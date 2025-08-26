@@ -90,10 +90,13 @@ void CppGrader::SetGraderEnv() {
   for (const auto &sp : *output_sp_) {
     assert(sp->output_);
     auto grade_sp = std::make_shared<SandboxProgram>();
+
     grade_sp->input_ = *sp->output_;
+    grade_sp->args_ = {std::to_string(id)};
     grade_sp->output_ = "./" + std::to_string(id++) + ".out";
     grade_sp->exe_ = grader_name_;
     grade_sp->type_ = SandboxProgram::kJudger;
+
     sp->child_.push_back(grade_sp);
   }
 }
