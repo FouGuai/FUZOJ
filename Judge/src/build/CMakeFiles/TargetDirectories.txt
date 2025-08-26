@@ -1,0 +1,3 @@
+/home/foushen/project/fuzoj/Judge/src/build/CMakeFiles/Project.dir
+/home/foushen/project/fuzoj/Judge/src/build/CMakeFiles/edit_cache.dir
+/home/foushen/project/fuzoj/Judge/src/build/CMakeFiles/rebuild_cache.dir

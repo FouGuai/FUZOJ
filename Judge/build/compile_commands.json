@@ -1,0 +1,42 @@
+[
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/CGroup.cc.o -c /home/foushen/project/fuzoj/Judge/src/CGroup.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/CGroup.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o -c /home/foushen/project/fuzoj/Judge/src/CppJudger.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/CppJudger.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/Judger.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/Logger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Logger.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/Logger.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/Sandbox.cc.o -c /home/foushen/project/fuzoj/Judge/src/Sandbox.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/Sandbox.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/Utils.cc.o -c /home/foushen/project/fuzoj/Judge/src/Utils.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/Utils.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -I/home/foushen/project/fuzoj/Judge/test -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o test/CMakeFiles/Sandbox_test.dir/SandboxTest.cc.o -c /home/foushen/project/fuzoj/Judge/test/SandboxTest.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/test/SandboxTest.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -I/home/foushen/project/fuzoj/Judge/test -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o test/CMakeFiles/Sandbox_test.dir/test_seccomp.cc.o -c /home/foushen/project/fuzoj/Judge/test/test_seccomp.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/test/test_seccomp.cc"
+}
+]

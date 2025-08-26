@@ -1,0 +1,8 @@
+/home/foushen/project/fuzoj/Judge/build/CMakeFiles/edit_cache.dir
+/home/foushen/project/fuzoj/Judge/build/CMakeFiles/rebuild_cache.dir
+/home/foushen/project/fuzoj/Judge/build/src/CMakeFiles/fuzoj_judge.dir
+/home/foushen/project/fuzoj/Judge/build/src/CMakeFiles/edit_cache.dir
+/home/foushen/project/fuzoj/Judge/build/src/CMakeFiles/rebuild_cache.dir
+/home/foushen/project/fuzoj/Judge/build/test/CMakeFiles/Sandbox_test.dir
+/home/foushen/project/fuzoj/Judge/build/test/CMakeFiles/edit_cache.dir
+/home/foushen/project/fuzoj/Judge/build/test/CMakeFiles/rebuild_cache.dir
