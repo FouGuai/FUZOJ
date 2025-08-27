@@ -23,19 +23,33 @@ class Solution {
   Language language_;
 };
 
-class Result {
- public:
-  enum Status {
-    kAC,
-    kWA,
-    kCE,
-    kTLE,
-    kMLE,
-    kUKN,
-  };
+enum class JudgeState {
+  kAC,
+  kWA,
+  kCE,
+  kTLE,
+  kMLE,
+  kMUL,
+  kUKN,
+};
+
+struct TestCaseResult {
+  JudgeState state_;
   int id_;
   int score_;
   std::string info_;
 };
+
+class Result {
+ public:
+  std::vector<TestCaseResult> testcase_rel_;
+  JudgeState state_;
+  std::string problem_id_;
+  std::string id_;
+  int score_;
+  std::string info_;
+};
+
+
 }  // namespace fuzoj
 #endif /*FUZOJ_SRC_PROBLEM_H_*/

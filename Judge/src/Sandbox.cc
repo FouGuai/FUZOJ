@@ -22,7 +22,7 @@
 
 namespace fuzoj {
 Sandbox::Sandbox(const std::string &path) : path_(path + "/"), valid_(true) {
-  if (mkdir(path_.c_str(), 0755) < 0) {
+  if (mkdir(path_.c_str(), 0777) < 0) {
     if (errno != EEXIST) {
       valid_ = false;
     }
@@ -69,26 +69,41 @@ void Sandbox::Run() {
   }
 }
 
-int Sandbox::AddFile(const std::string &dst, const std::string &src) {
+int Sandbox::AddFile(const std::string &dst, const std::string &src, __mode_t mode) {
   if (unlikely(!valid_)) {
     return -1;
   }
 
   std::string real_dst = path_ + dst;
-  if (link(src.c_str(), real_dst.c_str()) < 0) {
+  if (unlikely(link(src.c_str(), real_dst.c_str())) < 0) {
     LOGGER.error("Fail to create link, {}.", strerror(errno));
     return -1;
   }
+
+  if (unlikely(chmod(real_dst.c_str(), mode) < 0)) {
+    LOGGER.error("Fail chmod {}, error {}.", real_dst, strerror(errno));
+    return -1;
+  }
+
   return 0;
 }
 
-int Sandbox::CopyFile(const std::string &dst, const std::string &src) {
+int Sandbox::CopyFile(const std::string &dst, const std::string &src, __mode_t mode) {
   if (unlikely(!valid_)) {
     return -1;
   }
 
   std::string real_dst = path_ + dst;
-  return Utils::CopyFile(real_dst, src);
+  if (unlikely(Utils::CopyFile(real_dst, src) < 0)) {
+    LOGGER.error("Fail to copy {} to {}, error {}.", src, real_dst, strerror(errno));
+    return -1;
+  }
+
+  if (unlikely(chmod(real_dst.c_str(), mode) < 0)) {
+    LOGGER.error("Fail chmod {}, error {}.", real_dst, strerror(errno));
+    return -1;
+  }
+  return 0;
 }
 
 void Sandbox::AddProgram(const std::shared_ptr<SandboxProgram> &program) {
@@ -291,6 +306,8 @@ void Sandbox::SetSandbox(const std::shared_ptr<SandboxProgram> &program) {
     // SwitchUser();
     AvoidSyscall(program);
   }
+
+  SwitchUser();
 }
 
 static void ParserArgs(const std::shared_ptr<SandboxProgram> &program, std::vector<char *> &argv,

@@ -21,6 +21,7 @@ class RGBaser {
   UNCOPYABLE(RGBaser);
 
   Language GetLanguage() const { return language_; }
+  virtual std::vector<TestCaseResult> GetResult() = 0;
 
  protected:
   Sandbox *sandbox_;
@@ -48,12 +49,14 @@ class Grader : public RGBaser {
       : RGBaser(language, id, std::move(problem), std::move(solution)) {}
 
   virtual int SetGrader(Sandbox *sandbox, std::vector<std::shared_ptr<SandboxProgram>> *outout_sp_) = 0;
-  virtual std::shared_ptr<Result> GetGrade();
+
+ protected:
+  std::vector<std::shared_ptr<SandboxProgram>> grade_sp_;
 };
 
 class Judger {
  public:
-  Judger(std::shared_ptr<Runner> runner_, std::shared_ptr<Grader> &grader)
+  Judger(std::shared_ptr<Runner> runner_, std::shared_ptr<Grader> grader)
       : runner_(std::move(runner_)), grader_(std::move(grader)) {}
 
   UNCOPYABLE(Judger);
@@ -61,6 +64,8 @@ class Judger {
   std::shared_ptr<Result> Judge();
   ~Judger() = default;
   std::shared_ptr<Result> GetResult();
+  std::shared_ptr<Result> Converge(std::vector<TestCaseResult> &runner_result,
+                                   std::vector<TestCaseResult> &grader_result);
 
  protected:
   std::shared_ptr<Runner> runner_;

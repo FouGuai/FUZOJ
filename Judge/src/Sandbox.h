@@ -57,8 +57,8 @@ class Sandbox {
   }
 
   bool Valid() const { return valid_; }
-  int AddFile(const std::string &dst, const std::string &src);
-  int CopyFile(const std::string &dst, const std::string &src);
+  int AddFile(const std::string &dst, const std::string &src, __mode_t mode = 0777);
+  int CopyFile(const std::string &dst, const std::string &src, __mode_t mode = 0777);
   void AddProgram(const std::shared_ptr<SandboxProgram> &program);
   void Run();
   void Destroy();

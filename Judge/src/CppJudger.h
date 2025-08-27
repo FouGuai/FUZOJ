@@ -13,21 +13,25 @@ class CppRunner : public Runner {
       : Runner(Language::kCpp, id, problem, solution) {}
 
   int SetRunner(Sandbox *sandbox, std::vector<std::shared_ptr<SandboxProgram>> *outout_sp_) override;
+  std::vector<TestCaseResult> GetResult() override;
 
  private:
   void SetCompileEnv();
   void SetRunnerEnv();
+  void GetState(const std::shared_ptr<SandboxProgram> &sp, JudgeState &state, std::string &info);
 
   std::string program_name_;
   std::shared_ptr<SandboxProgram> compile_sp_;
   bool valid_;
 
   static constexpr size_t kCompileMemLimit = 1024 * 1024 * 1024;
+  static const std::string kCompileLogFile;
 };
 
 class CppGrader : public Grader {
  public:
   int SetGrader(Sandbox *sandbox, std::vector<std::shared_ptr<SandboxProgram>> *outout_sp_) override;
+
  private:
   void SetGraderEnv();
   std::string grader_name_;
