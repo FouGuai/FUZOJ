@@ -193,6 +193,26 @@ size_t CGroup::GetRunMem() {
   return mem;
 }
 
+bool CGroup::IsCgroupOom() {
+  std::ifstream ifs(GetPath() + "memory.events");
+  if (!ifs.is_open()) {
+    return false;  // 读取失败就当作不是 OOM
+  }
+
+  std::string line;
+  while (std::getline(ifs, line)) {
+    std::istringstream iss(line);
+    std::string key;
+    long long value;
+    if (iss >> key >> value) {
+      if ((key == "oom" || key == "oom_kill") && value > 0) {
+        return true;  // 说明发生过 OOM
+      }
+    }
+  }
+  return false;
+}
+
 void CGroupFactory::RemoveCGroup(const std::string &name) {
   std::unique_lock<std::mutex> lock(mtx_);
   curr_cgroups_.erase(name);
@@ -201,13 +221,13 @@ void CGroupFactory::RemoveCGroup(const std::string &name) {
 std::optional<CGroup> CGroupFactory::GetCGroup(const std::string &name) {
   CGroup cgroup(name);
 
-  {
-    std::unique_lock<std::mutex> lock;
-    if (curr_cgroups_.find(name) != curr_cgroups_.end()) {
-      return std::nullopt;
-    }
-    curr_cgroups_.insert(name);
-  }
+  // {
+  //   std::unique_lock<std::mutex> lock;
+  //   if (curr_cgroups_.find(name) != curr_cgroups_.end()) {
+  //     return std::nullopt;
+  //   }
+  //   curr_cgroups_.insert(name);
+  // }
 
   if (!cgroup.valid_) {
     return std::nullopt;

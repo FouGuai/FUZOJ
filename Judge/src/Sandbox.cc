@@ -21,11 +21,22 @@
 #include "Logger.h"
 
 namespace fuzoj {
+#define CLOSEPIPE(pipe) \
+  do {                  \
+    close((pipe)[0]);   \
+    close((pipe)[1]);   \
+  } while (false)
+
 Sandbox::Sandbox(const std::string &path) : path_(path + "/"), valid_(true) {
-  if (mkdir(path_.c_str(), 0777) < 0) {
+  if (unlikely(mkdir(path_.c_str(), 0777) < 0)) {
     if (errno != EEXIST) {
       valid_ = false;
     }
+  }
+
+  if (unlikely(chmod(path_.c_str(), 0777) < 0)) {
+    valid_ = false;
+    LOGGER.error("Fail to chmod {}, error {}.", path_, strerror(errno));
   }
 }
 
@@ -106,6 +117,25 @@ int Sandbox::CopyFile(const std::string &dst, const std::string &src, __mode_t m
   return 0;
 }
 
+int Sandbox::MoveFile(const std::string &dst, const std::string &src, __mode_t mode) {
+  if (unlikely(!valid_)) {
+    return -1;
+  }
+
+  std::string real_dst = path_ + dst;
+  if (unlikely(rename(real_dst.c_str(), src.c_str()) < 0)) {
+    LOGGER.error("Fail to rename {} to {}, error {}.", src, real_dst, strerror(errno));
+    return -1;
+  }
+
+  if (unlikely(chmod(real_dst.c_str(), mode)) < 0) {
+    LOGGER.error("Fail chmod {}, error {}.", real_dst, strerror(errno));
+    return -1;
+  }
+
+  return 0;
+}
+
 void Sandbox::AddProgram(const std::shared_ptr<SandboxProgram> &program) {
   if (unlikely(!valid_)) {
     return;
@@ -145,7 +175,7 @@ void Sandbox::RunProgram(const std::shared_ptr<SandboxProgram> &program) {
 }
 
 void Sandbox::SetOpenFile(const std::shared_ptr<SandboxProgram> &program) {
-  if (program->type_ != SandboxProgram::kCompile) {
+  if (0 && program->type_ != SandboxProgram::kCompile) {
     if (chroot("./") < 0) {
       perror("chroot");
       exit(1);
@@ -302,12 +332,11 @@ void Sandbox::SetSandbox(const std::shared_ptr<SandboxProgram> &program) {
   }
 
   SetOpenFile(program);
+  SwitchUser();
   if (program->type_ != SandboxProgram::kCompile) {
     // SwitchUser();
     AvoidSyscall(program);
   }
-
-  SwitchUser();
 }
 
 static void ParserArgs(const std::shared_ptr<SandboxProgram> &program, std::vector<char *> &argv,
@@ -340,8 +369,7 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
 
   if (pid < 0) {
     LOGGER.error("Faid to fork new program, error {}.", strerror(errno));
-    close(pipes[0]);
-    close(pipes[1]);
+    CLOSEPIPE(pipes);
     return;
   }
 
@@ -357,13 +385,10 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
     int pipe_val;
     if (read(pipes[0], &pipe_val, sizeof(pipe_val)) != sizeof(pipe_val)) {
       perror("pipe read");
-      close(pipes[0]);
-      close(pipes[1]);
+      CLOSEPIPE(pipes);
       exit(1);
     }
-
-    close(pipes[0]);
-    close(pipes[1]);
+    CLOSEPIPE(pipes);
 
     if (program->env_) {
       execvpe(program->exe_.c_str(), argv.data(), envp.data());
@@ -378,23 +403,20 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
 
     if (!cgroup) {
       kill(pid, SIGKILL);
-      close(pipes[0]);
-      close(pipes[1]);
+      CLOSEPIPE(pipes);
       return;
     }
 
     if (cgroup->AddProcess(pid) != 0) {
       kill(pid, SIGKILL);
-      close(pipes[0]);
-      close(pipes[1]);
+      CLOSEPIPE(pipes);
       return;
     }
 
     if (program->memory_limit_) {
       if (cgroup->SetMemLimit(*program->memory_limit_) != 0) {
         kill(pid, SIGKILL);
-        close(pipes[0]);
-        close(pipes[1]);
+        CLOSEPIPE(pipes);
         return;
       }
     }
@@ -402,13 +424,10 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
     int pipe_val = 0;
 
     if (write(pipes[1], &pipe_val, sizeof(pipe_val)) != sizeof(pipe_val)) {
-      close(pipes[0]);
-      close(pipes[1]);
+      CLOSEPIPE(pipes);
       kill(pid, SIGKILL);
       return;
     }
-
-    close(pipes[0]);
     close(pipes[1]);
 
     time_t start = time(nullptr);
@@ -421,7 +440,7 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
       if (program->time_limit_ && cgroup->GetRunTimems() > *program->time_limit_ ||
           time(nullptr) - start > kMaxProcessTime) {
         kill(pid, SIGKILL);
-        LOGGER.info("Program {}, timelimt.", pid);
+        // LOGGER.info("Program {}, timelimt.", pid);
         continue;
       }
       usleep(1000 * 100);
@@ -432,10 +451,17 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
     if (WIFEXITED(state)) {
       int exit_code = WEXITSTATUS(state);
       program->normal_exit_ = exit_code == 0;
+    } else {
+      program->cgroup_oom_ = cgroup->IsCgroupOom();
     }
 
     program->time_ms_ = cgroup->GetRunTimems();
     program->mem_byte_ = cgroup->GetRunMem();
+
+    LOGGER.debug("{}, {}.", program->exe_, *program->input_);
   }
 }
+
+#undef CLOSEPIPE
+
 }  // namespace fuzoj

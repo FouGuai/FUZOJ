@@ -2,11 +2,20 @@ cmake_minimum_required(VERSION 3.13)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+set(TEST_FILE)
+list(APPEND TEST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/TestSandbox/SandboxTest.cc")
+list(APPEND TEST_FILE "${CMAKE_CURRENT_SOURCE_DIR}/TestCppJudger/TestCppJudger.cc")
 
-file(GLOB TESTOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.cc")
-
-add_executable(Sandbox_test ${TESTOURCES})
-
-target_link_libraries(Sandbox_test PRIVATE ${GTEST_LIBRARIES} pthread)
-target_link_libraries(Sandbox_test PRIVATE  ${PROJECT_NAME})
-target_link_libraries(Sandbox_test PRIVATE gtest gtest_main pthread fuzoj_judge)
+foreach(test_file IN LISTS TEST_FILE)
+  get_filename_component(test_name ${test_file} NAME_WE)
+  add_executable(${test_name} ${test_file})
+  target_link_libraries(${test_name}
+      PRIVATE
+      ${GTEST_LIBRARIES}
+      gtest
+      gtest_main
+      pthread
+      fuzoj_judge
+      ${PROJECT_NAME}
+  )
+endforeach()

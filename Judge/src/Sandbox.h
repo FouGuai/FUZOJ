@@ -16,6 +16,7 @@ struct SandboxProgram {
   enum Type {
     kProgram,
     kCompile,
+    kInterprete,
     kJudger,
   } type_;
 
@@ -25,11 +26,12 @@ struct SandboxProgram {
 
   std::vector<std::shared_ptr<SandboxProgram>> child_;
 
+  // use for standard io.
   std::optional<std::string> input_;
   std::optional<std::string> output_;
   std::optional<std::string> error_;
 
-  std::optional<time_t> time_limit_;
+  std::optional<long long> time_limit_;
   std::optional<size_t> memory_limit_;
 
   int state_;
@@ -38,6 +40,8 @@ struct SandboxProgram {
   size_t mem_byte_;
 
   bool normal_exit_ = false;
+  // MLE
+  bool cgroup_oom_ = false;
   // bool follow_last_;
 };
 
@@ -59,6 +63,7 @@ class Sandbox {
   bool Valid() const { return valid_; }
   int AddFile(const std::string &dst, const std::string &src, __mode_t mode = 0777);
   int CopyFile(const std::string &dst, const std::string &src, __mode_t mode = 0777);
+  int MoveFile(const std::string &dst, const std::string &src, __mode_t mode = 0777);
   void AddProgram(const std::shared_ptr<SandboxProgram> &program);
   void Run();
   void Destroy();

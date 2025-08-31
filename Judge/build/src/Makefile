@@ -154,30 +154,6 @@ CGroup.cc.s:
 	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/CGroup.cc.s
 .PHONY : CGroup.cc.s
 
-CppJudger.o: CppJudger.cc.o
-.PHONY : CppJudger.o
-
-# target to build an object file
-CppJudger.cc.o:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o
-.PHONY : CppJudger.cc.o
-
-CppJudger.i: CppJudger.cc.i
-.PHONY : CppJudger.i
-
-# target to preprocess a source file
-CppJudger.cc.i:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.i
-.PHONY : CppJudger.cc.i
-
-CppJudger.s: CppJudger.cc.s
-.PHONY : CppJudger.s
-
-# target to generate assembly for a file
-CppJudger.cc.s:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.s
-.PHONY : CppJudger.cc.s
-
 Judger.o: Judger.cc.o
 .PHONY : Judger.o
 
@@ -201,6 +177,54 @@ Judger.s: Judger.cc.s
 Judger.cc.s:
 	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/Judger.cc.s
 .PHONY : Judger.cc.s
+
+Judger/CppJudger.o: Judger/CppJudger.cc.o
+.PHONY : Judger/CppJudger.o
+
+# target to build an object file
+Judger/CppJudger.cc.o:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o
+.PHONY : Judger/CppJudger.cc.o
+
+Judger/CppJudger.i: Judger/CppJudger.cc.i
+.PHONY : Judger/CppJudger.i
+
+# target to preprocess a source file
+Judger/CppJudger.cc.i:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.i
+.PHONY : Judger/CppJudger.cc.i
+
+Judger/CppJudger.s: Judger/CppJudger.cc.s
+.PHONY : Judger/CppJudger.s
+
+# target to generate assembly for a file
+Judger/CppJudger.cc.s:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.s
+.PHONY : Judger/CppJudger.cc.s
+
+JudgerFactory.o: JudgerFactory.cc.o
+.PHONY : JudgerFactory.o
+
+# target to build an object file
+JudgerFactory.cc.o:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o
+.PHONY : JudgerFactory.cc.o
+
+JudgerFactory.i: JudgerFactory.cc.i
+.PHONY : JudgerFactory.i
+
+# target to preprocess a source file
+JudgerFactory.cc.i:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.i
+.PHONY : JudgerFactory.cc.i
+
+JudgerFactory.s: JudgerFactory.cc.s
+.PHONY : JudgerFactory.s
+
+# target to generate assembly for a file
+JudgerFactory.cc.s:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.s
+.PHONY : JudgerFactory.cc.s
 
 Logger.o: Logger.cc.o
 .PHONY : Logger.o
@@ -286,12 +310,15 @@ help:
 	@echo "... CGroup.o"
 	@echo "... CGroup.i"
 	@echo "... CGroup.s"
-	@echo "... CppJudger.o"
-	@echo "... CppJudger.i"
-	@echo "... CppJudger.s"
 	@echo "... Judger.o"
 	@echo "... Judger.i"
 	@echo "... Judger.s"
+	@echo "... Judger/CppJudger.o"
+	@echo "... Judger/CppJudger.i"
+	@echo "... Judger/CppJudger.s"
+	@echo "... JudgerFactory.o"
+	@echo "... JudgerFactory.i"
+	@echo "... JudgerFactory.s"
 	@echo "... Logger.o"
 	@echo "... Logger.i"
 	@echo "... Logger.s"

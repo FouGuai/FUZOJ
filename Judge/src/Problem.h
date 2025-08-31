@@ -12,10 +12,15 @@ namespace fuzoj {
 struct TestCase {
  public:
   int id_;
+  // input data
   std::string data_path_;
+
+  // use for is internal checker.
   std::string answer_path_;
+
   long long time_limit_;
   size_t mem_limit_;
+  int score_;
 };
 
 struct Problem {
@@ -24,8 +29,9 @@ struct Problem {
   std::string name_;
 
   std::string checker_path_;
-  std::vector<TestCase> test_case_;
   Language checker_language_;
+
+  std::vector<TestCase> test_case_;
 
   int score_;
   int diffculty_;

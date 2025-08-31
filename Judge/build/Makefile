@@ -130,17 +130,30 @@ fuzoj_judge/fast:
 .PHONY : fuzoj_judge/fast
 
 #=============================================================================
-# Target rules for targets named Sandbox_test
+# Target rules for targets named SandboxTest
 
 # Build rule for target.
-Sandbox_test: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 Sandbox_test
-.PHONY : Sandbox_test
+SandboxTest: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 SandboxTest
+.PHONY : SandboxTest
 
 # fast build rule for target.
-Sandbox_test/fast:
-	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/Sandbox_test.dir/build.make test/CMakeFiles/Sandbox_test.dir/build
-.PHONY : Sandbox_test/fast
+SandboxTest/fast:
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/build
+.PHONY : SandboxTest/fast
+
+#=============================================================================
+# Target rules for targets named TestCppJudger
+
+# Build rule for target.
+TestCppJudger: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 TestCppJudger
+.PHONY : TestCppJudger
+
+# fast build rule for target.
+TestCppJudger/fast:
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/build
+.PHONY : TestCppJudger/fast
 
 # Help Target
 help:
@@ -150,7 +163,8 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... Sandbox_test"
+	@echo "... SandboxTest"
+	@echo "... TestCppJudger"
 	@echo "... fuzoj_judge"
 .PHONY : help
 

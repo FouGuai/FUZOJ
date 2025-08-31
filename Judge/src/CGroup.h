@@ -22,7 +22,7 @@ class CGroup {
   long long GetRunTimems();
   long long GetRunTimeus();
   size_t GetRunMem();
-
+  bool IsCgroupOom();
   int SetTimeLimitms(long long time_ms);
   int SetTimeLimit(long long time_us);
   int SetMemLimit(size_t mem_limit);

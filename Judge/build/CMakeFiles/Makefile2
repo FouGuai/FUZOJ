@@ -96,7 +96,8 @@ src/clean: src/CMakeFiles/fuzoj_judge.dir/clean
 # Directory level rules for directory test
 
 # Recursive "all" directory target.
-test/all: test/CMakeFiles/Sandbox_test.dir/all
+test/all: test/CMakeFiles/SandboxTest.dir/all
+test/all: test/CMakeFiles/TestCppJudger.dir/all
 .PHONY : test/all
 
 # Recursive "preinstall" directory target.
@@ -104,7 +105,8 @@ test/preinstall:
 .PHONY : test/preinstall
 
 # Recursive "clean" directory target.
-test/clean: test/CMakeFiles/Sandbox_test.dir/clean
+test/clean: test/CMakeFiles/SandboxTest.dir/clean
+test/clean: test/CMakeFiles/TestCppJudger.dir/clean
 .PHONY : test/clean
 
 #=============================================================================
@@ -114,12 +116,12 @@ test/clean: test/CMakeFiles/Sandbox_test.dir/clean
 src/CMakeFiles/fuzoj_judge.dir/all:
 	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/depend
 	$(MAKE) $(MAKESILENT) -f src/CMakeFiles/fuzoj_judge.dir/build.make src/CMakeFiles/fuzoj_judge.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=3,4,5,6,7,8,9 "Built target fuzoj_judge"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=5,6,7,8,9,10,11,12 "Built target fuzoj_judge"
 .PHONY : src/CMakeFiles/fuzoj_judge.dir/all
 
 # Build rule for subdir invocation for target.
 src/CMakeFiles/fuzoj_judge.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 src/CMakeFiles/fuzoj_judge.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 0
 .PHONY : src/CMakeFiles/fuzoj_judge.dir/rule
@@ -134,30 +136,56 @@ src/CMakeFiles/fuzoj_judge.dir/clean:
 .PHONY : src/CMakeFiles/fuzoj_judge.dir/clean
 
 #=============================================================================
-# Target rules for target test/CMakeFiles/Sandbox_test.dir
+# Target rules for target test/CMakeFiles/SandboxTest.dir
 
 # All Build rule for target.
-test/CMakeFiles/Sandbox_test.dir/all: src/CMakeFiles/fuzoj_judge.dir/all
-	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/Sandbox_test.dir/build.make test/CMakeFiles/Sandbox_test.dir/depend
-	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/Sandbox_test.dir/build.make test/CMakeFiles/Sandbox_test.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=1,2 "Built target Sandbox_test"
-.PHONY : test/CMakeFiles/Sandbox_test.dir/all
+test/CMakeFiles/SandboxTest.dir/all: src/CMakeFiles/fuzoj_judge.dir/all
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/depend
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=1,2 "Built target SandboxTest"
+.PHONY : test/CMakeFiles/SandboxTest.dir/all
 
 # Build rule for subdir invocation for target.
-test/CMakeFiles/Sandbox_test.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 9
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test/CMakeFiles/Sandbox_test.dir/all
+test/CMakeFiles/SandboxTest.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 10
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test/CMakeFiles/SandboxTest.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 0
-.PHONY : test/CMakeFiles/Sandbox_test.dir/rule
+.PHONY : test/CMakeFiles/SandboxTest.dir/rule
 
 # Convenience name for target.
-Sandbox_test: test/CMakeFiles/Sandbox_test.dir/rule
-.PHONY : Sandbox_test
+SandboxTest: test/CMakeFiles/SandboxTest.dir/rule
+.PHONY : SandboxTest
 
 # clean rule for target.
-test/CMakeFiles/Sandbox_test.dir/clean:
-	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/Sandbox_test.dir/build.make test/CMakeFiles/Sandbox_test.dir/clean
-.PHONY : test/CMakeFiles/Sandbox_test.dir/clean
+test/CMakeFiles/SandboxTest.dir/clean:
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/clean
+.PHONY : test/CMakeFiles/SandboxTest.dir/clean
+
+#=============================================================================
+# Target rules for target test/CMakeFiles/TestCppJudger.dir
+
+# All Build rule for target.
+test/CMakeFiles/TestCppJudger.dir/all: src/CMakeFiles/fuzoj_judge.dir/all
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/depend
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=3,4 "Built target TestCppJudger"
+.PHONY : test/CMakeFiles/TestCppJudger.dir/all
+
+# Build rule for subdir invocation for target.
+test/CMakeFiles/TestCppJudger.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 10
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test/CMakeFiles/TestCppJudger.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/foushen/project/fuzoj/Judge/build/CMakeFiles 0
+.PHONY : test/CMakeFiles/TestCppJudger.dir/rule
+
+# Convenience name for target.
+TestCppJudger: test/CMakeFiles/TestCppJudger.dir/rule
+.PHONY : TestCppJudger
+
+# clean rule for target.
+test/CMakeFiles/TestCppJudger.dir/clean:
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/clean
+.PHONY : test/CMakeFiles/TestCppJudger.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.

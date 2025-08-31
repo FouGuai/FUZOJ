@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 namespace fuzoj {
-enum Language {
+enum class Language {
   kCpp,
   kPython,
   kJava,
@@ -14,6 +14,7 @@ enum Language {
   kJavaScript,
   kCSharp,
   kSQL,
+  kInternal,
 };
 
 class Solution {
@@ -26,11 +27,13 @@ class Solution {
 enum class JudgeState {
   kAC,
   kWA,
+  kRE,
   kCE,
   kTLE,
   kMLE,
   kMUL,
   kUKN,
+  kFPE,
 };
 
 struct TestCaseResult {
@@ -38,6 +41,8 @@ struct TestCaseResult {
   int id_;
   int score_;
   std::string info_;
+  long time_ms_;
+  size_t mem_byte_;
 };
 
 class Result {
@@ -49,7 +54,6 @@ class Result {
   int score_;
   std::string info_;
 };
-
 
 }  // namespace fuzoj
 #endif /*FUZOJ_SRC_PROBLEM_H_*/

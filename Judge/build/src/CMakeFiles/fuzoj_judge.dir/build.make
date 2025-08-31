@@ -83,24 +83,10 @@ src/CMakeFiles/fuzoj_judge.dir/CGroup.cc.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/fuzoj_judge.dir/CGroup.cc.s"
 	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/foushen/project/fuzoj/Judge/src/CGroup.cc -o CMakeFiles/fuzoj_judge.dir/CGroup.cc.s
 
-src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o: src/CMakeFiles/fuzoj_judge.dir/flags.make
-src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o: ../src/CppJudger.cc
-src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o: src/CMakeFiles/fuzoj_judge.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o"
-	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o -MF CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o.d -o CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o -c /home/foushen/project/fuzoj/Judge/src/CppJudger.cc
-
-src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/fuzoj_judge.dir/CppJudger.cc.i"
-	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/foushen/project/fuzoj/Judge/src/CppJudger.cc > CMakeFiles/fuzoj_judge.dir/CppJudger.cc.i
-
-src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/fuzoj_judge.dir/CppJudger.cc.s"
-	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/foushen/project/fuzoj/Judge/src/CppJudger.cc -o CMakeFiles/fuzoj_judge.dir/CppJudger.cc.s
-
 src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o: src/CMakeFiles/fuzoj_judge.dir/flags.make
 src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o: ../src/Judger.cc
 src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o: src/CMakeFiles/fuzoj_judge.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o"
 	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o -MF CMakeFiles/fuzoj_judge.dir/Judger.cc.o.d -o CMakeFiles/fuzoj_judge.dir/Judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger.cc
 
 src/CMakeFiles/fuzoj_judge.dir/Judger.cc.i: cmake_force
@@ -110,6 +96,20 @@ src/CMakeFiles/fuzoj_judge.dir/Judger.cc.i: cmake_force
 src/CMakeFiles/fuzoj_judge.dir/Judger.cc.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/fuzoj_judge.dir/Judger.cc.s"
 	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/foushen/project/fuzoj/Judge/src/Judger.cc -o CMakeFiles/fuzoj_judge.dir/Judger.cc.s
+
+src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o: src/CMakeFiles/fuzoj_judge.dir/flags.make
+src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o: ../src/JudgerFactory.cc
+src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o: src/CMakeFiles/fuzoj_judge.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o"
+	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o -MF CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o.d -o CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o -c /home/foushen/project/fuzoj/Judge/src/JudgerFactory.cc
+
+src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.i"
+	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/foushen/project/fuzoj/Judge/src/JudgerFactory.cc > CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.i
+
+src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.s"
+	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/foushen/project/fuzoj/Judge/src/JudgerFactory.cc -o CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.s
 
 src/CMakeFiles/fuzoj_judge.dir/Logger.cc.o: src/CMakeFiles/fuzoj_judge.dir/flags.make
 src/CMakeFiles/fuzoj_judge.dir/Logger.cc.o: ../src/Logger.cc
@@ -153,27 +153,43 @@ src/CMakeFiles/fuzoj_judge.dir/Utils.cc.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/fuzoj_judge.dir/Utils.cc.s"
 	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/foushen/project/fuzoj/Judge/src/Utils.cc -o CMakeFiles/fuzoj_judge.dir/Utils.cc.s
 
+src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o: src/CMakeFiles/fuzoj_judge.dir/flags.make
+src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o: ../src/Judger/CppJudger.cc
+src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o: src/CMakeFiles/fuzoj_judge.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o"
+	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o -MF CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o.d -o CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger/CppJudger.cc
+
+src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.i"
+	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/foushen/project/fuzoj/Judge/src/Judger/CppJudger.cc > CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.i
+
+src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.s"
+	cd /home/foushen/project/fuzoj/Judge/build/src && /usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/foushen/project/fuzoj/Judge/src/Judger/CppJudger.cc -o CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.s
+
 # Object files for target fuzoj_judge
 fuzoj_judge_OBJECTS = \
 "CMakeFiles/fuzoj_judge.dir/CGroup.cc.o" \
-"CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o" \
 "CMakeFiles/fuzoj_judge.dir/Judger.cc.o" \
+"CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o" \
 "CMakeFiles/fuzoj_judge.dir/Logger.cc.o" \
 "CMakeFiles/fuzoj_judge.dir/Sandbox.cc.o" \
-"CMakeFiles/fuzoj_judge.dir/Utils.cc.o"
+"CMakeFiles/fuzoj_judge.dir/Utils.cc.o" \
+"CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o"
 
 # External object files for target fuzoj_judge
 fuzoj_judge_EXTERNAL_OBJECTS =
 
 src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/CGroup.cc.o
-src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/CppJudger.cc.o
 src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/Judger.cc.o
+src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o
 src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/Logger.cc.o
 src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/Sandbox.cc.o
 src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/Utils.cc.o
+src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o
 src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/build.make
 src/libfuzoj_judge.a: src/CMakeFiles/fuzoj_judge.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Linking CXX static library libfuzoj_judge.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/foushen/project/fuzoj/Judge/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Linking CXX static library libfuzoj_judge.a"
 	cd /home/foushen/project/fuzoj/Judge/build/src && $(CMAKE_COMMAND) -P CMakeFiles/fuzoj_judge.dir/cmake_clean_target.cmake
 	cd /home/foushen/project/fuzoj/Judge/build/src && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/fuzoj_judge.dir/link.txt --verbose=$(VERBOSE)
 

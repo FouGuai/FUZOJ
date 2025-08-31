@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -fsanitize=address CMakeFiles/SandboxTest.dir/TestSandbox/SandboxTest.cc.o -o SandboxTest  /usr/lib/x86_64-linux-gnu/libgtest.a -lgtest -lgtest_main -lpthread ../src/libfuzoj_judge.a ../src/libfuzoj_judge.a /usr/lib/x86_64-linux-gnu/libspdlog.so.1.9.2 /usr/lib/x86_64-linux-gnu/libfmt.so.8.1.1 -Wl,--as-needed -lseccomp 

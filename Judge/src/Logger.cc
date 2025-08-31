@@ -1,5 +1,6 @@
 #include "Logger.h"
 #include <spdlog/sinks/stdout_color_sinks.h>
+
 namespace fuzoj {
 std::shared_ptr<spdlog::logger> Logger::logger_ = nullptr;
 
