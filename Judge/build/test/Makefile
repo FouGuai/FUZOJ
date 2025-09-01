@@ -117,80 +117,80 @@ depend:
 .PHONY : depend
 
 # Convenience name for target.
-test/CMakeFiles/SandboxTest.dir/rule:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test/CMakeFiles/SandboxTest.dir/rule
-.PHONY : test/CMakeFiles/SandboxTest.dir/rule
+test/CMakeFiles/sandbox_test.dir/rule:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test/CMakeFiles/sandbox_test.dir/rule
+.PHONY : test/CMakeFiles/sandbox_test.dir/rule
 
 # Convenience name for target.
-SandboxTest: test/CMakeFiles/SandboxTest.dir/rule
-.PHONY : SandboxTest
+sandbox_test: test/CMakeFiles/sandbox_test.dir/rule
+.PHONY : sandbox_test
 
 # fast build rule for target.
-SandboxTest/fast:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/build
-.PHONY : SandboxTest/fast
+sandbox_test/fast:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/sandbox_test.dir/build.make test/CMakeFiles/sandbox_test.dir/build
+.PHONY : sandbox_test/fast
 
 # Convenience name for target.
-test/CMakeFiles/TestCppJudger.dir/rule:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test/CMakeFiles/TestCppJudger.dir/rule
-.PHONY : test/CMakeFiles/TestCppJudger.dir/rule
+test/CMakeFiles/test_cpp_judger.dir/rule:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test/CMakeFiles/test_cpp_judger.dir/rule
+.PHONY : test/CMakeFiles/test_cpp_judger.dir/rule
 
 # Convenience name for target.
-TestCppJudger: test/CMakeFiles/TestCppJudger.dir/rule
-.PHONY : TestCppJudger
+test_cpp_judger: test/CMakeFiles/test_cpp_judger.dir/rule
+.PHONY : test_cpp_judger
 
 # fast build rule for target.
-TestCppJudger/fast:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/build
-.PHONY : TestCppJudger/fast
+test_cpp_judger/fast:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/test_cpp_judger.dir/build.make test/CMakeFiles/test_cpp_judger.dir/build
+.PHONY : test_cpp_judger/fast
 
-TestCppJudger/TestCppJudger.o: TestCppJudger/TestCppJudger.cc.o
-.PHONY : TestCppJudger/TestCppJudger.o
-
-# target to build an object file
-TestCppJudger/TestCppJudger.cc.o:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/TestCppJudger/TestCppJudger.cc.o
-.PHONY : TestCppJudger/TestCppJudger.cc.o
-
-TestCppJudger/TestCppJudger.i: TestCppJudger/TestCppJudger.cc.i
-.PHONY : TestCppJudger/TestCppJudger.i
-
-# target to preprocess a source file
-TestCppJudger/TestCppJudger.cc.i:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/TestCppJudger/TestCppJudger.cc.i
-.PHONY : TestCppJudger/TestCppJudger.cc.i
-
-TestCppJudger/TestCppJudger.s: TestCppJudger/TestCppJudger.cc.s
-.PHONY : TestCppJudger/TestCppJudger.s
-
-# target to generate assembly for a file
-TestCppJudger/TestCppJudger.cc.s:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/TestCppJudger/TestCppJudger.cc.s
-.PHONY : TestCppJudger/TestCppJudger.cc.s
-
-TestSandbox/SandboxTest.o: TestSandbox/SandboxTest.cc.o
-.PHONY : TestSandbox/SandboxTest.o
+TestCppJudger/test_cpp_judger.o: TestCppJudger/test_cpp_judger.cc.o
+.PHONY : TestCppJudger/test_cpp_judger.o
 
 # target to build an object file
-TestSandbox/SandboxTest.cc.o:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/TestSandbox/SandboxTest.cc.o
-.PHONY : TestSandbox/SandboxTest.cc.o
+TestCppJudger/test_cpp_judger.cc.o:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/test_cpp_judger.dir/build.make test/CMakeFiles/test_cpp_judger.dir/TestCppJudger/test_cpp_judger.cc.o
+.PHONY : TestCppJudger/test_cpp_judger.cc.o
 
-TestSandbox/SandboxTest.i: TestSandbox/SandboxTest.cc.i
-.PHONY : TestSandbox/SandboxTest.i
+TestCppJudger/test_cpp_judger.i: TestCppJudger/test_cpp_judger.cc.i
+.PHONY : TestCppJudger/test_cpp_judger.i
 
 # target to preprocess a source file
-TestSandbox/SandboxTest.cc.i:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/TestSandbox/SandboxTest.cc.i
-.PHONY : TestSandbox/SandboxTest.cc.i
+TestCppJudger/test_cpp_judger.cc.i:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/test_cpp_judger.dir/build.make test/CMakeFiles/test_cpp_judger.dir/TestCppJudger/test_cpp_judger.cc.i
+.PHONY : TestCppJudger/test_cpp_judger.cc.i
 
-TestSandbox/SandboxTest.s: TestSandbox/SandboxTest.cc.s
-.PHONY : TestSandbox/SandboxTest.s
+TestCppJudger/test_cpp_judger.s: TestCppJudger/test_cpp_judger.cc.s
+.PHONY : TestCppJudger/test_cpp_judger.s
 
 # target to generate assembly for a file
-TestSandbox/SandboxTest.cc.s:
-	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/TestSandbox/SandboxTest.cc.s
-.PHONY : TestSandbox/SandboxTest.cc.s
+TestCppJudger/test_cpp_judger.cc.s:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/test_cpp_judger.dir/build.make test/CMakeFiles/test_cpp_judger.dir/TestCppJudger/test_cpp_judger.cc.s
+.PHONY : TestCppJudger/test_cpp_judger.cc.s
+
+TestSandbox/sandbox_test.o: TestSandbox/sandbox_test.cc.o
+.PHONY : TestSandbox/sandbox_test.o
+
+# target to build an object file
+TestSandbox/sandbox_test.cc.o:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/sandbox_test.dir/build.make test/CMakeFiles/sandbox_test.dir/TestSandbox/sandbox_test.cc.o
+.PHONY : TestSandbox/sandbox_test.cc.o
+
+TestSandbox/sandbox_test.i: TestSandbox/sandbox_test.cc.i
+.PHONY : TestSandbox/sandbox_test.i
+
+# target to preprocess a source file
+TestSandbox/sandbox_test.cc.i:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/sandbox_test.dir/build.make test/CMakeFiles/sandbox_test.dir/TestSandbox/sandbox_test.cc.i
+.PHONY : TestSandbox/sandbox_test.cc.i
+
+TestSandbox/sandbox_test.s: TestSandbox/sandbox_test.cc.s
+.PHONY : TestSandbox/sandbox_test.s
+
+# target to generate assembly for a file
+TestSandbox/sandbox_test.cc.s:
+	cd /home/foushen/project/fuzoj/Judge/build && $(MAKE) $(MAKESILENT) -f test/CMakeFiles/sandbox_test.dir/build.make test/CMakeFiles/sandbox_test.dir/TestSandbox/sandbox_test.cc.s
+.PHONY : TestSandbox/sandbox_test.cc.s
 
 # Help Target
 help:
@@ -200,14 +200,14 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... SandboxTest"
-	@echo "... TestCppJudger"
-	@echo "... TestCppJudger/TestCppJudger.o"
-	@echo "... TestCppJudger/TestCppJudger.i"
-	@echo "... TestCppJudger/TestCppJudger.s"
-	@echo "... TestSandbox/SandboxTest.o"
-	@echo "... TestSandbox/SandboxTest.i"
-	@echo "... TestSandbox/SandboxTest.s"
+	@echo "... sandbox_test"
+	@echo "... test_cpp_judger"
+	@echo "... TestCppJudger/test_cpp_judger.o"
+	@echo "... TestCppJudger/test_cpp_judger.i"
+	@echo "... TestCppJudger/test_cpp_judger.s"
+	@echo "... TestSandbox/sandbox_test.o"
+	@echo "... TestSandbox/sandbox_test.i"
+	@echo "... TestSandbox/sandbox_test.s"
 .PHONY : help
 
 

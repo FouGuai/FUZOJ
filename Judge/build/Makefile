@@ -130,30 +130,30 @@ fuzoj_judge/fast:
 .PHONY : fuzoj_judge/fast
 
 #=============================================================================
-# Target rules for targets named SandboxTest
+# Target rules for targets named sandbox_test
 
 # Build rule for target.
-SandboxTest: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 SandboxTest
-.PHONY : SandboxTest
+sandbox_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 sandbox_test
+.PHONY : sandbox_test
 
 # fast build rule for target.
-SandboxTest/fast:
-	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/SandboxTest.dir/build.make test/CMakeFiles/SandboxTest.dir/build
-.PHONY : SandboxTest/fast
+sandbox_test/fast:
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/sandbox_test.dir/build.make test/CMakeFiles/sandbox_test.dir/build
+.PHONY : sandbox_test/fast
 
 #=============================================================================
-# Target rules for targets named TestCppJudger
+# Target rules for targets named test_cpp_judger
 
 # Build rule for target.
-TestCppJudger: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 TestCppJudger
-.PHONY : TestCppJudger
+test_cpp_judger: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_cpp_judger
+.PHONY : test_cpp_judger
 
 # fast build rule for target.
-TestCppJudger/fast:
-	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/TestCppJudger.dir/build.make test/CMakeFiles/TestCppJudger.dir/build
-.PHONY : TestCppJudger/fast
+test_cpp_judger/fast:
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/test_cpp_judger.dir/build.make test/CMakeFiles/test_cpp_judger.dir/build
+.PHONY : test_cpp_judger/fast
 
 # Help Target
 help:
@@ -163,9 +163,9 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
-	@echo "... SandboxTest"
-	@echo "... TestCppJudger"
 	@echo "... fuzoj_judge"
+	@echo "... sandbox_test"
+	@echo "... test_cpp_judger"
 .PHONY : help
 
 

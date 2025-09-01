@@ -1,2 +1,2 @@
-/usr/bin/ar qc libfuzoj_judge.a CMakeFiles/fuzoj_judge.dir/CGroup.cc.o CMakeFiles/fuzoj_judge.dir/Judger.cc.o CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o CMakeFiles/fuzoj_judge.dir/Logger.cc.o CMakeFiles/fuzoj_judge.dir/Sandbox.cc.o CMakeFiles/fuzoj_judge.dir/Utils.cc.o CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o
+/usr/bin/ar qc libfuzoj_judge.a CMakeFiles/fuzoj_judge.dir/cgroup.cc.o CMakeFiles/fuzoj_judge.dir/file_cache.cc.o CMakeFiles/fuzoj_judge.dir/judger.cc.o CMakeFiles/fuzoj_judge.dir/judger_factory.cc.o CMakeFiles/fuzoj_judge.dir/logger.cc.o CMakeFiles/fuzoj_judge.dir/sandbox.cc.o CMakeFiles/fuzoj_judge.dir/utils.cc.o CMakeFiles/fuzoj_judge.dir/Judger/cpp_judger.cc.o
 /usr/bin/ranlib libfuzoj_judge.a

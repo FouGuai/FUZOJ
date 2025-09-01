@@ -1,47 +1,52 @@
 [
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/CGroup.cc.o -c /home/foushen/project/fuzoj/Judge/src/CGroup.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/CGroup.cc"
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/cgroup.cc.o -c /home/foushen/project/fuzoj/Judge/src/cgroup.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/cgroup.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/Judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/Judger.cc"
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/file_cache.cc.o -c /home/foushen/project/fuzoj/Judge/src/file_cache.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/file_cache.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/JudgerFactory.cc.o -c /home/foushen/project/fuzoj/Judge/src/JudgerFactory.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/JudgerFactory.cc"
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/judger.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/judger.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/Logger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Logger.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/Logger.cc"
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/judger_factory.cc.o -c /home/foushen/project/fuzoj/Judge/src/judger_factory.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/judger_factory.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/Sandbox.cc.o -c /home/foushen/project/fuzoj/Judge/src/Sandbox.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/Sandbox.cc"
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/logger.cc.o -c /home/foushen/project/fuzoj/Judge/src/logger.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/logger.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/Utils.cc.o -c /home/foushen/project/fuzoj/Judge/src/Utils.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/Utils.cc"
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/sandbox.cc.o -c /home/foushen/project/fuzoj/Judge/src/sandbox.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/sandbox.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/Judger/CppJudger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger/CppJudger.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/Judger/CppJudger.cc"
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/utils.cc.o -c /home/foushen/project/fuzoj/Judge/src/utils.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/utils.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
+  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/Judger/cpp_judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger/cpp_judger.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/Judger/cpp_judger.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/test",
-  "command": "/usr/bin/c++  -I/home/foushen/project/fuzoj/Judge/test -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o CMakeFiles/SandboxTest.dir/TestSandbox/SandboxTest.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestSandbox/SandboxTest.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/test/TestSandbox/SandboxTest.cc"
+  "command": "/usr/bin/c++  -I/home/foushen/project/fuzoj/Judge/test -g -fsanitize=address -fno-omit-frame-pointer -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o CMakeFiles/sandbox_test.dir/TestSandbox/sandbox_test.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestSandbox/sandbox_test.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/test/TestSandbox/sandbox_test.cc"
 },
 {
   "directory": "/home/foushen/project/fuzoj/Judge/build/test",
-  "command": "/usr/bin/c++  -I/home/foushen/project/fuzoj/Judge/test -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o CMakeFiles/TestCppJudger.dir/TestCppJudger/TestCppJudger.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestCppJudger/TestCppJudger.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/test/TestCppJudger/TestCppJudger.cc"
+  "command": "/usr/bin/c++  -I/home/foushen/project/fuzoj/Judge/test -g -fsanitize=address -fno-omit-frame-pointer -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o CMakeFiles/test_cpp_judger.dir/TestCppJudger/test_cpp_judger.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestCppJudger/test_cpp_judger.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/test/TestCppJudger/test_cpp_judger.cc"
 }
 ]
