@@ -3,12 +3,15 @@
 using namespace std;
 
 int main() {
-  std::ios::sync_with_stdio(false);
-  std::cin.tie(nullptr);
   int n;
   cin >> n;
+  int x = 1;
+  int y = 0;
+  cout << x / y << endl;
   for (int i = 0; i < n; ++i) {
-    cout << i << '\n';
+    cout << i << endl;
   }
+
+
   return 0;
 }

@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 
+#include "Logger.h"
 #include "Sandbox.h"
 
 namespace fuzoj {
@@ -93,6 +94,13 @@ std::vector<TestCaseResult> CppRunner::GetResult() {
   std::vector<TestCaseResult> rls(output_sp_->size());
   // compile error.
   if (!compile_sp_->normal_exit_) {
+    LOGGER.error("Faild to compile, ret: {}.", compile_sp_->state_);
+    if (WIFSIGNALED(compile_sp_->state_)) {
+      // 子进程被信号杀死
+      int sig = WTERMSIG(compile_sp_->state_);
+      LOGGER.error("Faild to compile, sig: {}.", sig);
+      // 例如 SIGKILL=9, SIGSEGV=11
+    }
     // read compile log.
     std::ifstream ifs(sandbox_->GetPath() + kCompileLogFile);
     std::stringstream ss;

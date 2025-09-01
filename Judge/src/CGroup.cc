@@ -37,7 +37,7 @@ CGroup::CGroup(const std::string &name) : name_(Utils::GetFileName(name)), valid
     break;
   }
 
-  LOGGER.info("Create a cgroup named {}.", name_);
+  LOGGER.debug("Create a cgroup named {}.", name_);
 }
 
 CGroup::CGroup(CGroup &&other) {
@@ -82,7 +82,7 @@ void CGroup::Destroy() {
   if (rmdir(GetPath().c_str()) < 0) {
     LOGGER.warn("Fail to delete cgroup. error: {}.", strerror(errno));
   } else {
-    LOGGER.info("Delte cgroup named {}.", name_);
+    LOGGER.debug("Delte cgroup named {}.", name_);
   }
 
   CGroupFactory::RemoveCGroup(name_);

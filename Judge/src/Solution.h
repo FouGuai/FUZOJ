@@ -5,17 +5,8 @@
 
 #include <string>
 #include <vector>
+#include "Types.h"
 namespace fuzoj {
-enum class Language {
-  kCpp,
-  kPython,
-  kJava,
-  kGolang,
-  kJavaScript,
-  kCSharp,
-  kSQL,
-  kInternal,
-};
 
 class Solution {
  public:
@@ -24,17 +15,6 @@ class Solution {
   Language language_;
 };
 
-enum class JudgeState {
-  kAC,
-  kWA,
-  kRE,
-  kCE,
-  kTLE,
-  kMLE,
-  kMUL,
-  kUKN,
-  kFPE,
-};
 
 struct TestCaseResult {
   JudgeState state_;

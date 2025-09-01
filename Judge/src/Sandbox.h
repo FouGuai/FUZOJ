@@ -34,10 +34,10 @@ struct SandboxProgram {
   std::optional<long long> time_limit_;
   std::optional<size_t> memory_limit_;
 
-  int state_;
+  int state_ = 0;
 
-  long time_ms_;
-  size_t mem_byte_;
+  long time_ms_ = 0;
+  size_t mem_byte_ = 0;
 
   bool normal_exit_ = false;
   // MLE
@@ -80,6 +80,7 @@ class Sandbox {
   // main dictory path
   bool valid_ = false;
   std::string path_;
+  std::string name_;
   std::vector<std::shared_ptr<SandboxProgram>> programs_;
   static constexpr int kMaxProcessTime = 10;
 };

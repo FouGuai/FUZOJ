@@ -14,7 +14,7 @@ int main(int argc, const char *argv[]) {
     int x;
     if (!(cin >> x) || x != i) {
       cout << 0 << endl;
-      cout << "Error" << endl;
+      cout << "Fall in line:" << std::to_string(i) <<  " expect:" << std::to_string(i) << endl;
       return 0;
     }
   }

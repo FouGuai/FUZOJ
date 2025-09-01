@@ -8,26 +8,20 @@
 #include <sys/io.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "sys/stat.h"
-
+#include <iostream>
 #include <stack>
 
 #include "CGroup.h"
 #include "Logger.h"
 
 namespace fuzoj {
-#define CLOSEPIPE(pipe) \
-  do {                  \
-    close((pipe)[0]);   \
-    close((pipe)[1]);   \
-  } while (false)
-
-Sandbox::Sandbox(const std::string &path) : path_(path + "/"), valid_(true) {
+Sandbox::Sandbox(const std::string &path) : path_(path + "/"), name_(Utils::GetFileName(path)), valid_(true) {
   if (unlikely(mkdir(path_.c_str(), 0777) < 0)) {
     if (errno != EEXIST) {
       valid_ = false;
@@ -218,24 +212,26 @@ void Sandbox::SetOpenFile(const std::shared_ptr<SandboxProgram> &program) {
 
 void Sandbox::SwitchUser() {
   // switch to nobody.
-  struct passwd *pw = getpwnam("nobody");
-  if (!pw) {
-    perror("getpwnam");
-    exit(1);
-  }
+  // 防止子进程获得 root 权限
+  prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+  // struct passwd *pw = getpwnam("nobody");
+  // if (!pw) {
+  //   perror("getpwnam");
+  //   exit(1);
+  // }
 
-  if (setgid(pw->pw_gid) != 0) {
+  const uid_t nobody_uid = 19360;
+  const gid_t nobody_gid = 0;
+
+  if (syscall(SYS_setgid, nobody_gid) != 0) {
     perror("setgid");
     exit(1);
   }
 
-  if (setuid(pw->pw_uid) != 0) {
+  if (syscall(SYS_setuid, nobody_uid) != 0) {
     perror("setuid");
     exit(1);
   }
-
-  // 防止子进程获得 root 权限
-  prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
 }
 
 static decltype(SCMP_SYS(socket)) kKilledProgramSyscalls[] = {
@@ -355,6 +351,26 @@ static void ParserArgs(const std::shared_ptr<SandboxProgram> &program, std::vect
   envp.push_back(nullptr);
 }
 
+static void WaitProgramHang(pid_t pid, const std::shared_ptr<SandboxProgram> &program) {
+  int result = waitpid(pid, &program->state_, 0);
+  if (result < 0) {
+    LOGGER.info("Faild to wait child {}, error {}.", pid, strerror(errno));
+  }
+}
+
+#define CLOSEPIPE(pipe) \
+  do {                  \
+    close((pipe)[0]);   \
+    close((pipe)[1]);   \
+  } while (false)
+
+#define KILLCHILD(pid, program)    \
+  do {                             \
+    kill(pid, SIGKILL);            \
+    CLOSEPIPE(pipes);              \
+    WaitProgramHang(pid, program); \
+  } while (0)
+
 void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
   int pipes[2];
   if (pipe(pipes) < 0) {
@@ -388,6 +404,7 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
       CLOSEPIPE(pipes);
       exit(1);
     }
+
     CLOSEPIPE(pipes);
 
     if (program->env_) {
@@ -399,39 +416,35 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
     perror("execve failed");
     exit(1);
   } else {
-    auto cgroup = CGroupFactory::GetCGroup(program->exe_);
+    auto cgroup = CGroupFactory::GetCGroup(name_);
 
     if (!cgroup) {
-      kill(pid, SIGKILL);
-      CLOSEPIPE(pipes);
+      KILLCHILD(pid, program);
       return;
     }
 
     if (cgroup->AddProcess(pid) != 0) {
-      kill(pid, SIGKILL);
-      CLOSEPIPE(pipes);
+      KILLCHILD(pid, program);
       return;
     }
 
     if (program->memory_limit_) {
       if (cgroup->SetMemLimit(*program->memory_limit_) != 0) {
-        kill(pid, SIGKILL);
-        CLOSEPIPE(pipes);
+        KILLCHILD(pid, program);
         return;
       }
     }
 
     int pipe_val = 0;
-
     if (write(pipes[1], &pipe_val, sizeof(pipe_val)) != sizeof(pipe_val)) {
-      CLOSEPIPE(pipes);
-      kill(pid, SIGKILL);
+      KILLCHILD(pid, program);
       return;
     }
-    close(pipes[1]);
+    CLOSEPIPE(pipes);
 
     time_t start = time(nullptr);
     int state;
+
     while (true) {
       int result = waitpid(pid, &state, WNOHANG);
       if (result > 0) {

@@ -5,12 +5,12 @@
 
 #include <string>
 #include <vector>
+#include "Types.h"
 #include "Solution.h"
 
 namespace fuzoj {
 
 struct TestCase {
- public:
   int id_;
   // input data
   std::string data_path_;
@@ -24,7 +24,6 @@ struct TestCase {
 };
 
 struct Problem {
- public:
   std::string id_;
   std::string name_;
 
