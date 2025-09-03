@@ -1,5 +1,5 @@
-#ifndef FUZOJ_SRC_UTILS_H_
-#define FUZOJ_SRC_UTILS_H_
+#ifndef FUZOJ_SRC_FUZOJ_UTILS_H_
+#define FUZOJ_SRC_FUZOJ_UTILS_H_
 
 #include <string>
 

@@ -16,7 +16,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <stack>
-
+#include "Timer/timer.h"
 #include "cgroup.h"
 #include "logger.h"
 
@@ -442,7 +442,9 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
     }
     CLOSEPIPE(pipes);
 
-    time_t start = time(nullptr);
+    SteadyClock::time_point start = SteadyClock::now();
+
+    // time_t start = time(nullptr);
     int state;
 
     while (true) {
@@ -450,8 +452,9 @@ void Sandbox::Excute(const std::shared_ptr<SandboxProgram> &program) {
       if (result > 0) {
         break;
       }
+
       if (program->time_limit_ && cgroup->GetRunTimems() > *program->time_limit_ ||
-          time(nullptr) - start > kMaxProcessTime) {
+          std::chrono::duration_cast<std::chrono::seconds>(SteadyClock::now() - start).count() > kMaxProcessTime) {
         kill(pid, SIGKILL);
         // LOGGER.info("Program {}, timelimt.", pid);
         continue;

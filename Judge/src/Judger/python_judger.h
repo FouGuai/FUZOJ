@@ -1,7 +1,7 @@
 #ifndef FUZOJ_SRC_JUDGER_PYTHONJUDGER_H_
 #define FUZOJ_SRC_JUDGER_PYTHONJUDGER_H_
 
-#include "judger.h"
+#include "judge_executor.h"
 
 namespace fuzoj {
 class PythonRunner : public Runner {

@@ -1,4 +1,4 @@
-#include "judger_factory.h"
+#include "judge_executor_factory.h"
 #include <optional>
 
 #include "Judger/cpp_judger.h"
@@ -6,8 +6,8 @@
 
 namespace fuzoj {
 
-std::optional<Judger> JudgerFactory::GetJudger(const std::shared_ptr<Problem> &problem,
-                                               const std::shared_ptr<Solution> &solution) {
+std::optional<JudgerExecutor> JudgerExecutorFactory::GetJudger(const std::shared_ptr<Problem> &problem,
+                                                               const std::shared_ptr<Solution> &solution) {
   std::shared_ptr<Runner> runner;
   std::shared_ptr<Grader> grader;
   switch (problem->checker_language_) {
@@ -32,7 +32,7 @@ std::optional<Judger> JudgerFactory::GetJudger(const std::shared_ptr<Problem> &p
       break;
   }
 
-  std::optional<Judger> judger = Judger(runner, grader);
+  std::optional<JudgerExecutor> judger = JudgerExecutor(runner, grader);
   return std::move(judger);
 }
 

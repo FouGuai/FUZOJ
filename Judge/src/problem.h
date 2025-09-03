@@ -5,8 +5,8 @@
 
 #include <string>
 #include <vector>
-#include "types.h"
 #include "solution.h"
+#include "types.h"
 
 namespace fuzoj {
 
@@ -20,6 +20,8 @@ struct TestCase {
 
   long long time_limit_;
   size_t mem_limit_;
+
+  // ac score
   int score_;
 };
 

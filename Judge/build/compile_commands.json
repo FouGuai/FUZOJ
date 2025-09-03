@@ -1,52 +1,57 @@
 [
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/cgroup.cc.o -c /home/foushen/project/fuzoj/Judge/src/cgroup.cc",
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/cgroup.cc.o -c /home/foushen/project/fuzoj/Judge/src/cgroup.cc",
   "file": "/home/foushen/project/fuzoj/Judge/src/cgroup.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/file_cache.cc.o -c /home/foushen/project/fuzoj/Judge/src/file_cache.cc",
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/file_cache.cc.o -c /home/foushen/project/fuzoj/Judge/src/file_cache.cc",
   "file": "/home/foushen/project/fuzoj/Judge/src/file_cache.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/judger.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/judger.cc"
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/fuzoj_utils.cc.o -c /home/foushen/project/fuzoj/Judge/src/fuzoj_utils.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/fuzoj_utils.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/judger_factory.cc.o -c /home/foushen/project/fuzoj/Judge/src/judger_factory.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/judger_factory.cc"
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/judge_executor.cc.o -c /home/foushen/project/fuzoj/Judge/src/judge_executor.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/judge_executor.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/logger.cc.o -c /home/foushen/project/fuzoj/Judge/src/logger.cc",
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/judge_executor_factory.cc.o -c /home/foushen/project/fuzoj/Judge/src/judge_executor_factory.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/judge_executor_factory.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/logger.cc.o -c /home/foushen/project/fuzoj/Judge/src/logger.cc",
   "file": "/home/foushen/project/fuzoj/Judge/src/logger.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/sandbox.cc.o -c /home/foushen/project/fuzoj/Judge/src/sandbox.cc",
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/main.cc.o -c /home/foushen/project/fuzoj/Judge/src/main.cc",
+  "file": "/home/foushen/project/fuzoj/Judge/src/main.cc"
+},
+{
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/sandbox.cc.o -c /home/foushen/project/fuzoj/Judge/src/sandbox.cc",
   "file": "/home/foushen/project/fuzoj/Judge/src/sandbox.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/utils.cc.o -c /home/foushen/project/fuzoj/Judge/src/utils.cc",
-  "file": "/home/foushen/project/fuzoj/Judge/src/utils.cc"
-},
-{
-  "directory": "/home/foushen/project/fuzoj/Judge/build/src",
-  "command": "/usr/bin/c++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o CMakeFiles/fuzoj_judge.dir/Judger/cpp_judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger/cpp_judger.cc",
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -DFMT_LOCALE -DFMT_SHARED -DJSON_DIAGNOSTICS=0 -DJSON_USE_IMPLICIT_CONVERSIONS=1 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/home/foushen/project/fuzoj/Judge/src -I/usr/include/postgresql -g -fsanitize=address -fno-omit-frame-pointer -g -std=gnu++20 -o src/CMakeFiles/fuzoj_judge.dir/Judger/cpp_judger.cc.o -c /home/foushen/project/fuzoj/Judge/src/Judger/cpp_judger.cc",
   "file": "/home/foushen/project/fuzoj/Judge/src/Judger/cpp_judger.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/test",
-  "command": "/usr/bin/c++  -I/home/foushen/project/fuzoj/Judge/test -g -fsanitize=address -fno-omit-frame-pointer -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o CMakeFiles/sandbox_test.dir/TestSandbox/sandbox_test.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestSandbox/sandbox_test.cc",
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -I/home/foushen/project/fuzoj/Judge/test -g -fsanitize=address -fno-omit-frame-pointer -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o test/CMakeFiles/sandbox_test.dir/TestSandbox/sandbox_test.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestSandbox/sandbox_test.cc",
   "file": "/home/foushen/project/fuzoj/Judge/test/TestSandbox/sandbox_test.cc"
 },
 {
-  "directory": "/home/foushen/project/fuzoj/Judge/build/test",
-  "command": "/usr/bin/c++  -I/home/foushen/project/fuzoj/Judge/test -g -fsanitize=address -fno-omit-frame-pointer -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o CMakeFiles/test_cpp_judger.dir/TestCppJudger/test_cpp_judger.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestCppJudger/test_cpp_judger.cc",
+  "directory": "/home/foushen/project/fuzoj/Judge/build",
+  "command": "/usr/bin/clang++ -I/home/foushen/project/fuzoj/Judge/test -g -fsanitize=address -fno-omit-frame-pointer -g -DGTEST_HAS_PTHREAD=1 -std=gnu++20 -o test/CMakeFiles/test_cpp_judger.dir/TestCppJudger/test_cpp_judger.cc.o -c /home/foushen/project/fuzoj/Judge/test/TestCppJudger/test_cpp_judger.cc",
   "file": "/home/foushen/project/fuzoj/Judge/test/TestCppJudger/test_cpp_judger.cc"
 }
 ]

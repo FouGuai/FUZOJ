@@ -3,7 +3,7 @@
 
 #include <spdlog/spdlog.h>
 #include <memory>
-#include "utils.h"
+#include "fuzoj_utils.h"
 namespace fuzoj {
 class Logger {
  public:
@@ -13,6 +13,7 @@ class Logger {
  private:
   SINGLE_INSTANCE(Logger);
   static std::shared_ptr<spdlog::logger> logger_;
+  static std::once_flag once_flag_;
 };
 
 #define LOGGER (*Logger::GetInstance())

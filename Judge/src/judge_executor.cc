@@ -1,13 +1,13 @@
 #ifndef JUDGER_SRC_JUDGE_
 #define JUDGER_SRC_JUDGE_
-#include "judger.h"
+#include "judge_executor.h"
 #include <cassert>
 
 #include "sandbox.h"
 
 namespace fuzoj {
 
-Judger::Judger(Judger &&other) {
+JudgerExecutor::JudgerExecutor(JudgerExecutor &&other) {
   runner_ = std::move(other.runner_);
   grader_ = std::move(other.grader_);
   ok_ = std::move(other.ok_);
@@ -16,7 +16,7 @@ Judger::Judger(Judger &&other) {
   other.valid_ = false;
 }
 
-Judger &Judger::operator=(Judger &&other) {
+JudgerExecutor &JudgerExecutor::operator=(JudgerExecutor &&other) {
   if (this == &other) {
     return *this;
   }
@@ -29,7 +29,7 @@ Judger &Judger::operator=(Judger &&other) {
   return *this;
 }
 
-std::shared_ptr<Result> Judger::Judge() {
+std::shared_ptr<Result> JudgerExecutor::Judge() {
   valid_ = true;
   std::vector<std::shared_ptr<SandboxProgram>> output_sp;
   Sandbox sandbox("CPP_" + runner_->GetSolution()->id_);
@@ -59,7 +59,7 @@ std::shared_ptr<Result> Judger::Judge() {
   return result;
 }
 
-std::shared_ptr<Result> Judger::Converge(std::vector<TestCaseResult> &runner_result,
+std::shared_ptr<Result> JudgerExecutor::Converge(std::vector<TestCaseResult> &runner_result,
                                          std::vector<TestCaseResult> &grader_result) {
   assert(runner_result.size() == grader_result.size());
   auto result = std::make_shared<Result>();

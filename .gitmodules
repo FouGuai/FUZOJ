@@ -1,0 +1,6 @@
+[submodule "dependency/external/minio"]
+	path = dependency/external/minio
+	url = https://github.com/minio/minio.git
+[submodule "external/minio"]
+	path = external/minio
+	url = https://github.com/minio/minio.git

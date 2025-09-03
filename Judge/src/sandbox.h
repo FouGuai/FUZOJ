@@ -9,7 +9,7 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include "utils.h"
+#include "fuzoj_utils.h"
 
 namespace fuzoj {
 struct SandboxProgram {

@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "fuzoj_utils.h"
 #include <fcntl.h>
 #include <ftw.h>
 #include <sys/sendfile.h>

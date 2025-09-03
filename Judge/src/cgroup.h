@@ -5,7 +5,7 @@
 #include <optional>
 #include <string>
 #include <unordered_set>
-#include "utils.h"
+#include "fuzoj_utils.h"
 namespace fuzoj {
 class CGroupFactory;
 

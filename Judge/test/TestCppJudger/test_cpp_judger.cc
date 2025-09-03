@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include <thread>
-#include "../src/judger_factory.h"
+#include "../src/judge_executor_factory.h"
 
 TEST(TestCppJudger, Judger) {
   std::shared_ptr<fuzoj::Solution> solution = std::make_shared<fuzoj::Solution>();
@@ -22,7 +22,7 @@ TEST(TestCppJudger, Judger) {
     problem->test_case_.push_back(std::move(case1));
   }
 
-  fuzoj::JudgerFactory judger_factory;
+  fuzoj::JudgerExecutorFactory judger_factory;
   auto judger = judger_factory.GetJudger(problem, solution);
   auto result = judger->Judge();
   ASSERT_TRUE(!!result);
@@ -60,7 +60,7 @@ TEST(TestCppJudger, JudgerTLE) {
     problem->test_case_.push_back(std::move(case1));
   }
 
-  fuzoj::JudgerFactory judger_factory;
+  fuzoj::JudgerExecutorFactory judger_factory;
   auto judger = judger_factory.GetJudger(problem, solution);
   auto result = judger->Judge();
   ASSERT_TRUE(!!result);
@@ -98,7 +98,7 @@ TEST(TestCppJudger, JudgerMLE) {
     problem->test_case_.push_back(std::move(case1));
   }
 
-  fuzoj::JudgerFactory judger_factory;
+  fuzoj::JudgerExecutorFactory judger_factory;
   auto judger = judger_factory.GetJudger(problem, solution);
   auto result = judger->Judge();
   ASSERT_TRUE(!!result);
@@ -136,7 +136,7 @@ TEST(TestCppJudger, JudgerCE) {
     problem->test_case_.push_back(std::move(case1));
   }
 
-  fuzoj::JudgerFactory judger_factory;
+  fuzoj::JudgerExecutorFactory judger_factory;
   auto judger = judger_factory.GetJudger(problem, solution);
   auto result = judger->Judge();
   ASSERT_TRUE(!!result);
@@ -174,7 +174,7 @@ TEST(TestCppJudger, JudgerRE) {
     problem->test_case_.push_back(std::move(case1));
   }
 
-  fuzoj::JudgerFactory judger_factory;
+  fuzoj::JudgerExecutorFactory judger_factory;
   auto judger = judger_factory.GetJudger(problem, solution);
   auto result = judger->Judge();
   ASSERT_TRUE(!!result);
@@ -212,7 +212,7 @@ TEST(TestCppJudger, JudgerFPE) {
     problem->test_case_.push_back(std::move(case1));
   }
 
-  fuzoj::JudgerFactory judger_factory;
+  fuzoj::JudgerExecutorFactory judger_factory;
   auto judger = judger_factory.GetJudger(problem, solution);
   auto result = judger->Judge();
   ASSERT_TRUE(!!result);
@@ -251,7 +251,7 @@ TEST(TestCppJudger, JudgerWa) {
     problem->test_case_.push_back(std::move(case1));
   }
 
-  fuzoj::JudgerFactory judger_factory;
+  fuzoj::JudgerExecutorFactory judger_factory;
   auto judger = judger_factory.GetJudger(problem, solution);
   auto result = judger->Judge();
   ASSERT_TRUE(!!result);
@@ -290,7 +290,7 @@ TEST(TestCppJudger, MultiJudger) {
       problem->test_case_.push_back(std::move(case1));
     }
 
-    fuzoj::JudgerFactory judger_factory;
+    fuzoj::JudgerExecutorFactory judger_factory;
     auto judger = judger_factory.GetJudger(problem, solution);
     auto result = judger->Judge();
     ASSERT_TRUE(!!result);

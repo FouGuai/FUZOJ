@@ -75,21 +75,21 @@
 				{
 					"directoryIndex" : 1,
 					"id" : "fuzoj_judge::@145eef247bfb46b6828c",
-					"jsonFile" : "target-fuzoj_judge-Debug-9c502c3ddc9a105937a9.json",
+					"jsonFile" : "target-fuzoj_judge-Debug-f1d678ef2e0049df01c3.json",
 					"name" : "fuzoj_judge",
 					"projectIndex" : 0
 				},
 				{
 					"directoryIndex" : 2,
 					"id" : "sandbox_test::@36f028580bb02cc8272a",
-					"jsonFile" : "target-sandbox_test-Debug-349df030a2d005ca52cd.json",
+					"jsonFile" : "target-sandbox_test-Debug-b44fea8ddffa5b9fd502.json",
 					"name" : "sandbox_test",
 					"projectIndex" : 0
 				},
 				{
 					"directoryIndex" : 2,
 					"id" : "test_cpp_judger::@36f028580bb02cc8272a",
-					"jsonFile" : "target-test_cpp_judger-Debug-d706a6256bfccce8373f.json",
+					"jsonFile" : "target-test_cpp_judger-Debug-a611001c3e9d95c7c7e6.json",
 					"name" : "test_cpp_judger",
 					"projectIndex" : 0
 				}

@@ -38,7 +38,7 @@
 			{
 				"command" : 1,
 				"file" : 1,
-				"line" : 26,
+				"line" : 41,
 				"parent" : 2
 			},
 			{
@@ -50,7 +50,7 @@
 			{
 				"command" : 3,
 				"file" : 1,
-				"line" : 25,
+				"line" : 40,
 				"parent" : 2
 			},
 			{
@@ -158,12 +158,12 @@
 			},
 			{
 				"backtrace" : 4,
-				"fragment" : "../src/libfuzoj_judge.a",
+				"fragment" : "src/libfuzoj_judge.a",
 				"role" : "libraries"
 			},
 			{
 				"backtrace" : 4,
-				"fragment" : "../src/libfuzoj_judge.a",
+				"fragment" : "src/libfuzoj_judge.a",
 				"role" : "libraries"
 			},
 			{
@@ -180,6 +180,10 @@
 			},
 			{
 				"fragment" : "-lseccomp",
+				"role" : "libraries"
+			},
+			{
+				"fragment" : "/usr/lib/x86_64-linux-gnu/libpq.so",
 				"role" : "libraries"
 			}
 		],

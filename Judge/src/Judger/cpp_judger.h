@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "judger.h"
+#include "judge_executor.h"
 #include "solution.h"
 
 namespace fuzoj {
