@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+      
+  redis:
+    image: redis:6.2
+    ports:
+      - "6379:6379"
+      
+  minio:
+    image: minio/minio
+    command: server /data
+    ports:
+      - "9000:9000"
+      
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"

@@ -1,0 +1,48 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test Output
+*.out
+cover.out
+coverage.txt
+coverage.html
+
+# Vendor
+# vendor/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# IDEs & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data
+data/
+docker-data/
+minio-data/
+mysql-data/
+redis-data/
+
+# Buffer & Keys
+*.pem
+*.key
+!api/proto/**/*.proto 
