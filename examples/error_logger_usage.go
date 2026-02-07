@@ -21,25 +21,25 @@ func (s *UserService) GetUser(ctx context.Context, userID int64) (*User, error) 
 	if userID == 0 {
 		return nil, errors.New(errors.UserNotFound)
 	}
-	
+
 	// Scenario 2: User not found with custom message
 	if userID < 0 {
 		return nil, errors.Newf(errors.UserNotFound, "user with id %d does not exist", userID)
 	}
-	
+
 	// Scenario 3: Database error with wrapping
 	// err := db.Query(...)
 	// if err != nil {
 	//     return nil, errors.Wrap(err, errors.DatabaseError)
 	// }
-	
+
 	// Scenario 4: Add context details
 	user := &User{ID: userID, Username: "testuser"}
 	logger.Info(ctx, "user retrieved successfully",
 		zap.Int64("user_id", userID),
 		zap.String("username", user.Username),
 	)
-	
+
 	return user, nil
 }
 
@@ -50,7 +50,7 @@ func (s *UserService) CreateUser(ctx context.Context, req *CreateUserRequest) er
 			WithDetail("field", "username").
 			WithDetail("requirement", "must not be empty")
 	}
-	
+
 	// Scenario 6: Business rule violation
 	if len(req.Password) < 8 {
 		return errors.New(errors.PasswordTooWeak).
@@ -58,18 +58,18 @@ func (s *UserService) CreateUser(ctx context.Context, req *CreateUserRequest) er
 			WithDetail("min_length", 8).
 			WithDetail("provided_length", len(req.Password))
 	}
-	
+
 	// Scenario 7: Username already exists
 	// exists, err := s.repo.UsernameExists(ctx, req.Username)
 	// if exists {
 	//     return errors.New(errors.UsernameAlreadyExists).
 	//         WithDetail("username", req.Username)
 	// }
-	
+
 	logger.Info(ctx, "user created successfully",
 		zap.String("username", req.Username),
 	)
-	
+
 	return nil
 }
 
@@ -83,7 +83,7 @@ type UserHandler struct {
 func (h *UserHandler) GetUserHandler(c *gin.Context) {
 	// Extract user ID from path
 	userID := int64(1) // In real code: parse from c.Param("id")
-	
+
 	// Call service
 	user, err := h.service.GetUser(c.Request.Context(), userID)
 	if err != nil {
@@ -91,7 +91,7 @@ func (h *UserHandler) GetUserHandler(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	
+
 	// Success response
 	response.Success(c, user)
 }
@@ -99,20 +99,20 @@ func (h *UserHandler) GetUserHandler(c *gin.Context) {
 // CreateUserHandler demonstrates validation and error handling
 func (h *UserHandler) CreateUserHandler(c *gin.Context) {
 	var req CreateUserRequest
-	
+
 	// Bind JSON request
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request body")
 		return
 	}
-	
+
 	// Call service
 	if err := h.service.CreateUser(c.Request.Context(), &req); err != nil {
 		// Response package will auto-detect error code and HTTP status
 		response.Error(c, err)
 		return
 	}
-	
+
 	response.SuccessWithMessage(c, "user created successfully", nil)
 }
 
@@ -121,31 +121,31 @@ func (h *UserHandler) CreateUserHandler(c *gin.Context) {
 func LoggerExamples(ctx context.Context) {
 	// Basic logging
 	logger.Info(ctx, "user logged in")
-	
+
 	// Logging with fields
 	logger.Info(ctx, "processing submission",
 		zap.Int64("submission_id", 12345),
 		zap.String("language", "cpp"),
 		zap.Int("problem_id", 100),
 	)
-	
+
 	// Debug logging (won't show in production)
 	logger.Debug(ctx, "cache hit",
 		zap.String("key", "user:123"),
 		zap.Duration("latency", 5000),
 	)
-	
+
 	// Warning
 	logger.Warn(ctx, "cache miss, falling back to database",
 		zap.String("key", "user:123"),
 	)
-	
+
 	// Error logging
 	logger.Error(ctx, "failed to send email",
 		zap.String("recipient", "user@example.com"),
 		zap.Error(errors.New(errors.InternalServerError)),
 	)
-	
+
 	// Formatted logging
 	logger.Infof(ctx, "user %s submitted problem %d", "alice", 100)
 	logger.Errorf(ctx, "failed to connect to redis: %v", "connection refused")
@@ -158,7 +158,7 @@ type UserRepository struct{}
 func (r *UserRepository) GetByID(ctx context.Context, id int64) (*User, error) {
 	// Log the database query
 	logger.Debug(ctx, "querying user by id", zap.Int64("user_id", id))
-	
+
 	// Simulate database error
 	// err := db.First(&user, id).Error
 	// if err == gorm.ErrRecordNotFound {
@@ -172,10 +172,10 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*User, error) {
 	//     )
 	//     return nil, errors.Wrap(err, errors.DatabaseError)
 	// }
-	
+
 	user := &User{ID: id, Username: "testuser"}
 	logger.Debug(ctx, "user found", zap.Any("user", user))
-	
+
 	return user, nil
 }
 
@@ -197,16 +197,16 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*User, error) {
 func UseNewErrorCode(ctx context.Context) error {
 	// Direct usage
 	// return errors.New(errors.CustomFeatureNotEnabled)
-	
+
 	// With custom message
-	// return errors.Newf(errors.CustomFeatureNotEnabled, 
+	// return errors.Newf(errors.CustomFeatureNotEnabled,
 	//     "feature %s requires premium subscription", "advanced_analytics")
-	
+
 	// With details
 	// return errors.New(errors.CustomFeatureNotEnabled).
 	//     WithDetail("feature", "advanced_analytics").
 	//     WithDetail("required_plan", "premium")
-	
+
 	return nil
 }
 
@@ -214,16 +214,16 @@ func UseNewErrorCode(ctx context.Context) error {
 
 func ErrorCheckingExample(ctx context.Context) {
 	err := errors.New(errors.UserNotFound)
-	
+
 	// Check if error is specific code
 	if errors.Is(err, errors.UserNotFound) {
 		logger.Info(ctx, "user not found, creating new user")
 	}
-	
+
 	// Extract error code
 	code := errors.GetCode(err)
 	logger.Info(ctx, "error occurred", zap.Int("code", int(code)))
-	
+
 	// Get HTTP status
 	status := code.HTTPStatus()
 	logger.Info(ctx, "http status", zap.Int("status", status))
@@ -237,11 +237,11 @@ func PaginationExample(c *gin.Context) {
 		{ID: 1, Username: "alice"},
 		{ID: 2, Username: "bob"},
 	}
-	
+
 	total := int64(100)
 	page := 1
 	pageSize := 10
-	
+
 	response.SuccessWithPagination(c, users, total, page, pageSize)
 	// Output:
 	// {
@@ -276,20 +276,20 @@ type CreateUserRequest struct {
 func main() {
 	// Initialize logger
 	loggerConfig := logger.Config{
-		Level:      "debug",        // debug, info, warn, error
-		Format:     "console",      // json, console
-		OutputPath: "stdout",       // stdout or file path
-		ErrorPath:  "stderr",       // stderr or file path
+		Level:      "debug",   // debug, info, warn, error
+		Format:     "console", // json, console
+		OutputPath: "stdout",  // stdout or file path
+		ErrorPath:  "stderr",  // stderr or file path
 	}
-	
+
 	if err := logger.Init(loggerConfig); err != nil {
 		panic(err)
 	}
 	defer logger.Sync()
-	
+
 	// Initialize Gin
 	r := gin.Default()
-	
+
 	// Add trace ID middleware
 	r.Use(func(c *gin.Context) {
 		// Generate or extract trace ID
@@ -298,21 +298,21 @@ func main() {
 			traceID = "trace-" + c.GetString("request_id")
 		}
 		c.Set("trace_id", traceID)
-		
+
 		// Add to context
 		ctx := context.WithValue(c.Request.Context(), "trace_id", traceID)
 		c.Request = c.Request.WithContext(ctx)
-		
+
 		c.Next()
 	})
-	
+
 	// Setup routes
 	service := &UserService{}
 	handler := &UserHandler{service: service}
-	
+
 	r.GET("/users/:id", handler.GetUserHandler)
 	r.POST("/users", handler.CreateUserHandler)
-	
+
 	// Start server
 	logger.Info(context.Background(), "server starting", zap.Int("port", 8080))
 	if err := r.Run(":8080"); err != nil {

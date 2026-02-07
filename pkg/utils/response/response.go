@@ -11,10 +11,10 @@ import (
 
 // Response represents a standard API response
 type Response struct {
-	Code    errors.ErrorCode `json:"code"`              // Error code
-	Message string           `json:"message"`           // Error message
-	Data    interface{}      `json:"data,omitempty"`    // Response data (omit if nil)
-	Details interface{}      `json:"details,omitempty"` // Additional details (omit if nil)
+	Code    errors.ErrorCode `json:"code"`               // Error code
+	Message string           `json:"message"`            // Error message
+	Data    interface{}      `json:"data,omitempty"`     // Response data (omit if nil)
+	Details interface{}      `json:"details,omitempty"`  // Additional details (omit if nil)
 	TraceID string           `json:"trace_id,omitempty"` // Request trace ID
 }
 
@@ -44,7 +44,7 @@ func SuccessWithMessage(c *gin.Context, message string, data interface{}) {
 // It automatically extracts error code and message from the error
 func Error(c *gin.Context, err error) {
 	customErr := errors.GetError(err)
-	
+
 	// Log the error with context
 	logger.Error(c.Request.Context(), "request error",
 		zap.Int("code", int(customErr.Code)),
