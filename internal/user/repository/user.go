@@ -3,9 +3,12 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
+	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/db"
 )
 
@@ -52,11 +55,29 @@ type UserRepository interface {
 }
 
 type PostgresUserRepository struct {
-	db db.Database
+	db       db.Database
+	cache    cache.Cache
+	ttl      time.Duration
+	emptyTTL time.Duration
 }
 
-func NewUserRepository(database db.Database) UserRepository {
-	return &PostgresUserRepository{db: database}
+func NewUserRepository(database db.Database, cacheClient cache.Cache) UserRepository {
+	return NewUserRepositoryWithTTL(database, cacheClient, defaultUserCacheTTL, defaultUserCacheEmptyTTL)
+}
+
+func NewUserRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl, emptyTTL time.Duration) UserRepository {
+	if ttl <= 0 {
+		ttl = defaultUserCacheTTL
+	}
+	if emptyTTL <= 0 {
+		emptyTTL = defaultUserCacheEmptyTTL
+	}
+	return &PostgresUserRepository{
+		db:       database,
+		cache:    cacheClient,
+		ttl:      ttl,
+		emptyTTL: emptyTTL,
+	}
 }
 
 const userColumns = "id, username, email, phone, password_hash, role, status, created_at, updated_at"
@@ -96,46 +117,110 @@ func (r *PostgresUserRepository) Create(ctx context.Context, tx db.Transaction, 
 		}
 		return 0, err
 	}
+	if r.cache != nil {
+		user.ID = id
+		r.setCache(ctx, user)
+	}
 	return id, nil
 }
 
 func (r *PostgresUserRepository) GetByID(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
-	query := "SELECT " + userColumns + " FROM users WHERE id = $1"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, id)
-	user, err := scanUser(row)
-	if err != nil {
-		if isNoRows(err) {
+	if r.cache != nil && tx == nil {
+		user, err := cache.GetWithCached[*User](
+			ctx,
+			r.cache,
+			userInfoKey(id),
+			cache.JitterTTL(r.ttl),
+			cache.JitterTTL(r.emptyTTL),
+			func(user *User) bool { return user == nil },
+			marshalUser,
+			unmarshalUser,
+			func(ctx context.Context) (*User, error) {
+				user, err := r.getByIDFromDB(ctx, nil, id)
+				if err != nil {
+					if errors.Is(err, ErrUserNotFound) {
+						return nil, nil
+					}
+					return nil, err
+				}
+				return user, nil
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		if user == nil {
 			return nil, ErrUserNotFound
 		}
-		return nil, err
+		return user, nil
 	}
-	return user, nil
+	return r.getByIDFromDB(ctx, tx, id)
 }
 
 func (r *PostgresUserRepository) GetByUsername(ctx context.Context, tx db.Transaction, username string) (*User, error) {
-	query := "SELECT " + userColumns + " FROM users WHERE username = $1"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, username)
-	user, err := scanUser(row)
-	if err != nil {
-		if isNoRows(err) {
+	if r.cache != nil && tx == nil {
+		user, err := cache.GetWithCached[*User](
+			ctx,
+			r.cache,
+			userUsernameKey(username),
+			cache.JitterTTL(r.ttl),
+			cache.JitterTTL(r.emptyTTL),
+			func(user *User) bool { return user == nil },
+			marshalUser,
+			unmarshalUser,
+			func(ctx context.Context) (*User, error) {
+				user, err := r.getByUsernameFromDB(ctx, nil, username)
+				if err != nil {
+					if errors.Is(err, ErrUserNotFound) {
+						return nil, nil
+					}
+					return nil, err
+				}
+				return user, nil
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		if user == nil {
 			return nil, ErrUserNotFound
 		}
-		return nil, err
+		return user, nil
 	}
-	return user, nil
+	return r.getByUsernameFromDB(ctx, tx, username)
 }
 
 func (r *PostgresUserRepository) GetByEmail(ctx context.Context, tx db.Transaction, email string) (*User, error) {
-	query := "SELECT " + userColumns + " FROM users WHERE email = $1"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, email)
-	user, err := scanUser(row)
-	if err != nil {
-		if isNoRows(err) {
+	if r.cache != nil && tx == nil {
+		user, err := cache.GetWithCached[*User](
+			ctx,
+			r.cache,
+			userEmailKey(email),
+			cache.JitterTTL(r.ttl),
+			cache.JitterTTL(r.emptyTTL),
+			func(user *User) bool { return user == nil },
+			marshalUser,
+			unmarshalUser,
+			func(ctx context.Context) (*User, error) {
+				user, err := r.getByEmailFromDB(ctx, nil, email)
+				if err != nil {
+					if errors.Is(err, ErrUserNotFound) {
+						return nil, nil
+					}
+					return nil, err
+				}
+				return user, nil
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		if user == nil {
 			return nil, ErrUserNotFound
 		}
-		return nil, err
+		return user, nil
 	}
-	return user, nil
+	return r.getByEmailFromDB(ctx, tx, email)
 }
 
 func (r *PostgresUserRepository) ExistsByUsername(ctx context.Context, tx db.Transaction, username string) (bool, error) {
@@ -165,6 +250,14 @@ func (r *PostgresUserRepository) ExistsByEmail(ctx context.Context, tx db.Transa
 }
 
 func (r *PostgresUserRepository) UpdatePassword(ctx context.Context, tx db.Transaction, userID int64, newHash string) error {
+	var username, email string
+	if r.cache != nil {
+		var err error
+		username, email, err = r.getUserIdentifiers(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+	}
 	query := "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2"
 	result, err := getQuerier(r.db, tx).Exec(ctx, query, newHash, userID)
 	if err != nil {
@@ -178,10 +271,21 @@ func (r *PostgresUserRepository) UpdatePassword(ctx context.Context, tx db.Trans
 	if affected == 0 {
 		return ErrUserNotFound
 	}
+	if r.cache != nil {
+		r.deleteCache(ctx, userID, username, email)
+	}
 	return nil
 }
 
 func (r *PostgresUserRepository) UpdateStatus(ctx context.Context, tx db.Transaction, userID int64, status UserStatus) error {
+	var username, email string
+	if r.cache != nil {
+		var err error
+		username, email, err = r.getUserIdentifiers(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+	}
 	query := "UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2"
 	result, err := getQuerier(r.db, tx).Exec(ctx, query, status, userID)
 	if err != nil {
@@ -195,7 +299,142 @@ func (r *PostgresUserRepository) UpdateStatus(ctx context.Context, tx db.Transac
 	if affected == 0 {
 		return ErrUserNotFound
 	}
+	if r.cache != nil {
+		r.deleteCache(ctx, userID, username, email)
+	}
 	return nil
+}
+
+const (
+	userInfoKeyPrefix     = "user:info:"
+	userUsernameKeyPrefix = "user:username:"
+	userEmailKeyPrefix    = "user:email:"
+
+	defaultUserCacheTTL      = 30 * time.Minute
+	defaultUserCacheEmptyTTL = 5 * time.Minute
+)
+
+func (r *PostgresUserRepository) getByIDFromDB(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
+	query := "SELECT " + userColumns + " FROM users WHERE id = $1"
+	row := getQuerier(r.db, tx).QueryRow(ctx, query, id)
+	user, err := scanUser(row)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *PostgresUserRepository) getByUsernameFromDB(ctx context.Context, tx db.Transaction, username string) (*User, error) {
+	query := "SELECT " + userColumns + " FROM users WHERE username = $1"
+	row := getQuerier(r.db, tx).QueryRow(ctx, query, username)
+	user, err := scanUser(row)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *PostgresUserRepository) getByEmailFromDB(ctx context.Context, tx db.Transaction, email string) (*User, error) {
+	query := "SELECT " + userColumns + " FROM users WHERE email = $1"
+	row := getQuerier(r.db, tx).QueryRow(ctx, query, email)
+	user, err := scanUser(row)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
+func (r *PostgresUserRepository) getUserIdentifiers(ctx context.Context, tx db.Transaction, userID int64) (string, string, error) {
+	query := "SELECT username, email FROM users WHERE id = $1"
+	row := getQuerier(r.db, tx).QueryRow(ctx, query, userID)
+	var username, email string
+	if err := row.Scan(&username, &email); err != nil {
+		if isNoRows(err) {
+			return "", "", ErrUserNotFound
+		}
+		return "", "", err
+	}
+	return username, email, nil
+}
+
+func (r *PostgresUserRepository) setCache(ctx context.Context, user *User) {
+	if r.cache == nil || user == nil {
+		return
+	}
+
+	payload, err := json.Marshal(user)
+	if err != nil {
+		return
+	}
+	data := string(payload)
+
+	_ = r.cache.Set(ctx, userInfoKey(user.ID), data, cache.JitterTTL(r.ttl))
+	if user.Username != "" {
+		_ = r.cache.Set(ctx, userUsernameKey(user.Username), data, cache.JitterTTL(r.ttl))
+	}
+	if user.Email != "" {
+		_ = r.cache.Set(ctx, userEmailKey(user.Email), data, cache.JitterTTL(r.ttl))
+	}
+}
+
+func (r *PostgresUserRepository) deleteCache(ctx context.Context, userID int64, username, email string) {
+	if r.cache == nil {
+		return
+	}
+	keys := make([]string, 0, 3)
+	if userID != 0 {
+		keys = append(keys, userInfoKey(userID))
+	}
+	if username != "" {
+		keys = append(keys, userUsernameKey(username))
+	}
+	if email != "" {
+		keys = append(keys, userEmailKey(email))
+	}
+	if len(keys) == 0 {
+		return
+	}
+	_ = r.cache.Del(ctx, keys...)
+}
+
+func userInfoKey(id int64) string {
+	return fmt.Sprintf("%s%d", userInfoKeyPrefix, id)
+}
+
+func userUsernameKey(username string) string {
+	return userUsernameKeyPrefix + username
+}
+
+func userEmailKey(email string) string {
+	return userEmailKeyPrefix + email
+}
+
+func marshalUser(user *User) string {
+	payload, err := json.Marshal(user)
+	if err != nil {
+		return ""
+	}
+	return string(payload)
+}
+
+func unmarshalUser(data string) (*User, error) {
+	if data == "" {
+		return nil, nil
+	}
+	var user User
+	if err := json.Unmarshal([]byte(data), &user); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func scanUser(scanner db.Scanner) (*User, error) {

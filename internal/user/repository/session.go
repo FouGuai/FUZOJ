@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"fuzoj/internal/common/cache"
@@ -38,15 +40,32 @@ type TokenRepository interface {
 }
 
 type PostgresTokenRepository struct {
-	db    db.Database
-	cache cache.Cache
+	db       db.Database
+	cache    cache.Cache
+	ttl      time.Duration
+	emptyTTL time.Duration
 }
 
 func NewTokenRepository(database db.Database, cacheClient cache.Cache) TokenRepository {
-	return &PostgresTokenRepository{db: database, cache: cacheClient}
+	return NewTokenRepositoryWithTTL(database, cacheClient, defaultTokenCacheTTL, defaultTokenCacheEmptyTTL)
+}
+
+func NewTokenRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl, emptyTTL time.Duration) TokenRepository {
+	if ttl <= 0 {
+		ttl = defaultTokenCacheTTL
+	}
+	if emptyTTL <= 0 {
+		emptyTTL = defaultTokenCacheEmptyTTL
+	}
+	return &PostgresTokenRepository{db: database, cache: cacheClient, ttl: ttl, emptyTTL: emptyTTL}
 }
 
 const tokenColumns = "id, user_id, token_hash, token_type, device_info, ip_address, expires_at, revoked, created_at"
+const (
+	tokenCacheKeyPrefix       = "token:hash:"
+	defaultTokenCacheTTL      = 30 * time.Minute
+	defaultTokenCacheEmptyTTL = 5 * time.Minute
+)
 
 func (r *PostgresTokenRepository) Create(ctx context.Context, tx db.Transaction, token *UserToken) error {
 	if token == nil {
@@ -74,20 +93,41 @@ func (r *PostgresTokenRepository) Create(ctx context.Context, tx db.Transaction,
 		token.ExpiresAt,
 		token.Revoked,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if r.cache != nil && tx == nil {
+		r.setCache(ctx, token)
+	}
+	return nil
 }
 
 func (r *PostgresTokenRepository) GetByHash(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
-	query := "SELECT " + tokenColumns + " FROM user_tokens WHERE token_hash = $1"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, tokenHash)
-	result, err := scanToken(row)
-	if err != nil {
-		if isNoRows(err) {
-			return nil, ErrTokenNotFound
+	if r.cache != nil && tx == nil {
+		key := tokenCacheKey(tokenHash)
+		if cached, err := r.cache.Get(ctx, key); err == nil && cached != "" {
+			if cached == cache.NullCacheValue {
+				return nil, ErrTokenNotFound
+			}
+			token, err := unmarshalToken(cached)
+			if err == nil && token != nil {
+				return token, nil
+			}
 		}
-		return nil, err
+
+		token, err := r.getByHashFromDB(ctx, nil, tokenHash)
+		if err != nil {
+			if errors.Is(err, ErrTokenNotFound) {
+				_ = r.cache.Set(ctx, key, cache.NullCacheValue, cache.JitterTTL(r.emptyTTL))
+				return nil, ErrTokenNotFound
+			}
+			return nil, err
+		}
+		r.setCache(ctx, token)
+		return token, nil
 	}
-	return result, nil
+
+	return r.getByHashFromDB(ctx, tx, tokenHash)
 }
 
 func (r *PostgresTokenRepository) RevokeByHash(ctx context.Context, tx db.Transaction, tokenHash string, expiresAt time.Time) error {
@@ -103,6 +143,9 @@ func (r *PostgresTokenRepository) RevokeByHash(ctx context.Context, tx db.Transa
 	}
 	if affected == 0 {
 		return ErrTokenNotFound
+	}
+	if r.cache != nil {
+		r.deleteCache(ctx, tokenHash)
 	}
 
 	return r.blacklistToken(ctx, tokenHash, expiresAt)
@@ -138,6 +181,9 @@ func (r *PostgresTokenRepository) RevokeByUser(ctx context.Context, tx db.Transa
 		if err := r.blacklistToken(ctx, token.TokenHash, token.ExpiresAt); err != nil {
 			return err
 		}
+		if r.cache != nil {
+			r.deleteCache(ctx, token.TokenHash)
+		}
 	}
 
 	return nil
@@ -165,6 +211,67 @@ func (r *PostgresTokenRepository) blacklistToken(ctx context.Context, tokenHash 
 	}
 
 	return extendTTL(ctx, r.cache, tokenBlacklistKey, ttl)
+}
+
+func (r *PostgresTokenRepository) getByHashFromDB(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
+	query := "SELECT " + tokenColumns + " FROM user_tokens WHERE token_hash = $1"
+	row := getQuerier(r.db, tx).QueryRow(ctx, query, tokenHash)
+	result, err := scanToken(row)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, ErrTokenNotFound
+		}
+		return nil, err
+	}
+	return result, nil
+}
+
+func (r *PostgresTokenRepository) cacheTTL(expiresAt time.Time) time.Duration {
+	ttl := time.Until(expiresAt)
+	if ttl <= 0 {
+		return 0
+	}
+	if r.ttl > 0 && ttl > r.ttl {
+		ttl = r.ttl
+	}
+	return cache.JitterTTL(ttl)
+}
+
+func (r *PostgresTokenRepository) setCache(ctx context.Context, token *UserToken) {
+	if r.cache == nil || token == nil {
+		return
+	}
+	ttl := r.cacheTTL(token.ExpiresAt)
+	if ttl <= 0 {
+		return
+	}
+	payload, err := json.Marshal(token)
+	if err != nil {
+		return
+	}
+	_ = r.cache.Set(ctx, tokenCacheKey(token.TokenHash), string(payload), ttl)
+}
+
+func (r *PostgresTokenRepository) deleteCache(ctx context.Context, tokenHash string) {
+	if r.cache == nil || tokenHash == "" {
+		return
+	}
+	_ = r.cache.Del(ctx, tokenCacheKey(tokenHash))
+}
+
+func tokenCacheKey(tokenHash string) string {
+	return fmt.Sprintf("%s%s", tokenCacheKeyPrefix, tokenHash)
+}
+
+func unmarshalToken(data string) (*UserToken, error) {
+	if data == "" {
+		return nil, nil
+	}
+	var token UserToken
+	if err := json.Unmarshal([]byte(data), &token); err != nil {
+		return nil, err
+	}
+	return &token, nil
 }
 
 func scanToken(scanner db.Scanner) (*UserToken, error) {

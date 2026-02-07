@@ -43,6 +43,38 @@
 
 - ai 不应该手动提交 git，应该由人类审核并且提交
 
+## 性能要求
+
+### 缓存优先原则
+
+- **有缓存就要用缓存**：除非有明确说明，否则任何可以缓存的数据都应该使用缓存机制
+  - 用户信息、配置数据 → Redis 缓存（TTL: 30min）
+  - 黑名单数据（被封禁用户） → 本地内存缓存 + Redis 备份
+  - 热点数据 → 多层缓存（本地内存 → Redis → 数据库）
+  - 频繁查询的数据 → 一定要缓存
+  - 要考虑缓存雪崩，缓存穿透，缓存击穿的影响
+
+- **缓存模式遵循规范**：
+  - 读操作：使用 `cache.GetWithCached()` 实现 Cache-Aside 模式
+  - 空值缓存：防止缓存穿透，用短 TTL（如 5 分钟）缓存空结果
+  - 写操作：使用 Write-Through（写入后立即删除缓存）或 Write-Behind（异步更新）
+
+- **缓存框架和工具**：
+  - 查看 **已实现的模块文档** 中的 `Common Cache Interface` 和 `User Cache Repository`
+  - 复用现有的缓存实现，不要重复造轮子
+
+### 高并发优化
+
+- **连接池**：数据库、Redis、MQ 都要使用连接池，单个连接池共享（不是一个 Repository 一个池）
+- **批量操作**：大量数据查询时使用批量接口（`MGET`、`IN` 查询），减少网络往返
+- **异步处理**：非关键路径的操作（日志、审计、通知）用消息队列异步处理
+- **超时控制**：所有外部调用（数据库、缓存、MQ）都要设置 context timeout，防止慢查询堆积
+
+### 监控与可观测性
+
+- 添加性能相关的日志和 metrics（查询耗时、缓存命中率、慢查询）
+- 定期查看是否有性能瓶颈（未缓存的热点数据、N+1 查询等）
+
 ## 安全与配置建议
 
 - 所有外部输入必须校验
@@ -77,12 +109,13 @@
 
 - 位置：统一放在 `docs/` 目录下，按功能模块分类
 - 格式：`.md` 文件，使用中文编写
+- 复用性：有些功能相似的模块可以放在同一个文件中
 - 结构：分为三个层级
   - **第一层**：功能概览（用途、核心特性）
   - **第二层**：关键接口或数据结构（列出主要 API、类型定义）
   - **第三层**：使用示例或配置说明（可选，复杂模块必须包含）
 - 长度：200-500 字为宜，简明扼要
-- 示例见：`docs/user_cache_repository.md`
+- 示例见：`docs/user_repository.md`
 
 ### 在 AGENTS.md 中的注册方式
 
@@ -90,11 +123,12 @@
 - 格式：模块名称 + 文档路径 + 一句话说明
 - 示例：
   ```
-  - **User Cache Repository**：`docs/user_cache_repository.md` — 缓存旁路模式辅助工具
+  - **User Repository**：`docs/user_repository.md` — 用户、会话与缓存仓储的数据访问层实现
   ```
 
 ## 已实现的模块文档
 
-- **User Cache Repository**：`docs/user_cache_repository.md` — 缓存旁路模式实现，用于优化用户信息读取
 - **Common Cache Interface**：`internal/common/cache/interface.go` — 统一的缓存操作接口定义
 - **User Repository**：`docs/user_repository.md` — 用户、会话与缓存仓储的数据访问层实现
+- **User Auth Service**：`docs/user_auth_service.md` — 用户注册、登录与令牌管理服务
+- **User Token Repository**：`docs/user_token_repository.md` — 用户 Token 持久化与黑名单管理
