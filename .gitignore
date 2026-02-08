@@ -46,3 +46,7 @@ redis-data/
 *.pem
 *.key
 !api/proto/**/*.proto 
+
+
+coverage.html
+coverage.out
