@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"fuzoj/internal/user/repository"
 	"fuzoj/internal/user/service"
 	pkgerrors "fuzoj/pkg/errors"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -266,6 +268,10 @@ func newAuthServiceWithFakes(userRepo *fakeUserRepo, tokenRepo *fakeTokenRepo, c
 	return service.NewAuthService(nil, userRepo, tokenRepo, cache, cfg)
 }
 
+func newAuthServiceWithConfig(userRepo *fakeUserRepo, tokenRepo *fakeTokenRepo, cache *fakeCache, cfg service.AuthServiceConfig) *service.AuthService {
+	return service.NewAuthService(nil, userRepo, tokenRepo, cache, cfg)
+}
+
 func TestAuthService_Register(t *testing.T) {
 	userRepo := newFakeUserRepo()
 	tokenRepo := newFakeTokenRepo()
@@ -292,6 +298,51 @@ func TestAuthService_Register(t *testing.T) {
 	})
 	if err == nil || !pkgerrors.Is(err, pkgerrors.UsernameAlreadyExists) {
 		t.Fatalf("expected UsernameAlreadyExists, got %v", err)
+	}
+}
+
+func TestAuthService_RegisterValidation(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	tokenRepo := newFakeTokenRepo()
+	cache := newFakeCache()
+	authService := newAuthServiceWithFakes(userRepo, tokenRepo, cache)
+
+	tests := []struct {
+		name     string
+		username string
+		password string
+		errCode  pkgerrors.ErrorCode
+	}{
+		{
+			name:     "invalid username",
+			username: "ab",
+			password: "password123",
+			errCode:  pkgerrors.InvalidUsername,
+		},
+		{
+			name:     "weak password",
+			username: "valid_user",
+			password: "short",
+			errCode:  pkgerrors.PasswordTooWeak,
+		},
+		{
+			name:     "password too long",
+			username: "valid_user",
+			password: strings.Repeat("a", 129),
+			errCode:  pkgerrors.InvalidPassword,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := authService.Register(context.Background(), service.RegisterInput{
+				Username: tc.username,
+				Password: tc.password,
+			})
+			if err == nil || !pkgerrors.Is(err, tc.errCode) {
+				t.Fatalf("expected %v, got %v", tc.errCode, err)
+			}
+		})
 	}
 }
 
@@ -340,6 +391,59 @@ func TestAuthService_LoginAndRateLimit(t *testing.T) {
 	}
 }
 
+func TestAuthService_LoginStatus(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	tokenRepo := newFakeTokenRepo()
+	cache := newFakeCache()
+	authService := newAuthServiceWithFakes(userRepo, tokenRepo, cache)
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+	_, _ = userRepo.Create(context.Background(), nil, &repository.User{
+		Username:     "banned_user",
+		Email:        "banned@local",
+		PasswordHash: string(hash),
+		Role:         repository.UserRoleUser,
+		Status:       repository.UserStatusBanned,
+	})
+	_, _ = userRepo.Create(context.Background(), nil, &repository.User{
+		Username:     "pending_user",
+		Email:        "pending@local",
+		PasswordHash: string(hash),
+		Role:         repository.UserRoleUser,
+		Status:       repository.UserStatusPendingVerify,
+	})
+
+	tests := []struct {
+		name     string
+		username string
+		errCode  pkgerrors.ErrorCode
+	}{
+		{
+			name:     "banned user",
+			username: "banned_user",
+			errCode:  pkgerrors.AccountSuspended,
+		},
+		{
+			name:     "pending verify user",
+			username: "pending_user",
+			errCode:  pkgerrors.AccountNotActivated,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := authService.Login(context.Background(), service.LoginInput{
+				Username: tc.username,
+				Password: "password123",
+				IP:       "127.0.0.1",
+			})
+			if err == nil || !pkgerrors.Is(err, tc.errCode) {
+				t.Fatalf("expected %v, got %v", tc.errCode, err)
+			}
+		})
+	}
+}
+
 func TestAuthService_RefreshAndLogout(t *testing.T) {
 	userRepo := newFakeUserRepo()
 	tokenRepo := newFakeTokenRepo()
@@ -371,7 +475,7 @@ func TestAuthService_RefreshAndLogout(t *testing.T) {
 		t.Fatalf("refresh failed: %v", err)
 	}
 	if refreshResult.RefreshToken == loginResult.RefreshToken {
-		t.Fatalf("refresh token should rotate")
+		t.Fatalf("refresh token should rotate, %s eq %s", refreshResult.RefreshToken, loginResult.RefreshToken)
 	}
 
 	oldHash := hashTokenForTest(loginResult.RefreshToken)
@@ -387,6 +491,69 @@ func TestAuthService_RefreshAndLogout(t *testing.T) {
 	newHash := hashTokenForTest(refreshResult.RefreshToken)
 	if !tokenRepo.blacklisted[newHash] {
 		t.Fatalf("refresh token should be blacklisted after logout")
+	}
+}
+
+func TestAuthService_RefreshInvalid(t *testing.T) {
+	userRepo := newFakeUserRepo()
+	tokenRepo := newFakeTokenRepo()
+	cache := newFakeCache()
+	authService := newAuthServiceWithFakes(userRepo, tokenRepo, cache)
+
+	if _, err := authService.Refresh(context.Background(), service.RefreshInput{
+		RefreshToken: "",
+	}); err == nil || !pkgerrors.Is(err, pkgerrors.TokenInvalid) {
+		t.Fatalf("expected TokenInvalid, got %v", err)
+	}
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+	_, _ = userRepo.Create(context.Background(), nil, &repository.User{
+		Username:     "dave",
+		Email:        "dave@local",
+		PasswordHash: string(hash),
+		Role:         repository.UserRoleUser,
+		Status:       repository.UserStatusActive,
+	})
+	loginResult, err := authService.Login(context.Background(), service.LoginInput{
+		Username: "dave",
+		Password: "password123",
+		IP:       "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+
+	refreshHash := hashTokenForTest(loginResult.RefreshToken)
+	tokenRepo.blacklisted[refreshHash] = true
+
+	if _, err := authService.Refresh(context.Background(), service.RefreshInput{
+		RefreshToken: loginResult.RefreshToken,
+	}); err == nil || !pkgerrors.Is(err, pkgerrors.TokenInvalid) {
+		t.Fatalf("expected TokenInvalid, got %v", err)
+	}
+
+	expiredAuthService := newAuthServiceWithConfig(userRepo, tokenRepo, cache, service.AuthServiceConfig{
+		JWTSecret:       []byte("test-secret"),
+		JWTIssuer:       "fuzoj",
+		AccessTokenTTL:  time.Minute,
+		RefreshTokenTTL: -time.Minute,
+		LoginFailTTL:    time.Minute * 15,
+		LoginFailLimit:  5,
+	})
+
+	expiredLogin, err := expiredAuthService.Login(context.Background(), service.LoginInput{
+		Username: "dave",
+		Password: "password123",
+		IP:       "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("login failed: %v", err)
+	}
+
+	if _, err := expiredAuthService.Refresh(context.Background(), service.RefreshInput{
+		RefreshToken: expiredLogin.RefreshToken,
+	}); err == nil || !pkgerrors.Is(err, pkgerrors.TokenExpired) {
+		t.Fatalf("expected TokenExpired, got %v", err)
 	}
 }
 

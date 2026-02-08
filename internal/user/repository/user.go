@@ -54,7 +54,7 @@ type UserRepository interface {
 	UpdateStatus(ctx context.Context, tx db.Transaction, userID int64, status UserStatus) error
 }
 
-type PostgresUserRepository struct {
+type MySQLUserRepository struct {
 	db       db.Database
 	cache    cache.Cache
 	ttl      time.Duration
@@ -72,7 +72,7 @@ func NewUserRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl
 	if emptyTTL <= 0 {
 		emptyTTL = defaultUserCacheEmptyTTL
 	}
-	return &PostgresUserRepository{
+	return &MySQLUserRepository{
 		db:       database,
 		cache:    cacheClient,
 		ttl:      ttl,
@@ -82,7 +82,7 @@ func NewUserRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl
 
 const userColumns = "id, username, email, phone, password_hash, role, status, created_at, updated_at"
 
-func (r *PostgresUserRepository) Create(ctx context.Context, tx db.Transaction, user *User) (int64, error) {
+func (r *MySQLUserRepository) Create(ctx context.Context, tx db.Transaction, user *User) (int64, error) {
 	if user == nil {
 		return 0, errors.New("user is nil")
 	}
@@ -101,20 +101,23 @@ func (r *PostgresUserRepository) Create(ctx context.Context, tx db.Transaction, 
 		phone = sql.NullString{String: *user.Phone, Valid: true}
 	}
 
-	query := "INSERT INTO users (username, email, phone, password_hash, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, user.Username, user.Email, phone, user.PasswordHash, role, status)
-	var id int64
-	if err := row.Scan(&id); err != nil {
-		if pqErr, ok := uniqueViolation(err); ok {
-			switch pqErr.Constraint {
-			case "users_username_uq":
+	query := "INSERT INTO users (username, email, phone, password_hash, role, status) VALUES (?, ?, ?, ?, ?, ?)"
+	result, err := getQuerier(r.db, tx).Exec(ctx, query, user.Username, user.Email, phone, user.PasswordHash, role, status)
+	if err != nil {
+		if key, ok := uniqueViolation(err); ok {
+			switch key {
+			case "users_username_uq", "users.username":
 				return 0, ErrUsernameExists
-			case "users_email_uq":
+			case "users_email_uq", "users.email":
 				return 0, ErrEmailExists
 			default:
 				return 0, ErrDuplicate
 			}
 		}
+		return 0, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
 		return 0, err
 	}
 	if r.cache != nil {
@@ -124,7 +127,7 @@ func (r *PostgresUserRepository) Create(ctx context.Context, tx db.Transaction, 
 	return id, nil
 }
 
-func (r *PostgresUserRepository) GetByID(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
+func (r *MySQLUserRepository) GetByID(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
 	if r.cache != nil && tx == nil {
 		user, err := cache.GetWithCached[*User](
 			ctx,
@@ -157,7 +160,7 @@ func (r *PostgresUserRepository) GetByID(ctx context.Context, tx db.Transaction,
 	return r.getByIDFromDB(ctx, tx, id)
 }
 
-func (r *PostgresUserRepository) GetByUsername(ctx context.Context, tx db.Transaction, username string) (*User, error) {
+func (r *MySQLUserRepository) GetByUsername(ctx context.Context, tx db.Transaction, username string) (*User, error) {
 	if r.cache != nil && tx == nil {
 		user, err := cache.GetWithCached[*User](
 			ctx,
@@ -190,7 +193,7 @@ func (r *PostgresUserRepository) GetByUsername(ctx context.Context, tx db.Transa
 	return r.getByUsernameFromDB(ctx, tx, username)
 }
 
-func (r *PostgresUserRepository) GetByEmail(ctx context.Context, tx db.Transaction, email string) (*User, error) {
+func (r *MySQLUserRepository) GetByEmail(ctx context.Context, tx db.Transaction, email string) (*User, error) {
 	if r.cache != nil && tx == nil {
 		user, err := cache.GetWithCached[*User](
 			ctx,
@@ -223,8 +226,8 @@ func (r *PostgresUserRepository) GetByEmail(ctx context.Context, tx db.Transacti
 	return r.getByEmailFromDB(ctx, tx, email)
 }
 
-func (r *PostgresUserRepository) ExistsByUsername(ctx context.Context, tx db.Transaction, username string) (bool, error) {
-	query := "SELECT 1 FROM users WHERE username = $1"
+func (r *MySQLUserRepository) ExistsByUsername(ctx context.Context, tx db.Transaction, username string) (bool, error) {
+	query := "SELECT 1 FROM users WHERE username = ?"
 	row := getQuerier(r.db, tx).QueryRow(ctx, query, username)
 	var one int
 	if err := row.Scan(&one); err != nil {
@@ -236,8 +239,8 @@ func (r *PostgresUserRepository) ExistsByUsername(ctx context.Context, tx db.Tra
 	return true, nil
 }
 
-func (r *PostgresUserRepository) ExistsByEmail(ctx context.Context, tx db.Transaction, email string) (bool, error) {
-	query := "SELECT 1 FROM users WHERE email = $1"
+func (r *MySQLUserRepository) ExistsByEmail(ctx context.Context, tx db.Transaction, email string) (bool, error) {
+	query := "SELECT 1 FROM users WHERE email = ?"
 	row := getQuerier(r.db, tx).QueryRow(ctx, query, email)
 	var one int
 	if err := row.Scan(&one); err != nil {
@@ -249,7 +252,7 @@ func (r *PostgresUserRepository) ExistsByEmail(ctx context.Context, tx db.Transa
 	return true, nil
 }
 
-func (r *PostgresUserRepository) UpdatePassword(ctx context.Context, tx db.Transaction, userID int64, newHash string) error {
+func (r *MySQLUserRepository) UpdatePassword(ctx context.Context, tx db.Transaction, userID int64, newHash string) error {
 	var username, email string
 	if r.cache != nil {
 		var err error
@@ -258,7 +261,7 @@ func (r *PostgresUserRepository) UpdatePassword(ctx context.Context, tx db.Trans
 			return err
 		}
 	}
-	query := "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2"
+	query := "UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?"
 	result, err := getQuerier(r.db, tx).Exec(ctx, query, newHash, userID)
 	if err != nil {
 		return err
@@ -277,7 +280,7 @@ func (r *PostgresUserRepository) UpdatePassword(ctx context.Context, tx db.Trans
 	return nil
 }
 
-func (r *PostgresUserRepository) UpdateStatus(ctx context.Context, tx db.Transaction, userID int64, status UserStatus) error {
+func (r *MySQLUserRepository) UpdateStatus(ctx context.Context, tx db.Transaction, userID int64, status UserStatus) error {
 	var username, email string
 	if r.cache != nil {
 		var err error
@@ -286,7 +289,7 @@ func (r *PostgresUserRepository) UpdateStatus(ctx context.Context, tx db.Transac
 			return err
 		}
 	}
-	query := "UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2"
+	query := "UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?"
 	result, err := getQuerier(r.db, tx).Exec(ctx, query, status, userID)
 	if err != nil {
 		return err
@@ -314,8 +317,8 @@ const (
 	defaultUserCacheEmptyTTL = 5 * time.Minute
 )
 
-func (r *PostgresUserRepository) getByIDFromDB(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
-	query := "SELECT " + userColumns + " FROM users WHERE id = $1"
+func (r *MySQLUserRepository) getByIDFromDB(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
+	query := "SELECT " + userColumns + " FROM users WHERE id = ?"
 	row := getQuerier(r.db, tx).QueryRow(ctx, query, id)
 	user, err := scanUser(row)
 	if err != nil {
@@ -327,8 +330,8 @@ func (r *PostgresUserRepository) getByIDFromDB(ctx context.Context, tx db.Transa
 	return user, nil
 }
 
-func (r *PostgresUserRepository) getByUsernameFromDB(ctx context.Context, tx db.Transaction, username string) (*User, error) {
-	query := "SELECT " + userColumns + " FROM users WHERE username = $1"
+func (r *MySQLUserRepository) getByUsernameFromDB(ctx context.Context, tx db.Transaction, username string) (*User, error) {
+	query := "SELECT " + userColumns + " FROM users WHERE username = ?"
 	row := getQuerier(r.db, tx).QueryRow(ctx, query, username)
 	user, err := scanUser(row)
 	if err != nil {
@@ -340,8 +343,8 @@ func (r *PostgresUserRepository) getByUsernameFromDB(ctx context.Context, tx db.
 	return user, nil
 }
 
-func (r *PostgresUserRepository) getByEmailFromDB(ctx context.Context, tx db.Transaction, email string) (*User, error) {
-	query := "SELECT " + userColumns + " FROM users WHERE email = $1"
+func (r *MySQLUserRepository) getByEmailFromDB(ctx context.Context, tx db.Transaction, email string) (*User, error) {
+	query := "SELECT " + userColumns + " FROM users WHERE email = ?"
 	row := getQuerier(r.db, tx).QueryRow(ctx, query, email)
 	user, err := scanUser(row)
 	if err != nil {
@@ -353,8 +356,8 @@ func (r *PostgresUserRepository) getByEmailFromDB(ctx context.Context, tx db.Tra
 	return user, nil
 }
 
-func (r *PostgresUserRepository) getUserIdentifiers(ctx context.Context, tx db.Transaction, userID int64) (string, string, error) {
-	query := "SELECT username, email FROM users WHERE id = $1"
+func (r *MySQLUserRepository) getUserIdentifiers(ctx context.Context, tx db.Transaction, userID int64) (string, string, error) {
+	query := "SELECT username, email FROM users WHERE id = ?"
 	row := getQuerier(r.db, tx).QueryRow(ctx, query, userID)
 	var username, email string
 	if err := row.Scan(&username, &email); err != nil {
@@ -366,7 +369,7 @@ func (r *PostgresUserRepository) getUserIdentifiers(ctx context.Context, tx db.T
 	return username, email, nil
 }
 
-func (r *PostgresUserRepository) setCache(ctx context.Context, user *User) {
+func (r *MySQLUserRepository) setCache(ctx context.Context, user *User) {
 	if r.cache == nil || user == nil {
 		return
 	}
@@ -386,7 +389,7 @@ func (r *PostgresUserRepository) setCache(ctx context.Context, user *User) {
 	}
 }
 
-func (r *PostgresUserRepository) deleteCache(ctx context.Context, userID int64, username, email string) {
+func (r *MySQLUserRepository) deleteCache(ctx context.Context, userID int64, username, email string) {
 	if r.cache == nil {
 		return
 	}

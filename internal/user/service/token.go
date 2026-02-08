@@ -27,6 +27,10 @@ func (s *AuthService) generateToken(userID int64, role string, tokenType reposit
 
 	now := time.Now()
 	expiresAt := now.Add(ttl)
+	tokenID, err := s.newTokenID()
+	if err != nil {
+		return "", time.Time{}, err
+	}
 	claims := tokenClaims{
 		Role:      role,
 		TokenType: string(tokenType),
@@ -35,6 +39,7 @@ func (s *AuthService) generateToken(userID int64, role string, tokenType reposit
 			Issuer:    s.config.JWTIssuer,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			ID:        tokenID,
 		},
 	}
 

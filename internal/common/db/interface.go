@@ -8,7 +8,7 @@ import (
 
 // Database defines the core interface for database operations.
 // This abstraction allows switching between different database implementations
-// (MySQL, PostgreSQL, etc.) without changing business logic.
+// (MySQL, MySQL, etc.) without changing business logic.
 type Database interface {
 	// Query executes a query that returns rows
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)

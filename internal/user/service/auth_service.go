@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	stderrors "errors"
 	"fmt"
 	"time"
@@ -218,8 +220,8 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 	if err != nil {
 		return AuthResult{}, err
 	}
-
 	hash := hashToken(input.RefreshToken)
+
 	tokenRecord, err := s.tokens.GetByHash(ctx, nil, hash)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrTokenNotFound) {
@@ -249,34 +251,38 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 		return AuthResult{}, pkgerrors.New(pkgerrors.TokenInvalid)
 	}
 
-	if err := s.tokens.RevokeByHash(ctx, nil, hash, tokenRecord.ExpiresAt); err != nil {
-		if stderrors.Is(err, repository.ErrTokenNotFound) {
-			return AuthResult{}, pkgerrors.New(pkgerrors.TokenInvalid)
-		}
-		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("revoke refresh token failed: %w", err), pkgerrors.DatabaseError)
-	}
-
-	user, err := s.getUserByID(ctx, tokenRecord.UserID)
-	if err != nil {
-		return AuthResult{}, err
-	}
-	switch user.Status {
-	case repository.UserStatusBanned:
-		return AuthResult{}, pkgerrors.New(pkgerrors.AccountSuspended)
-	case repository.UserStatusPendingVerify:
-		return AuthResult{}, pkgerrors.New(pkgerrors.AccountNotActivated)
-	}
-
 	var result AuthResult
 	err = s.withTransaction(ctx, func(tx db.Transaction) error {
-		tokenResult, tokenErr := s.issueTokens(ctx, tx, user, "", "")
+		if err := s.tokens.RevokeByHash(ctx, tx, hash, tokenRecord.ExpiresAt); err != nil {
+			if stderrors.Is(err, repository.ErrTokenNotFound) {
+				return pkgerrors.New(pkgerrors.TokenInvalid)
+			}
+			return pkgerrors.Wrap(fmt.Errorf("revoke refresh token failed: %w", err), pkgerrors.DatabaseError)
+		}
+
+		user, err := s.getUserByID(ctx, tokenRecord.UserID)
+		if err != nil {
+			return err
+		}
+
+		switch user.Status {
+		case repository.UserStatusBanned:
+			return pkgerrors.New(pkgerrors.AccountSuspended)
+		case repository.UserStatusPendingVerify:
+			return pkgerrors.New(pkgerrors.AccountNotActivated)
+		}
+
+		deviceInfo := tokenRecord.DeviceInfo
+		IPAddress := tokenRecord.IPAddress
+
+		tokenResult, tokenErr := s.issueTokens(ctx, tx, user, deviceInfo, IPAddress)
 		if tokenErr != nil {
 			return tokenErr
 		}
 		result = tokenResult
 		return nil
 	})
-	return result, nil
+	return result, err
 }
 
 // Logout revokes a refresh token.
@@ -342,8 +348,8 @@ func (s *AuthService) issueTokens(ctx context.Context, tx db.Transaction, user *
 		TokenType:  repository.TokenTypeAccess,
 		ExpiresAt:  accessExp,
 		Revoked:    false,
-		DeviceInfo: optionalString(deviceInfo),
-		IPAddress:  optionalString(ip),
+		DeviceInfo: deviceInfo,
+		IPAddress:  ip,
 	}); err != nil {
 		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("create access token record failed: %w", err), pkgerrors.DatabaseError)
 	}
@@ -354,8 +360,8 @@ func (s *AuthService) issueTokens(ctx context.Context, tx db.Transaction, user *
 		TokenType:  repository.TokenTypeRefresh,
 		ExpiresAt:  refreshExp,
 		Revoked:    false,
-		DeviceInfo: optionalString(deviceInfo),
-		IPAddress:  optionalString(ip),
+		DeviceInfo: deviceInfo,
+		IPAddress:  ip,
 	}); err != nil {
 		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("create refresh token record failed: %w", err), pkgerrors.DatabaseError)
 	}
@@ -371,6 +377,14 @@ func (s *AuthService) issueTokens(ctx context.Context, tx db.Transaction, user *
 			Role:     user.Role,
 		},
 	}, nil
+}
+
+func (s *AuthService) newTokenID() (string, error) {
+	randomBytes := make([]byte, 32)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", pkgerrors.Wrap(fmt.Errorf("generate token id failed: %w", err), pkgerrors.TokenGenerationFailed)
+	}
+	return hex.EncodeToString(randomBytes), nil
 }
 
 func (s *AuthService) getUserByID(ctx context.Context, userID int64) (*repository.User, error) {
@@ -403,13 +417,6 @@ func mapUserCreateError(err error) error {
 		return pkgerrors.New(pkgerrors.RecordAlreadyExists)
 	}
 	return pkgerrors.Wrap(fmt.Errorf("create user failed: %w", err), pkgerrors.DatabaseError)
-}
-
-func optionalString(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }
 
 // just for temporary place holder

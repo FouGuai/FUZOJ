@@ -1,4 +1,4 @@
-# FuzOJ 用户模块设计（整理版，PostgreSQL）
+# FuzOJ 用户模块设计（整理版，MySQL）
 
 ## 1. 目标与原则
 - 高并发鉴权：请求不频繁调用用户服务。
@@ -12,18 +12,18 @@
 ## 2. 模块职责划分
 - Controller：参数校验、鉴权结果组装、错误码映射。
 - Service：业务规则（登录、刷新、封禁、解封、改密、限流）。
-- Repository：PostgreSQL/Redis/MQ 读写与事务封装。
+- Repository：MySQL/Redis/MQ 读写与事务封装。
 
 ---
 
-## 3. 数据模型（PostgreSQL）
+## 3. 数据模型（MySQL）
 
 ### 3.1 设计要点
 - `users`：用户基础信息与状态。
 - `user_bans`：封禁历史与审计数据。
 - `user_tokens`：Token 记录（多设备、撤销）。
 
-### 3.2 PostgreSQL Schema（推荐）
+### 3.2 MySQL Schema（推荐）
 
 ```sql
 -- 枚举类型（也可用 TEXT + CHECK 代替）
@@ -131,14 +131,14 @@ login:fail:{id}       -> String 失败计数（TTL 15m）
 ## 6. 封禁与解封流程
 
 ### 6.1 封禁（思路）
-1) PostgreSQL 事务：写封禁记录 + 更新用户状态
+1) MySQL 事务：写封禁记录 + 更新用户状态
 2) 撤销所有 token：写入 `token:blacklist` + 标记 `revoked`
 3) 发布封禁事件（Redis Pub/Sub + MQ）
 4) 更新 `user:banned` 集合
 5) 清理用户缓存
 
 ### 6.2 解封（思路）
-1) PostgreSQL 事务：更新封禁记录状态 + 恢复用户状态
+1) MySQL 事务：更新封禁记录状态 + 恢复用户状态
 2) 发布解封事件
 3) 移除 `user:banned`
 4) 清理用户缓存
@@ -172,6 +172,7 @@ BanEvent:
 - 正常路径：Redis
 - 降级路径：本地封禁缓存 -> 限流 DB 查询 -> 快速失败(503)
 - 可选：Redis 断路器，连续失败触发降级
+- 使用 BloomFilter 防止缓存击穿
 
 ---
 
@@ -223,7 +224,7 @@ BanEvent:
 
 ## 13. 落地实现清单
 - Model：User / UserBan / UserToken
-- Repository：PostgreSQL、Redis、MQ
+- Repository：MySQL、Redis、MQ
 - Service：AuthService / BanService
 - Middleware：AuthMiddleware + Fallback
 - Cron：AutoUnban

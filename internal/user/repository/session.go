@@ -24,8 +24,8 @@ type UserToken struct {
 	UserID     int64
 	TokenHash  string
 	TokenType  TokenType
-	DeviceInfo *string
-	IPAddress  *string
+	DeviceInfo string
+	IPAddress  string
 	ExpiresAt  time.Time
 	Revoked    bool
 	CreatedAt  time.Time
@@ -39,7 +39,7 @@ type TokenRepository interface {
 	IsBlacklisted(ctx context.Context, tokenHash string) (bool, error)
 }
 
-type PostgresTokenRepository struct {
+type MySQLTokenRepository struct {
 	db       db.Database
 	cache    cache.Cache
 	ttl      time.Duration
@@ -57,7 +57,7 @@ func NewTokenRepositoryWithTTL(database db.Database, cacheClient cache.Cache, tt
 	if emptyTTL <= 0 {
 		emptyTTL = defaultTokenCacheEmptyTTL
 	}
-	return &PostgresTokenRepository{db: database, cache: cacheClient, ttl: ttl, emptyTTL: emptyTTL}
+	return &MySQLTokenRepository{db: database, cache: cacheClient, ttl: ttl, emptyTTL: emptyTTL}
 }
 
 const tokenColumns = "id, user_id, token_hash, token_type, device_info, ip_address, expires_at, revoked, created_at"
@@ -67,19 +67,19 @@ const (
 	defaultTokenCacheEmptyTTL = 5 * time.Minute
 )
 
-func (r *PostgresTokenRepository) Create(ctx context.Context, tx db.Transaction, token *UserToken) error {
+func (r *MySQLTokenRepository) Create(ctx context.Context, tx db.Transaction, token *UserToken) error {
 	if token == nil {
 		return errors.New("token is nil")
 	}
 
-	query := "INSERT INTO user_tokens (user_id, token_hash, token_type, device_info, ip_address, expires_at, revoked) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+	query := "INSERT INTO user_tokens (user_id, token_hash, token_type, device_info, ip_address, expires_at, revoked) VALUES (?, ?, ?, ?, ?, ?, ?)"
 	deviceInfo := sql.NullString{}
-	if token.DeviceInfo != nil {
-		deviceInfo = sql.NullString{String: *token.DeviceInfo, Valid: true}
+	if token.DeviceInfo != "" {
+		deviceInfo = sql.NullString{String: token.DeviceInfo, Valid: true}
 	}
 	ipAddress := sql.NullString{}
-	if token.IPAddress != nil {
-		ipAddress = sql.NullString{String: *token.IPAddress, Valid: true}
+	if token.IPAddress != "" {
+		ipAddress = sql.NullString{String: token.IPAddress, Valid: true}
 	}
 
 	_, err := getQuerier(r.db, tx).Exec(
@@ -102,7 +102,7 @@ func (r *PostgresTokenRepository) Create(ctx context.Context, tx db.Transaction,
 	return nil
 }
 
-func (r *PostgresTokenRepository) GetByHash(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
+func (r *MySQLTokenRepository) GetByHash(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
 	if r.cache != nil && tx == nil {
 		key := tokenCacheKey(tokenHash)
 		if cached, err := r.cache.Get(ctx, key); err == nil && cached != "" {
@@ -130,8 +130,8 @@ func (r *PostgresTokenRepository) GetByHash(ctx context.Context, tx db.Transacti
 	return r.getByHashFromDB(ctx, tx, tokenHash)
 }
 
-func (r *PostgresTokenRepository) RevokeByHash(ctx context.Context, tx db.Transaction, tokenHash string, expiresAt time.Time) error {
-	query := "UPDATE user_tokens SET revoked = TRUE WHERE token_hash = $1"
+func (r *MySQLTokenRepository) RevokeByHash(ctx context.Context, tx db.Transaction, tokenHash string, expiresAt time.Time) error {
+	query := "UPDATE user_tokens SET revoked = TRUE WHERE token_hash = ?"
 	result, err := getQuerier(r.db, tx).Exec(ctx, query, tokenHash)
 	if err != nil {
 		return err
@@ -151,9 +151,9 @@ func (r *PostgresTokenRepository) RevokeByHash(ctx context.Context, tx db.Transa
 	return r.blacklistToken(ctx, tokenHash, expiresAt)
 }
 
-func (r *PostgresTokenRepository) RevokeByUser(ctx context.Context, tx db.Transaction, userID int64) error {
+func (r *MySQLTokenRepository) RevokeByUser(ctx context.Context, tx db.Transaction, userID int64) error {
 	now := time.Now()
-	queryTokens := "SELECT token_hash, expires_at FROM user_tokens WHERE user_id = $1 AND revoked = FALSE AND expires_at > $2"
+	queryTokens := "SELECT token_hash, expires_at FROM user_tokens WHERE user_id = ? AND revoked = FALSE AND expires_at > ?"
 	rows, err := getQuerier(r.db, tx).Query(ctx, queryTokens, userID, now)
 	if err != nil {
 		return err
@@ -172,7 +172,7 @@ func (r *PostgresTokenRepository) RevokeByUser(ctx context.Context, tx db.Transa
 		return err
 	}
 
-	queryRevoke := "UPDATE user_tokens SET revoked = TRUE WHERE user_id = $1"
+	queryRevoke := "UPDATE user_tokens SET revoked = TRUE WHERE user_id = ?"
 	if _, err := getQuerier(r.db, tx).Exec(ctx, queryRevoke, userID); err != nil {
 		return err
 	}
@@ -189,14 +189,14 @@ func (r *PostgresTokenRepository) RevokeByUser(ctx context.Context, tx db.Transa
 	return nil
 }
 
-func (r *PostgresTokenRepository) IsBlacklisted(ctx context.Context, tokenHash string) (bool, error) {
+func (r *MySQLTokenRepository) IsBlacklisted(ctx context.Context, tokenHash string) (bool, error) {
 	if r.cache == nil {
 		return false, errors.New("cache is nil")
 	}
 	return r.cache.SIsMember(ctx, tokenBlacklistKey, tokenHash)
 }
 
-func (r *PostgresTokenRepository) blacklistToken(ctx context.Context, tokenHash string, expiresAt time.Time) error {
+func (r *MySQLTokenRepository) blacklistToken(ctx context.Context, tokenHash string, expiresAt time.Time) error {
 	if r.cache == nil {
 		return errors.New("cache is nil")
 	}
@@ -213,8 +213,8 @@ func (r *PostgresTokenRepository) blacklistToken(ctx context.Context, tokenHash 
 	return extendTTL(ctx, r.cache, tokenBlacklistKey, ttl)
 }
 
-func (r *PostgresTokenRepository) getByHashFromDB(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
-	query := "SELECT " + tokenColumns + " FROM user_tokens WHERE token_hash = $1"
+func (r *MySQLTokenRepository) getByHashFromDB(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
+	query := "SELECT " + tokenColumns + " FROM user_tokens WHERE token_hash = ?"
 	row := getQuerier(r.db, tx).QueryRow(ctx, query, tokenHash)
 	result, err := scanToken(row)
 	if err != nil {
@@ -226,7 +226,7 @@ func (r *PostgresTokenRepository) getByHashFromDB(ctx context.Context, tx db.Tra
 	return result, nil
 }
 
-func (r *PostgresTokenRepository) cacheTTL(expiresAt time.Time) time.Duration {
+func (r *MySQLTokenRepository) cacheTTL(expiresAt time.Time) time.Duration {
 	ttl := time.Until(expiresAt)
 	if ttl <= 0 {
 		return 0
@@ -237,7 +237,7 @@ func (r *PostgresTokenRepository) cacheTTL(expiresAt time.Time) time.Duration {
 	return cache.JitterTTL(ttl)
 }
 
-func (r *PostgresTokenRepository) setCache(ctx context.Context, token *UserToken) {
+func (r *MySQLTokenRepository) setCache(ctx context.Context, token *UserToken) {
 	if r.cache == nil || token == nil {
 		return
 	}
@@ -252,7 +252,7 @@ func (r *PostgresTokenRepository) setCache(ctx context.Context, token *UserToken
 	_ = r.cache.Set(ctx, tokenCacheKey(token.TokenHash), string(payload), ttl)
 }
 
-func (r *PostgresTokenRepository) deleteCache(ctx context.Context, tokenHash string) {
+func (r *MySQLTokenRepository) deleteCache(ctx context.Context, tokenHash string) {
 	if r.cache == nil || tokenHash == "" {
 		return
 	}
@@ -295,10 +295,10 @@ func scanToken(scanner db.Scanner) (*UserToken, error) {
 	}
 
 	if deviceInfo.Valid {
-		token.DeviceInfo = &deviceInfo.String
+		token.DeviceInfo = deviceInfo.String
 	}
 	if ipAddress.Valid {
-		token.IPAddress = &ipAddress.String
+		token.IPAddress = ipAddress.String
 	}
 
 	return &token, nil

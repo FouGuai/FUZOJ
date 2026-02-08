@@ -1,4 +1,4 @@
-dsn: "user=postgres password=postgres host=127.0.0.1 port=5432 dbname=fuzoj sslmode=disable"
+dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj?parseTime=true&loc=Local"
 maxOpenConnections: 25
 maxIdleConnections: 5
 connMaxLifetime: "5m"

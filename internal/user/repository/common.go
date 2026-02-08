@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"fuzoj/internal/common/db"
 
-	"github.com/lib/pq"
+	"github.com/go-sql-driver/mysql"
 )
 
 const (
@@ -40,10 +41,23 @@ func isNoRows(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)
 }
 
-func uniqueViolation(err error) (*pq.Error, bool) {
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) && string(pqErr.Code) == "23505" {
-		return pqErr, true
+func uniqueViolation(err error) (string, bool) {
+	var myErr *mysql.MySQLError
+	if errors.As(err, &myErr) && myErr.Number == 1062 {
+		return extractDuplicateKeyName(myErr.Message), true
 	}
-	return nil, false
+	return "", false
+}
+
+func extractDuplicateKeyName(message string) string {
+	if message == "" {
+		return ""
+	}
+	const marker = "for key "
+	idx := strings.LastIndex(message, marker)
+	if idx == -1 {
+		return ""
+	}
+	key := strings.TrimSpace(message[idx+len(marker):])
+	return strings.Trim(key, " `\"'")
 }

@@ -2,61 +2,156 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"fuzoj/internal/user"
+	"fuzoj/internal/common/cache"
+	"fuzoj/internal/common/db"
+	"fuzoj/internal/user/controller"
+	"fuzoj/internal/user/repository"
+	"fuzoj/internal/user/service"
+	"fuzoj/pkg/utils/logger"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultDatabaseConfigPath = "configs/database.yaml"
-	defaultRedisConfigPath    = "configs/redis.yaml"
+	databaseConfigPath = "configs/database.yaml"
+	redisConfigPath    = "configs/redis.yaml"
+	appConfigPath      = "configs/user_service.yaml"
 )
 
 func main() {
-	logger, err := zap.NewProduction()
+	appCfg, err := loadAppConfig(appConfigPath)
 	if err != nil {
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "load app config failed: %v\n", err)
+		return
+	}
+
+	if err := logger.Init(appCfg.Logger); err != nil {
+		fmt.Fprintf(os.Stderr, "init logger failed: %v\n", err)
+		return
 	}
 	defer func() {
 		_ = logger.Sync()
 	}()
 
-	databasePath := getenvWithDefault("USER_SERVICE_DATABASE_CONFIG", defaultDatabaseConfigPath)
-	redisPath := getenvWithDefault("USER_SERVICE_REDIS_CONFIG", defaultRedisConfigPath)
-	configSource := user.NewFileConfigSource(databasePath, redisPath)
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	initCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	deps, err := user.InitUserService(initCtx, configSource)
+	dbCfg, err := loadDatabaseConfig(databaseConfigPath)
 	if err != nil {
-		logger.Error("init user service failed", zap.Error(err))
-		os.Exit(1)
+		logger.Error(context.Background(), "load database config failed", zap.Error(err))
+		return
+	}
+
+	redisCfg, err := loadRedisConfig(redisConfigPath)
+	if err != nil {
+		logger.Error(context.Background(), "load redis config failed", zap.Error(err))
+		return
+	}
+
+	mysqlDB, err := db.NewMySQLWithConfig(dbCfg)
+	if err != nil {
+		logger.Error(context.Background(), "init database failed", zap.Error(err))
+		return
 	}
 	defer func() {
-		if closeErr := deps.Close(); closeErr != nil {
-			logger.Error("close dependencies failed", zap.Error(closeErr))
-		}
+		_ = mysqlDB.Close()
 	}()
 
-	logger.Info("user service initialized", zap.String("databaseConfig", databasePath), zap.String("redisConfig", redisPath))
+	redisCache, err := cache.NewRedisCacheWithConfig(redisCfg)
+	if err != nil {
+		logger.Error(context.Background(), "init redis failed", zap.Error(err))
+		return
+	}
+	defer func() {
+		_ = redisCache.Close()
+	}()
 
-	<-ctx.Done()
-	logger.Info("user service shutting down", zap.String("signal", ctx.Err().Error()))
+	userRepo := repository.NewUserRepository(mysqlDB, redisCache)
+	tokenRepo := repository.NewTokenRepository(mysqlDB, redisCache)
+
+	authService := service.NewAuthService(
+		mysqlDB,
+		userRepo,
+		tokenRepo,
+		redisCache,
+		service.AuthServiceConfig{
+			JWTSecret:       []byte(appCfg.Auth.JWTSecret),
+			JWTIssuer:       appCfg.Auth.JWTIssuer,
+			AccessTokenTTL:  appCfg.Auth.AccessTokenTTL,
+			RefreshTokenTTL: appCfg.Auth.RefreshTokenTTL,
+			LoginFailTTL:    appCfg.Auth.LoginFailTTL,
+			LoginFailLimit:  appCfg.Auth.LoginFailLimit,
+		},
+	)
+
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(requestLogger())
+
+	api := router.Group("/api/v1/user")
+	authController := controller.NewAuthController(authService)
+	api.POST("/register", authController.Register)
+	api.POST("/login", authController.Login)
+	api.POST("/refresh-token", authController.Refresh)
+	api.POST("/logout", authController.Logout)
+
+	srv := &http.Server{
+		Addr:         appCfg.Server.Addr,
+		Handler:      router,
+		ReadTimeout:  appCfg.Server.ReadTimeout,
+		WriteTimeout: appCfg.Server.WriteTimeout,
+		IdleTimeout:  appCfg.Server.IdleTimeout,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info(context.Background(), "user service started", zap.String("addr", appCfg.Server.Addr))
+		errCh <- srv.ListenAndServe()
+	}()
+
+	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error(context.Background(), "http server stopped", zap.Error(err))
+		}
+	case <-shutdownCtx.Done():
+		logger.Info(context.Background(), "shutdown signal received")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error(context.Background(), "http server shutdown failed", zap.Error(err))
+	}
 }
 
-func getenvWithDefault(key, fallback string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
+func requestLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+
+		logger.Info(
+			c.Request.Context(),
+			"request completed",
+			zap.String("method", c.Request.Method),
+			zap.String("path", path),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("latency", time.Since(start)),
+			zap.String("client_ip", c.ClientIP()),
+		)
 	}
-	return value
 }
