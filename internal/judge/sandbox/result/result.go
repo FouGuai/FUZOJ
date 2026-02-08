@@ -27,13 +27,14 @@ const (
 
 // RunResult captures raw sandbox execution data.
 type RunResult struct {
-	ExitCode  int
-	TimeMs    int64
-	MemoryKB  int64
-	OutputKB  int64
-	Stdout    string
-	Stderr    string
-	OomKilled bool
+	ExitCode   int
+	TimeMs     int64
+	WallTimeMs int64
+	MemoryKB   int64
+	OutputKB   int64
+	Stdout     string
+	Stderr     string
+	OomKilled  bool
 }
 
 // CompileResult contains compilation outcomes.

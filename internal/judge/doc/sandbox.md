@@ -15,6 +15,22 @@
 
 这样既能做到“每种语言和任务都有独立 sandbox 规则”，又能复用核心执行逻辑，降低维护成本。
 
+### 2.1 执行调用图与判题顺序
+
+
+一次判题的调用顺序（简化）：
+
+1. 接收判题请求，创建 `submissionId`
+2. 拉取 `LanguageSpec` 与 `TaskProfile`（优先缓存，未命中回源）。
+3. 准备工作目录 `/sandbox/{submissionId}/{testId}`，写入源码与测试数据。
+4. 若 `compileEnabled=true`，生成编译 `RunSpec` 并调用 Sandbox Engine；失败则直接返回 CE。
+5. 逐个测试点生成运行 `RunSpec` 并执行，采集时间/内存/输出。
+6. 需要 SPJ/交互时，生成对应 `RunSpec` 并执行比较器或交互器。
+7. 汇总所有测试点结果，计算最终 `verdict/score/summary`。
+8. 清理 sandbox 目录与 cgroup
+
+更新状态由上层服务更新，sandbox就是无状态的执行器，只会记录一些自己的性能信息
+
 ## 3. 执行目录与文件模型
 
 每个测试点独立目录：

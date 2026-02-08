@@ -20,13 +20,15 @@ type MountSpec struct {
 
 // RunSpec is the unified execution specification for one task.
 type RunSpec struct {
-	WorkDir    string
-	Cmd        []string
-	Env        []string
-	StdinPath  string
-	StdoutPath string
-	StderrPath string
-	BindMounts []MountSpec
-	Profile    string
-	Limits     ResourceLimit
+	SubmissionID string
+	TestID       string
+	WorkDir      string
+	Cmd          []string
+	Env          []string
+	StdinPath    string
+	StdoutPath   string
+	StderrPath   string
+	BindMounts   []MountSpec
+	Profile      string
+	Limits       ResourceLimit
 }

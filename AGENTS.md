@@ -132,3 +132,4 @@
 - **User Repository**：`docs/user_repository.md` — 用户、会话与缓存仓储的数据访问层实现
 - **User Auth Service**：`docs/user_auth_service.md` — 用户注册、登录与令牌管理服务
 - **User Token Repository**：`docs/user_token_repository.md` — 用户 Token 持久化与黑名单管理
+- **Sandbox Engine**：`docs/sandbox_engine.md` — Linux 原生沙箱引擎与初始化流程说明
