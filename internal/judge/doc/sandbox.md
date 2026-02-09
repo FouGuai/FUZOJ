@@ -31,6 +31,31 @@
 
 更新状态由上层服务更新，sandbox就是无状态的执行器，只会记录一些自己的性能信息
 
+### 2.2 Runner 实现要点（当前实现）
+
+Runner 负责将语言与任务配置转化为可执行的 `RunSpec`，并调用 Sandbox Engine。当前实现以 **C++ 为优先支持语言**，并通过“基础请求结构 + 语言扩展结构”的方式预留多语言扩展：
+
+- `CompileRequest` / `RunRequest` 作为基础结构，承载通用字段（SubmissionID、WorkDir、语言配置、Profile、资源限制等）。
+- 语言扩展采用结构体嵌入（如 `CppCompileRequest` / `CppRunRequest`），便于后续横向扩展到其它语言。
+
+Runner 生成 RunSpec 的关键规则：
+
+1. `Cmd` 由 `LanguageSpec.CompileCmdTpl` / `RunCmdTpl` 生成，替换 `{src}`、`{bin}`、`{extraFlags}`，并用 `strings.Fields` 分词。
+2. `WorkDir` 固定为容器路径 `/work`，通过 bind mount 把主机工作目录挂载到容器。
+3. `BindMounts` 包含工作目录（读写）与输入/答案（只读）。
+4. 资源限制优先使用请求中覆盖值，其次使用 `TaskProfile.DefaultLimits`，并应用语言倍率（Time/Memory multiplier）。
+5. 编译日志写入 `/work/compile.log`，运行日志写入 `/work/runtime.log`。
+
+#### SPJ（Checker）流程
+
+当判题需要 SPJ 时，Runner 会生成独立的 Checker RunSpec，命令为：
+
+```
+checker input.txt output.txt answer.txt
+```
+
+Checker 运行结果用于判断 AC/WA；其日志写入 `/work/checker.log`。交互题流程暂不实现，但 Runner 结构已预留扩展点。
+
 ## 3. 执行目录与文件模型
 
 每个测试点独立目录：

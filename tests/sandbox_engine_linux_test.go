@@ -271,6 +271,66 @@ func TestLinuxEngineRun(t *testing.T) {
 			},
 		},
 		{
+			name: "stats_visible_with_complex_workload",
+			run: func(t *testing.T) (result.RunResult, error) {
+				workDir := t.TempDir()
+				stdoutPath := filepath.Join(workDir, "stdout.txt")
+				stderrPath := filepath.Join(workDir, "stderr.txt")
+				cgroupRoot := filepath.Join(workDir, "cgroup")
+
+				cfg := engine.Config{
+					CgroupRoot:       cgroupRoot,
+					HelperPath:       helperPath,
+					EnableSeccomp:    false,
+					EnableCgroup:     true,
+					EnableNamespaces: false,
+				}
+				eng, err := engine.NewEngine(cfg, resolver)
+				if err != nil {
+					t.Fatalf("create engine: %v", err)
+				}
+
+				runSpec := spec.RunSpec{
+					SubmissionID: "sub-stats",
+					TestID:       "t-stats",
+					WorkDir:      workDir,
+					Cmd: []string{"/bin/sh", "-c",
+						"i=0; sum=0; while [ $i -lt 200000 ]; do i=$((i+1)); sum=$((sum+i)); done; " +
+							"dd if=/dev/zero of=buf.bin bs=4096 count=512 >/dev/null 2>&1; " +
+							"echo $sum"},
+					StdoutPath: stdoutPath,
+					StderrPath: stderrPath,
+					Profile:    "default",
+					Limits: spec.ResourceLimit{
+						WallTimeMs: 3000,
+						CPUTimeMs:  2000,
+						MemoryMB:   256,
+					},
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				return eng.Run(ctx, runSpec)
+			},
+			verify: func(t *testing.T, res result.RunResult, err error) {
+				if err != nil {
+					t.Fatalf("run failed: %v", err)
+				}
+				t.Logf("stats: exit=%d cpu_ms=%d wall_ms=%d mem_kb=%d out_kb=%d oom=%v",
+					res.ExitCode, res.TimeMs, res.WallTimeMs, res.MemoryKB, res.OutputKB, res.OomKilled)
+				if res.ExitCode != 0 {
+					t.Fatalf("expected exit code 0, got %d", res.ExitCode)
+				}
+				if res.WallTimeMs <= 0 {
+					t.Fatalf("expected wall time to be positive, got %d", res.WallTimeMs)
+				}
+				if res.TimeMs <= 0 {
+					t.Fatalf("expected cpu time to be positive, got %d", res.TimeMs)
+				}
+			},
+		},
+		{
 			name: "cpu_time_limit_kills_process",
 			run: func(t *testing.T) (result.RunResult, error) {
 				workDir := t.TempDir()

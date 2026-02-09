@@ -1,6 +1,6 @@
 package profile
 
-import "fuzoj/internal/judge/spec"
+import "fuzoj/internal/judge/sandbox/spec"
 
 // TaskType identifies the sandbox task category.
 type TaskType string
