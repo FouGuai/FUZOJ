@@ -121,23 +121,51 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 	}
 
 	var timedOut atomic.Bool
+	var cpuTimedOut atomic.Bool
 	killCtx, cancelKill := context.WithCancel(ctx)
 	defer cancelKill()
 
 	done := make(chan struct{})
 	go func() {
 		wallLimit := durationFromMs(runSpec.Limits.WallTimeMs)
+		cpuLimitMs := runSpec.Limits.CPUTimeMs
 		var wallTimer <-chan time.Time
 		if wallLimit > 0 {
 			wallTimer = time.After(wallLimit)
 		}
-		select {
-		case <-killCtx.Done():
-			e.killProcessGroup(cmd.Process.Pid)
-		case <-wallTimer:
-			timedOut.Store(true)
-			e.killProcessGroup(cmd.Process.Pid)
-		case <-done:
+		var cpuTicker *time.Ticker
+		if cpuLimitMs > 0 && e.cfg.EnableCgroup && cgroupPath != "" {
+			// Poll cgroup cpu.stat to enforce CPU time limit.
+			cpuTicker = time.NewTicker(100 * time.Millisecond)
+			defer cpuTicker.Stop()
+		}
+		var cpuTick <-chan time.Time
+		if cpuTicker != nil {
+			cpuTick = cpuTicker.C
+		}
+		for {
+			select {
+			case <-killCtx.Done():
+				// Context canceled: terminate the whole process group.
+				e.killProcessGroup(cmd.Process.Pid)
+				return
+			case <-wallTimer:
+				// Wall-time exceeded.
+				timedOut.Store(true)
+				e.killProcessGroup(cmd.Process.Pid)
+				return
+			case <-done:
+				// Process finished normally.
+				return
+			case <-cpuTick:
+				usageMs, err := cgroupCPUTimeMs(cgroupPath)
+				if err == nil && usageMs >= cpuLimitMs {
+					// CPU time exceeded based on the same source used for stats.
+					cpuTimedOut.Store(true)
+					e.killProcessGroup(cmd.Process.Pid)
+					return
+				}
+			}
 		}
 	}()
 
@@ -153,9 +181,17 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 	wallTimeMs := time.Since(start).Milliseconds()
 	stdoutPath := resolveHostPath(runSpec.StdoutPath, runSpec)
 	stderrPath := resolveHostPath(runSpec.StderrPath, runSpec)
+	timeMs := cpuTimeMs(cmd.ProcessState)
+	// Prefer cgroup CPU usage so stats and CPU limit use the same source.
+	if e.cfg.EnableCgroup && cgroupPath != "" {
+		if usageMs, err := cgroupCPUTimeMs(cgroupPath); err == nil && usageMs > 0 {
+			timeMs = usageMs
+		}
+	}
+
 	runResult := result.RunResult{
 		ExitCode:   exitCodeFromErr(waitErr, cmd.ProcessState),
-		TimeMs:     cpuTimeMs(cmd.ProcessState),
+		TimeMs:     timeMs,
 		WallTimeMs: wallTimeMs,
 		MemoryKB:   memoryPeakKB(cgroupPath, cmd.ProcessState),
 		OutputKB:   stdoutSizeKB(stdoutPath),
@@ -164,7 +200,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 		OomKilled:  wasOomKilled(cgroupPath),
 	}
 
-	if timedOut.Load() && runResult.ExitCode == 0 {
+	if (timedOut.Load() || cpuTimedOut.Load()) && runResult.ExitCode == 0 {
 		runResult.ExitCode = -1
 	}
 

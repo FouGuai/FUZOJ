@@ -85,6 +85,31 @@ func wasOomKilled(cgroupPath string) bool {
 	return false
 }
 
+func cgroupCPUTimeMs(cgroupPath string) (int64, error) {
+	if cgroupPath == "" {
+		return 0, fmt.Errorf("cgroup path is required")
+	}
+	data, err := os.ReadFile(filepath.Join(cgroupPath, "cpu.stat"))
+	if err != nil {
+		return 0, err
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		if fields[0] == "usage_usec" {
+			val, err := strconv.ParseInt(fields[1], 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return val / 1000, nil
+		}
+	}
+	return 0, fmt.Errorf("usage_usec not found in cpu.stat")
+}
+
 func memoryPeakKB(cgroupPath string, state *os.ProcessState) int64 {
 	if cgroupPath != "" {
 		if val, err := readCgroupInt(cgroupPath, "memory.peak"); err == nil && val > 0 {

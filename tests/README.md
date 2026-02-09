@@ -86,3 +86,23 @@ func TestTableDriven(t *testing.T) {
 - 可以在 GitHub Actions 页面手动触发
 
 查看测试结果：前往 GitHub 仓库的 Actions 标签页。
+
+## 端到端测试（Auth Service）
+
+该测试会通过 HTTP 接口调用认证流程，并校验 MySQL 与 Redis 的落库/缓存结果。
+测试会自动执行建表（`users`、`user_tokens`）。
+
+运行前需要配置仓库根目录的 `test.yaml`：
+
+```yaml
+mysql:
+  dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj_test?parseTime=true&loc=Local"
+redis:
+  addr: "127.0.0.1:6379"
+```
+
+运行示例：
+
+```bash
+go test ./tests -run TestAuthService_EndToEnd -v
+```

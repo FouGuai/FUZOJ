@@ -11,6 +11,31 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: fuzoj_test
+          MYSQL_USER: user
+          MYSQL_PASSWORD: password
+          MYSQL_ROOT_PASSWORD: rootpassword
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uuser -ppassword"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      redis:
+        image: redis:7.2
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
     
     strategy:
       matrix:
@@ -31,6 +56,22 @@ jobs:
       
       - name: Verify dependencies
         run: go mod verify
+
+      - name: Wait for MySQL and Redis
+        run: |
+          set -e
+          for i in {1..30}; do
+            if (echo > /dev/tcp/127.0.0.1/3306) >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          for i in {1..30}; do
+            if (echo > /dev/tcp/127.0.0.1/6379) >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
       
       - name: Run tests
         run: go test ./tests/... -v -race -coverprofile=coverage.out

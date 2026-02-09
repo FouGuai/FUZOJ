@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"fuzoj/internal/common/cache"
@@ -105,10 +106,11 @@ func (r *MySQLUserRepository) Create(ctx context.Context, tx db.Transaction, use
 	result, err := getQuerier(r.db, tx).Exec(ctx, query, user.Username, user.Email, phone, user.PasswordHash, role, status)
 	if err != nil {
 		if key, ok := uniqueViolation(err); ok {
-			switch key {
-			case "users_username_uq", "users.username":
+			normalizedKey := strings.ToLower(strings.TrimSpace(key))
+			switch {
+			case strings.Contains(normalizedKey, "users_username_uq") || strings.Contains(normalizedKey, "users.username") || strings.Contains(normalizedKey, ".username") || strings.Contains(normalizedKey, "username"):
 				return 0, ErrUsernameExists
-			case "users_email_uq", "users.email":
+			case strings.Contains(normalizedKey, "users_email_uq") || strings.Contains(normalizedKey, "users.email") || strings.Contains(normalizedKey, ".email") || strings.Contains(normalizedKey, "email"):
 				return 0, ErrEmailExists
 			default:
 				return 0, ErrDuplicate

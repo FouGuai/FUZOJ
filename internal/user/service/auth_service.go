@@ -327,6 +327,9 @@ func (s *AuthService) withTransaction(ctx context.Context, fn func(tx db.Transac
 		return fn(nil)
 	}
 	if err := s.db.Transaction(ctx, fn); err != nil {
+		if _, ok := err.(*pkgerrors.Error); ok {
+			return err
+		}
 		return pkgerrors.Wrap(fmt.Errorf("transaction failed: %w", err), pkgerrors.TransactionFailed)
 	}
 	return nil
