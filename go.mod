@@ -6,6 +6,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.23.0
 )

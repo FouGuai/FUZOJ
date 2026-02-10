@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -20,6 +19,7 @@ import (
 	"fuzoj/internal/judge/sandbox/result"
 	"fuzoj/internal/judge/sandbox/security"
 	"fuzoj/internal/judge/sandbox/spec"
+	appErr "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/logger"
 
 	"go.uber.org/zap"
@@ -39,7 +39,7 @@ type linuxEngine struct {
 // NewEngine creates a Linux sandbox engine.
 func NewEngine(cfg Config, resolver ProfileResolver) (Engine, error) {
 	if resolver == nil {
-		return nil, fmt.Errorf("profile resolver is required")
+		return nil, appErr.ValidationError("profile_resolver", "required")
 	}
 	if cfg.StdoutStderrMaxBytes <= 0 {
 		cfg.StdoutStderrMaxBytes = defaultStdoutStderrMaxBytes
@@ -61,7 +61,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 
 	isoProfile, err := e.resolver.Resolve(runSpec.Profile)
 	if err != nil {
-		return result.RunResult{}, fmt.Errorf("resolve profile: %w", err)
+		return result.RunResult{}, appErr.Wrapf(err, appErr.JudgeSystemError, "resolve profile failed")
 	}
 	if e.cfg.SeccompDir != "" && isoProfile.SeccompProfile != "" && !filepath.IsAbs(isoProfile.SeccompProfile) {
 		isoProfile.SeccompProfile = filepath.Join(e.cfg.SeccompDir, isoProfile.SeccompProfile)
@@ -72,11 +72,11 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 	if e.cfg.EnableCgroup {
 		cgroupPath, cgroupCleanup, err = createRunCgroup(e.cfg.CgroupRoot, runSpec.SubmissionID, runSpec.TestID)
 		if err != nil {
-			return result.RunResult{}, fmt.Errorf("create cgroup: %w", err)
+			return result.RunResult{}, err
 		}
 		if err := applyCgroupLimits(cgroupPath, runSpec.Limits); err != nil {
 			cgroupCleanup()
-			return result.RunResult{}, fmt.Errorf("apply cgroup limits: %w", err)
+			return result.RunResult{}, err
 		}
 		e.registerCgroup(runSpec.SubmissionID, cgroupPath)
 	}
@@ -96,7 +96,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 
 	stdinPipe, err := jsonToPipe(initReq)
 	if err != nil {
-		return result.RunResult{}, fmt.Errorf("encode init request: %w", err)
+		return result.RunResult{}, appErr.Wrapf(err, appErr.JudgeSystemError, "encode init request failed")
 	}
 	defer stdinPipe.Close()
 
@@ -111,7 +111,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
-		return result.RunResult{}, fmt.Errorf("start helper: %w", err)
+		return result.RunResult{}, appErr.Wrapf(err, appErr.JudgeSystemError, "start helper failed")
 	}
 
 	if e.cfg.EnableCgroup {
@@ -231,7 +231,7 @@ func exitCodeFromErr(err error, state *os.ProcessState) int {
 
 func (e *linuxEngine) KillSubmission(ctx context.Context, submissionID string) error {
 	if submissionID == "" {
-		return fmt.Errorf("submission id is required")
+		return appErr.ValidationError("submission_id", "required")
 	}
 	paths := e.snapshotCgroups(submissionID)
 	for _, cgroupPath := range paths {
@@ -286,19 +286,19 @@ func (e *linuxEngine) killProcessGroup(pid int) {
 
 func validateRunSpec(runSpec spec.RunSpec) error {
 	if runSpec.SubmissionID == "" {
-		return fmt.Errorf("submission id is required")
+		return appErr.ValidationError("submission_id", "required")
 	}
 	if runSpec.TestID == "" {
-		return fmt.Errorf("test id is required")
+		return appErr.ValidationError("test_id", "required")
 	}
 	if runSpec.WorkDir == "" {
-		return fmt.Errorf("work dir is required")
+		return appErr.ValidationError("work_dir", "required")
 	}
 	if len(runSpec.Cmd) == 0 {
-		return fmt.Errorf("command is required")
+		return appErr.ValidationError("command", "required")
 	}
 	if runSpec.Profile == "" {
-		return fmt.Errorf("profile is required")
+		return appErr.ValidationError("profile", "required")
 	}
 	return nil
 }

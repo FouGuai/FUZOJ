@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -281,13 +280,19 @@ func TestCppRunnerCallsEngineWithComplexProgram(t *testing.T) {
 
 	helperPath := buildSandboxHelperInRepo(t)
 	if err := checkHelperExecutable(helperPath); err != nil {
-		t.Skipf("sandbox helper not executable: %v", err)
+		t.Fatalf("sandbox helper not executable: %v", err)
 	}
+	workDir, err := os.MkdirTemp("", "fuzoj-runner-")
+	if err != nil {
+		t.Fatalf("work dir not writable: %v", err)
+	}
+	defer os.RemoveAll(workDir)
 	resolver := staticResolver{profile: security.IsolationProfile{}}
 	eng, err := engine.NewEngine(engine.Config{
+		CgroupRoot:       filepath.Join(workDir, "cgroup"),
 		HelperPath:       helperPath,
-		EnableSeccomp:    false,
-		EnableCgroup:     false,
+		EnableSeccomp:    true,
+		EnableCgroup:     true,
 		EnableNamespaces: true,
 	}, resolver)
 	if err != nil {
@@ -295,11 +300,6 @@ func TestCppRunnerCallsEngineWithComplexProgram(t *testing.T) {
 	}
 	r := runner.NewRunner(eng)
 
-	workDir := filepath.Join(os.TempDir(), fmt.Sprintf("fuzoj-runner-%d", time.Now().UnixNano()))
-	if err := os.MkdirAll(workDir, 0755); err != nil {
-		t.Skipf("work dir not writable: %v", err)
-	}
-	defer os.RemoveAll(workDir)
 	sourcePath := filepath.Join(workDir, "source.cpp")
 	inputPath := filepath.Join(workDir, "input.txt")
 
@@ -364,14 +364,14 @@ int main(){
 	compileRes, err := r.CompileCpp(context.Background(), compileReq)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") {
-			t.Skipf("sandbox helper not executable: %v", err)
+			t.Fatalf("sandbox helper not executable: %v", err)
 		}
 		t.Fatalf("compile failed: %v", err)
 	}
 	if !compileRes.OK {
 		logPath := filepath.Join(workDir, "compile.log")
 		data, _ := os.ReadFile(logPath)
-		t.Fatalf("compile not ok: %s log=%q", compileRes.Error, string(data))
+		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, log:%s", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.LogPath)
 	}
 
 	runReq := runner.CppRunRequest{RunRequest: runner.RunRequest{

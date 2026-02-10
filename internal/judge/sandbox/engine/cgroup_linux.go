@@ -12,16 +12,17 @@ import (
 	"time"
 
 	"fuzoj/internal/judge/sandbox/spec"
+	appErr "fuzoj/pkg/errors"
 )
 
 func createRunCgroup(root, submissionID, testID string) (string, func(), error) {
 	if root == "" {
-		return "", func() {}, fmt.Errorf("cgroup root is required")
+		return "", func() {}, appErr.ValidationError("cgroup_root", "required")
 	}
 	runDir := fmt.Sprintf("%s-%d", testID, time.Now().UnixNano())
 	cgroupPath := filepath.Join(root, submissionID, runDir)
 	if err := os.MkdirAll(cgroupPath, 0750); err != nil {
-		return "", func() {}, fmt.Errorf("create cgroup path: %w", err)
+		return "", func() {}, appErr.Wrapf(err, appErr.JudgeSystemError, "create cgroup path failed")
 	}
 	cleanup := func() {
 		_ = os.RemoveAll(cgroupPath)
@@ -35,24 +36,27 @@ func applyCgroupLimits(cgroupPath string, limits spec.ResourceLimit) error {
 		pidsValue = strconv.FormatInt(limits.PIDs, 10)
 	}
 	if err := writeCgroupValue(cgroupPath, "pids.max", pidsValue); err != nil {
-		return err
+		return appErr.Wrapf(err, appErr.JudgeSystemError, "write pids.max failed")
 	}
 	if limits.MemoryMB > 0 {
 		if err := writeCgroupValue(cgroupPath, "memory.max", strconv.FormatInt(limits.MemoryMB*1024*1024, 10)); err != nil {
-			return err
+			return appErr.Wrapf(err, appErr.JudgeSystemError, "write memory.max failed")
 		}
 	}
 	if err := writeCgroupValue(cgroupPath, "cpu.max", "max 100000"); err != nil {
-		return err
+		return appErr.Wrapf(err, appErr.JudgeSystemError, "write cpu.max failed")
 	}
 	return nil
 }
 
 func addProcessToCgroup(cgroupPath string, pid int) error {
 	if pid <= 0 {
-		return fmt.Errorf("invalid pid")
+		return appErr.ValidationError("pid", "invalid")
 	}
-	return writeCgroupValue(cgroupPath, "cgroup.procs", strconv.Itoa(pid))
+	if err := writeCgroupValue(cgroupPath, "cgroup.procs", strconv.Itoa(pid)); err != nil {
+		return appErr.Wrapf(err, appErr.JudgeSystemError, "write cgroup.procs failed")
+	}
+	return nil
 }
 
 func killCgroup(cgroupPath string) error {
@@ -87,11 +91,11 @@ func wasOomKilled(cgroupPath string) bool {
 
 func cgroupCPUTimeMs(cgroupPath string) (int64, error) {
 	if cgroupPath == "" {
-		return 0, fmt.Errorf("cgroup path is required")
+		return 0, appErr.ValidationError("cgroup_path", "required")
 	}
 	data, err := os.ReadFile(filepath.Join(cgroupPath, "cpu.stat"))
 	if err != nil {
-		return 0, err
+		return 0, appErr.Wrapf(err, appErr.JudgeSystemError, "read cpu.stat failed")
 	}
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
@@ -102,12 +106,12 @@ func cgroupCPUTimeMs(cgroupPath string) (int64, error) {
 		if fields[0] == "usage_usec" {
 			val, err := strconv.ParseInt(fields[1], 10, 64)
 			if err != nil {
-				return 0, err
+				return 0, appErr.Wrapf(err, appErr.JudgeSystemError, "parse cpu.stat usage_usec failed")
 			}
 			return val / 1000, nil
 		}
 	}
-	return 0, fmt.Errorf("usage_usec not found in cpu.stat")
+	return 0, appErr.New(appErr.JudgeSystemError).WithMessage("usage_usec not found in cpu.stat")
 }
 
 func memoryPeakKB(cgroupPath string, state *os.ProcessState) int64 {
@@ -128,13 +132,20 @@ func memoryPeakKB(cgroupPath string, state *os.ProcessState) int64 {
 func readCgroupInt(cgroupPath, name string) (int64, error) {
 	data, err := os.ReadFile(filepath.Join(cgroupPath, name))
 	if err != nil {
-		return 0, err
+		return 0, appErr.Wrapf(err, appErr.JudgeSystemError, "read cgroup value failed")
 	}
 	value := strings.TrimSpace(string(data))
-	return strconv.ParseInt(value, 10, 64)
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, appErr.Wrapf(err, appErr.JudgeSystemError, "parse cgroup value failed")
+	}
+	return parsed, nil
 }
 
 func writeCgroupValue(cgroupPath, name, value string) error {
 	path := filepath.Join(cgroupPath, name)
-	return os.WriteFile(path, []byte(value), 0640)
+	if err := os.WriteFile(path, []byte(value), 0640); err != nil {
+		return appErr.Wrapf(err, appErr.JudgeSystemError, "write cgroup value failed")
+	}
+	return nil
 }

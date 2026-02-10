@@ -8,10 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/shlex"
+
 	"fuzoj/internal/judge/sandbox/engine"
 	"fuzoj/internal/judge/sandbox/profile"
 	"fuzoj/internal/judge/sandbox/result"
 	"fuzoj/internal/judge/sandbox/spec"
+	appErr "fuzoj/pkg/errors"
 )
 
 const (
@@ -152,13 +155,13 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 
 func (r *DefaultRunner) runChecker(ctx context.Context, req RunRequest, outputName string) (checkerRunResult, error) {
 	if req.Checker == nil || req.CheckerProfile == nil {
-		return checkerRunResult{}, fmt.Errorf("checker is required")
+		return checkerRunResult{}, appErr.ValidationError("checker", "required")
 	}
 	if req.AnswerPath == "" {
-		return checkerRunResult{}, fmt.Errorf("answer path is required for checker")
+		return checkerRunResult{}, appErr.ValidationError("answer_path", "required")
 	}
 	if req.InputPath == "" {
-		return checkerRunResult{}, fmt.Errorf("input path is required for checker")
+		return checkerRunResult{}, appErr.ValidationError("input_path", "required")
 	}
 
 	checkerLimits := applyLimits(req.Checker.Limits, req.CheckerProfile.DefaultLimits, req.Language)
@@ -200,53 +203,53 @@ type checkerRunResult struct {
 
 func validateCompileRequest(req CompileRequest) error {
 	if req.SubmissionID == "" {
-		return fmt.Errorf("submission id is required")
+		return appErr.ValidationError("submission_id", "required")
 	}
 	if req.WorkDir == "" {
-		return fmt.Errorf("work dir is required")
+		return appErr.ValidationError("work_dir", "required")
 	}
 	if req.SourcePath == "" {
-		return fmt.Errorf("source path is required")
+		return appErr.ValidationError("source_path", "required")
 	}
 	if req.Language.ID == "" {
-		return fmt.Errorf("language id is required")
+		return appErr.ValidationError("language_id", "required")
 	}
 	if req.Profile.TaskType == "" {
-		return fmt.Errorf("task profile is required")
+		return appErr.ValidationError("task_profile", "required")
 	}
 	return nil
 }
 
 func validateRunRequest(req RunRequest) error {
 	if req.SubmissionID == "" {
-		return fmt.Errorf("submission id is required")
+		return appErr.ValidationError("submission_id", "required")
 	}
 	if req.TestID == "" {
-		return fmt.Errorf("test id is required")
+		return appErr.ValidationError("test_id", "required")
 	}
 	if req.WorkDir == "" {
-		return fmt.Errorf("work dir is required")
+		return appErr.ValidationError("work_dir", "required")
 	}
 	if req.Language.ID == "" {
-		return fmt.Errorf("language id is required")
+		return appErr.ValidationError("language_id", "required")
 	}
 	if req.Profile.TaskType == "" {
-		return fmt.Errorf("task profile is required")
+		return appErr.ValidationError("task_profile", "required")
 	}
 	switch req.IOConfig.Mode {
 	case "stdio", "fileio":
 	default:
-		return fmt.Errorf("unsupported io mode: %s", req.IOConfig.Mode)
+		return appErr.Newf(appErr.InvalidParams, "unsupported io mode: %s", req.IOConfig.Mode)
 	}
 	if req.InputPath == "" {
-		return fmt.Errorf("input path is required")
+		return appErr.ValidationError("input_path", "required")
 	}
 	if req.IOConfig.Mode == "fileio" {
 		if req.IOConfig.InputFileName == "" {
-			return fmt.Errorf("input file name is required for fileio")
+			return appErr.ValidationError("input_file_name", "required")
 		}
 		if req.IOConfig.OutputFileName == "" {
-			return fmt.Errorf("output file name is required for fileio")
+			return appErr.ValidationError("output_file_name", "required")
 		}
 	}
 	return nil
@@ -320,7 +323,7 @@ func outputName(cfg IOConfig) string {
 
 func buildCommand(tpl string, lang profile.LanguageSpec, extraFlags []string) ([]string, error) {
 	if strings.TrimSpace(tpl) == "" {
-		return nil, fmt.Errorf("command template is required")
+		return nil, appErr.New(appErr.InvalidParams).WithMessage("command template is required")
 	}
 	expanded := tpl
 	expanded = strings.ReplaceAll(expanded, "{src}", filepath.Join(containerWorkDir, lang.SourceFile))
@@ -328,9 +331,12 @@ func buildCommand(tpl string, lang profile.LanguageSpec, extraFlags []string) ([
 	if strings.Contains(expanded, "{extraFlags}") {
 		expanded = strings.ReplaceAll(expanded, "{extraFlags}", strings.Join(extraFlags, " "))
 	}
-	fields := strings.Fields(expanded)
+	fields, err := shlex.Split(expanded)
+	if err != nil {
+		return nil, appErr.Wrapf(err, appErr.InvalidParams, "parse command template failed")
+	}
 	if len(fields) == 0 {
-		return nil, fmt.Errorf("command is empty after expansion")
+		return nil, appErr.New(appErr.InvalidParams).WithMessage("command is empty after expansion")
 	}
 	return fields, nil
 }
@@ -407,22 +413,25 @@ func profileName(languageID string, taskType profile.TaskType) string {
 
 func prepareWorkDir(workDir string) error {
 	if workDir == "" {
-		return fmt.Errorf("work dir is required")
+		return appErr.ValidationError("work_dir", "required")
 	}
-	return os.MkdirAll(workDir, 0755)
+	if err := os.MkdirAll(workDir, 0755); err != nil {
+		return appErr.Wrapf(err, appErr.InternalServerError, "create work dir failed")
+	}
+	return nil
 }
 
 func writeSourceFile(workDir, sourcePath, targetName string) error {
 	if targetName == "" {
-		return fmt.Errorf("source file name is required")
+		return appErr.ValidationError("source_file_name", "required")
 	}
 	content, err := os.ReadFile(sourcePath)
 	if err != nil {
-		return fmt.Errorf("read source: %w", err)
+		return appErr.Wrapf(err, appErr.InternalServerError, "read source failed")
 	}
 	targetPath := filepath.Join(workDir, targetName)
 	if err := os.WriteFile(targetPath, content, 0644); err != nil {
-		return fmt.Errorf("write source: %w", err)
+		return appErr.Wrapf(err, appErr.InternalServerError, "write source failed")
 	}
 	return nil
 }

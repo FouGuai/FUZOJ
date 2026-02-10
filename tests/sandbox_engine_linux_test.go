@@ -517,12 +517,18 @@ type initRequest struct {
 }
 
 type runSpec struct {
-	WorkDir    string   ` + "`json:\"WorkDir\"`" + `
-	Cmd        []string ` + "`json:\"Cmd\"`" + `
-	Env        []string ` + "`json:\"Env\"`" + `
-	StdinPath  string   ` + "`json:\"StdinPath\"`" + `
-	StdoutPath string   ` + "`json:\"StdoutPath\"`" + `
-	StderrPath string   ` + "`json:\"StderrPath\"`" + `
+	WorkDir    string      ` + "`json:\"WorkDir\"`" + `
+	Cmd        []string    ` + "`json:\"Cmd\"`" + `
+	Env        []string    ` + "`json:\"Env\"`" + `
+	StdinPath  string      ` + "`json:\"StdinPath\"`" + `
+	StdoutPath string      ` + "`json:\"StdoutPath\"`" + `
+	StderrPath string      ` + "`json:\"StderrPath\"`" + `
+	BindMounts []mountSpec ` + "`json:\"BindMounts\"`" + `
+}
+
+type mountSpec struct {
+	Source string ` + "`json:\"Source\"`" + `
+	Target string ` + "`json:\"Target\"`" + `
 }
 
 func main() {
@@ -544,6 +550,8 @@ func run() error {
 	if req.RunSpec.WorkDir == "" {
 		return fmt.Errorf("work dir is required")
 	}
+	req.RunSpec = rewriteSpecPaths(req.RunSpec)
+
 	stdinPath := req.RunSpec.StdinPath
 	if stdinPath == "" {
 		stdinPath = "/dev/null"
@@ -591,5 +599,47 @@ func buildEnv(env []string) []string {
 		return env
 	}
 	return []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+}
+
+func rewriteSpecPaths(spec runSpec) runSpec {
+	if len(spec.BindMounts) == 0 {
+		return spec
+	}
+	spec.WorkDir = rewritePath(spec.WorkDir, spec.BindMounts)
+	spec.StdinPath = rewritePath(spec.StdinPath, spec.BindMounts)
+	spec.StdoutPath = rewritePath(spec.StdoutPath, spec.BindMounts)
+	spec.StderrPath = rewritePath(spec.StderrPath, spec.BindMounts)
+	if len(spec.Cmd) > 0 {
+		for i := range spec.Cmd {
+			spec.Cmd[i] = rewritePath(spec.Cmd[i], spec.BindMounts)
+		}
+	}
+	return spec
+}
+
+func rewritePath(path string, mounts []mountSpec) string {
+	if path == "" {
+		return path
+	}
+	bestTarget := ""
+	bestSource := ""
+	for _, m := range mounts {
+		if m.Target == "" || m.Source == "" {
+			continue
+		}
+		if path == m.Target || (len(path) > len(m.Target) && path[:len(m.Target)] == m.Target && path[len(m.Target)] == '/') {
+			if len(m.Target) > len(bestTarget) {
+				bestTarget = m.Target
+				bestSource = m.Source
+			}
+		}
+	}
+	if bestTarget == "" {
+		return path
+	}
+	if path == bestTarget {
+		return bestSource
+	}
+	return bestSource + path[len(bestTarget):]
 }
 `
