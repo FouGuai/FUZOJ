@@ -11,6 +11,7 @@ import (
 	"github.com/google/shlex"
 
 	"fuzoj/internal/judge/sandbox/engine"
+	"fuzoj/internal/judge/sandbox/observer"
 	"fuzoj/internal/judge/sandbox/profile"
 	"fuzoj/internal/judge/sandbox/result"
 	"fuzoj/internal/judge/sandbox/spec"
@@ -29,12 +30,21 @@ const (
 
 // DefaultRunner implements compile/run workflows for supported languages.
 type DefaultRunner struct {
-	eng engine.Engine
+	eng     engine.Engine
+	metrics observer.MetricsRecorder
 }
 
 // NewRunner creates a new runner backed by the sandbox engine.
 func NewRunner(eng engine.Engine) *DefaultRunner {
-	return &DefaultRunner{eng: eng}
+	return NewRunnerWithObserver(eng, observer.NoopMetricsRecorder{})
+}
+
+// NewRunnerWithObserver creates a new runner with metrics hooks.
+func NewRunnerWithObserver(eng engine.Engine, metrics observer.MetricsRecorder) *DefaultRunner {
+	if metrics == nil {
+		metrics = observer.NoopMetricsRecorder{}
+	}
+	return &DefaultRunner{eng: eng, metrics: metrics}
 }
 
 func (r *DefaultRunner) Compile(ctx context.Context, req CompileRequest) (result.CompileResult, error) {
@@ -83,6 +93,7 @@ func (r *DefaultRunner) Compile(ctx context.Context, req CompileRequest) (result
 		MemoryKB: runRes.MemoryKB,
 		LogPath:  logPath,
 	}
+	r.metrics.ObserveCompile(ctx, req.Language.ID, compileRes.OK, compileRes.TimeMs, compileRes.MemoryKB)
 	if err != nil {
 		compileRes.Error = err.Error()
 		return compileRes, err
@@ -112,6 +123,7 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 
 	runRes, runErr := r.eng.Run(ctx, runSpec)
 	if runErr != nil {
+		r.metrics.ObserveRun(ctx, req.Language.ID, string(result.VerdictSE), runRes.TimeMs, runRes.MemoryKB, runRes.OutputKB)
 		return result.TestcaseResult{
 			TestID:         req.TestID,
 			Verdict:        result.VerdictSE,
@@ -137,7 +149,7 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 		}
 	}
 
-	return result.TestcaseResult{
+	res := result.TestcaseResult{
 		TestID:         req.TestID,
 		Verdict:        verdict,
 		TimeMs:         runRes.TimeMs,
@@ -150,7 +162,9 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 		Stderr:         runRes.Stderr,
 		Score:          req.Score,
 		SubtaskID:      req.SubtaskID,
-	}, nil
+	}
+	r.metrics.ObserveRun(ctx, req.Language.ID, string(verdict), res.TimeMs, res.MemoryKB, res.OutputKB)
+	return res, nil
 }
 
 func (r *DefaultRunner) runChecker(ctx context.Context, req RunRequest, outputName string) (checkerRunResult, error) {

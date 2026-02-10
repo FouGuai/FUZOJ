@@ -403,6 +403,117 @@ int main(){
 	}
 }
 
+func TestCppRunnerTimesOutInfiniteLoop(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux only")
+	}
+	if _, err := exec.LookPath("g++"); err != nil {
+		t.Skip("g++ is required for this test")
+	}
+
+	helperPath := buildSandboxHelperInRepo(t)
+	if err := checkHelperExecutable(helperPath); err != nil {
+		t.Fatalf("sandbox helper not executable: %v", err)
+	}
+	workDir, err := os.MkdirTemp("", "fuzoj-runner-tle-")
+	if err != nil {
+		t.Fatalf("work dir not writable: %v", err)
+	}
+	defer os.RemoveAll(workDir)
+	resolver := staticResolver{profile: security.IsolationProfile{}}
+	eng, err := engine.NewEngine(engine.Config{
+		CgroupRoot:       filepath.Join(workDir, "cgroup"),
+		HelperPath:       helperPath,
+		EnableSeccomp:    true,
+		EnableCgroup:     true,
+		EnableNamespaces: true,
+	}, resolver)
+	if err != nil {
+		t.Fatalf("create engine: %v", err)
+	}
+	r := runner.NewRunner(eng)
+
+	sourcePath := filepath.Join(workDir, "source.cpp")
+	inputPath := filepath.Join(workDir, "input.txt")
+
+	cppSource := `#include <iostream>
+using namespace std;
+int main(){
+    volatile unsigned long long x = 0;
+    while(true){ x++; }
+    return 0;
+}`
+	if err := os.WriteFile(sourcePath, []byte(cppSource), 0644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	if err := os.WriteFile(inputPath, []byte(""), 0644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+
+	lang := profile.LanguageSpec{
+		ID:             "cpp",
+		Name:           "C++",
+		Version:        "gnu++17",
+		SourceFile:     "main.cpp",
+		BinaryFile:     "main",
+		CompileEnabled: true,
+		CompileCmdTpl:  "g++ -std=gnu++17 -O2 -pipe -o {bin} {src}",
+		RunCmdTpl:      "{bin}",
+		Env:            nil,
+	}
+
+	compileProfile := profile.TaskProfile{TaskType: profile.TaskTypeCompile}
+	runProfile := profile.TaskProfile{TaskType: profile.TaskTypeRun}
+
+	compileReq := runner.CppCompileRequest{CompileRequest: runner.CompileRequest{
+		SubmissionID:      "sub-runner-tle",
+		Language:          lang,
+		Profile:           compileProfile,
+		WorkDir:           workDir,
+		SourcePath:        sourcePath,
+		ExtraCompileFlags: []string{},
+		Limits:            spec.ResourceLimit{WallTimeMs: 50000, CPUTimeMs: 30000, MemoryMB: 256},
+	}}
+	compileRes, err := r.CompileCpp(context.Background(), compileReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("sandbox helper not executable: %v", err)
+		}
+		t.Fatalf("compile failed: %v", err)
+	}
+	if !compileRes.OK {
+		logPath := filepath.Join(workDir, "compile.log")
+		data, _ := os.ReadFile(logPath)
+		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, log:%s", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.LogPath)
+	}
+
+	runReq := runner.CppRunRequest{RunRequest: runner.RunRequest{
+		SubmissionID: "sub-runner-tle",
+		TestID:       "t1",
+		Language:     lang,
+		Profile:      runProfile,
+		WorkDir:      workDir,
+		IOConfig:     runner.IOConfig{Mode: "stdio"},
+		InputPath:    inputPath,
+		Limits:       spec.ResourceLimit{WallTimeMs: 800, CPUTimeMs: 400, MemoryMB: 128, OutputMB: 1},
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	runRes, err := r.RunCpp(ctx, runReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "permission denied") {
+			t.Skipf("sandbox helper not executable: %v", err)
+		}
+		t.Fatalf("run failed: %v", err)
+	}
+	t.Logf("runner stats: verdict=%s exit=%d cpu_ms=%d mem_kb=%d out_kb=%d elapsed_ms=%d",
+		runRes.Verdict, runRes.ExitCode, runRes.TimeMs, runRes.MemoryKB, runRes.OutputKB, time.Since(start).Milliseconds())
+	if runRes.Verdict != result.VerdictTLE {
+		t.Fatalf("expected verdict TLE, got %s (exit=%d)", runRes.Verdict, runRes.ExitCode)
+	}
+}
+
 func buildSandboxHelperInRepo(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

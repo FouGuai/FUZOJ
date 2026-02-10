@@ -4,7 +4,6 @@ package sandbox
 import (
 	"context"
 
-	"fuzoj/internal/judge/sandbox/profile"
 	"fuzoj/internal/judge/sandbox/result"
 	"fuzoj/internal/judge/sandbox/spec"
 )
@@ -29,29 +28,22 @@ type IOConfig struct {
 // All paths must point to local files prepared before calling the sandbox.
 type JudgeRequest struct {
 	SubmissionID string
-	Language     profile.LanguageSpec
+	LanguageID   string
+	WorkRoot     string
+	SourcePath   string
 
-	// CompileProfile is required when Language.CompileEnabled is true.
-	// RunProfile is always required.
-	CompileProfile profile.TaskProfile
-	RunProfile     profile.TaskProfile
-
-	// Optional profiles for special tasks.
-	CheckerProfile    *profile.TaskProfile
-	InteractorProfile *profile.TaskProfile
-
-	// WorkRoot is the host path used to create per-test workspaces.
-	WorkRoot string
-	// SourcePath is the local path to the user source code.
-	SourcePath string
-
-	IOConfig   IOConfig
-	Tests      []TestcaseSpec
-	Checker    *CheckerSpec
-	Interactor *InteractorSpec
+	Tests    []TestcaseSpec
+	Subtasks []SubtaskSpec
 
 	// ExtraCompileFlags must be filtered by the caller before use.
 	ExtraCompileFlags []string
+
+	// Business metadata.
+	ProblemID string
+	ContestID string
+	UserID    string
+	Priority  int
+	Tags      []string
 }
 
 // TestcaseSpec describes one test case input and expected answer.
@@ -59,21 +51,25 @@ type TestcaseSpec struct {
 	TestID     string
 	InputPath  string
 	AnswerPath string
+	IOConfig   IOConfig
 	Score      int
 	SubtaskID  string
 	Limits     spec.ResourceLimit
+	Checker    *CheckerSpec
+	// CheckerLanguageID defaults to LanguageID if empty.
+	CheckerLanguageID string
+}
+
+// SubtaskSpec defines scoring strategy for a group of testcases.
+type SubtaskSpec struct {
+	ID         string
+	Score      int
+	Strategy   string
+	StopOnFail bool
 }
 
 // CheckerSpec describes the special judge binary and its arguments.
 type CheckerSpec struct {
-	BinaryPath string
-	Args       []string
-	Env        []string
-	Limits     spec.ResourceLimit
-}
-
-// InteractorSpec describes the interactor binary and its arguments.
-type InteractorSpec struct {
 	BinaryPath string
 	Args       []string
 	Env        []string

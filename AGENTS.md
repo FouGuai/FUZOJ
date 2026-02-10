@@ -136,3 +136,4 @@
 - **User Token Repository**：`docs/user_token_repository.md` — 用户 Token 持久化与黑名单管理
 - **Sandbox Engine**：`docs/sandbox_engine.md` — Linux 原生沙箱引擎与初始化流程说明
 - **Sandbox Runner**：`docs/sandbox_runner.md` — 判题编排层，负责生成 RunSpec 并执行编译、运行与 SPJ
+- **Judge Worker**：`docs/judge_worker.md` — 沙箱执行调度单元，负责编译、运行与 SPJ 结果汇总
