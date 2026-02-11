@@ -62,7 +62,7 @@ func TestCppCompileBuildsRunSpec(t *testing.T) {
 	engine := &fakeEngine{runResults: []result.RunResult{{ExitCode: 0}}}
 	r := runner.NewRunner(engine)
 
-	req := runner.CppCompileRequest{CompileRequest: runner.CompileRequest{
+	req := runner.CompileRequest{
 		SubmissionID:      "sub-1",
 		Language:          lang,
 		Profile:           prof,
@@ -70,9 +70,9 @@ func TestCppCompileBuildsRunSpec(t *testing.T) {
 		SourcePath:        sourcePath,
 		ExtraCompileFlags: []string{"-pipe"},
 		Limits:            spec.ResourceLimit{CPUTimeMs: 1000, MemoryMB: 256},
-	}}
+	}
 
-	if _, err := r.CompileCpp(context.Background(), req); err != nil {
+	if _, err := r.Compile(context.Background(), req); err != nil {
 		t.Fatalf("compile failed: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestCppRunStdioRunSpec(t *testing.T) {
 	engine := &fakeEngine{runResults: []result.RunResult{{ExitCode: 0}}}
 	r := runner.NewRunner(engine)
 
-	req := runner.CppRunRequest{RunRequest: runner.RunRequest{
+	req := runner.RunRequest{
 		SubmissionID: "sub-1",
 		TestID:       "t1",
 		Language:     lang,
@@ -136,9 +136,9 @@ func TestCppRunStdioRunSpec(t *testing.T) {
 		InputPath:    inputPath,
 		AnswerPath:   answerPath,
 		Limits:       spec.ResourceLimit{WallTimeMs: 1000},
-	}}
+	}
 
-	if _, err := r.RunCpp(context.Background(), req); err != nil {
+	if _, err := r.Run(context.Background(), req); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 	if len(engine.runSpecs) != 1 {
@@ -239,7 +239,7 @@ func TestCppRunWithChecker(t *testing.T) {
 	}
 	r := runner.NewRunner(engine)
 
-	req := runner.CppRunRequest{RunRequest: runner.RunRequest{
+	req := runner.RunRequest{
 		SubmissionID: "sub-1",
 		TestID:       "t1",
 		Language:     lang,
@@ -253,9 +253,9 @@ func TestCppRunWithChecker(t *testing.T) {
 			BinaryPath: "/work/checker",
 		},
 		CheckerProfile: &checkerProf,
-	}}
+	}
 
-	res, err := r.RunCpp(context.Background(), req)
+	res, err := r.Run(context.Background(), req)
 	if err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
@@ -352,7 +352,7 @@ int main(){
 	compileProfile := profile.TaskProfile{TaskType: profile.TaskTypeCompile}
 	runProfile := profile.TaskProfile{TaskType: profile.TaskTypeRun}
 
-	compileReq := runner.CppCompileRequest{CompileRequest: runner.CompileRequest{
+	compileReq := runner.CompileRequest{
 		SubmissionID:      "sub-runner",
 		Language:          lang,
 		Profile:           compileProfile,
@@ -360,8 +360,8 @@ int main(){
 		SourcePath:        sourcePath,
 		ExtraCompileFlags: []string{},
 		Limits:            spec.ResourceLimit{WallTimeMs: 5000, CPUTimeMs: 3000, MemoryMB: 512},
-	}}
-	compileRes, err := r.CompileCpp(context.Background(), compileReq)
+	}
+	compileRes, err := r.Compile(context.Background(), compileReq)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("sandbox helper not executable: %v", err)
@@ -374,7 +374,7 @@ int main(){
 		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, log:%s", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.LogPath)
 	}
 
-	runReq := runner.CppRunRequest{RunRequest: runner.RunRequest{
+	runReq := runner.RunRequest{
 		SubmissionID: "sub-runner",
 		TestID:       "t1",
 		Language:     lang,
@@ -383,9 +383,9 @@ int main(){
 		IOConfig:     runner.IOConfig{Mode: "stdio"},
 		InputPath:    inputPath,
 		Limits:       spec.ResourceLimit{WallTimeMs: 2000, CPUTimeMs: 1500, MemoryMB: 256, OutputMB: 64},
-	}}
+	}
 	start := time.Now()
-	runRes, err := r.RunCpp(context.Background(), runReq)
+	runRes, err := r.Run(context.Background(), runReq)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") {
 			t.Skipf("sandbox helper not executable: %v", err)
@@ -465,7 +465,7 @@ int main(){
 	compileProfile := profile.TaskProfile{TaskType: profile.TaskTypeCompile}
 	runProfile := profile.TaskProfile{TaskType: profile.TaskTypeRun}
 
-	compileReq := runner.CppCompileRequest{CompileRequest: runner.CompileRequest{
+	compileReq := runner.CompileRequest{
 		SubmissionID:      "sub-runner-tle",
 		Language:          lang,
 		Profile:           compileProfile,
@@ -473,8 +473,8 @@ int main(){
 		SourcePath:        sourcePath,
 		ExtraCompileFlags: []string{},
 		Limits:            spec.ResourceLimit{WallTimeMs: 50000, CPUTimeMs: 30000, MemoryMB: 256},
-	}}
-	compileRes, err := r.CompileCpp(context.Background(), compileReq)
+	}
+	compileRes, err := r.Compile(context.Background(), compileReq)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("sandbox helper not executable: %v", err)
@@ -487,7 +487,7 @@ int main(){
 		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, log:%s", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.LogPath)
 	}
 
-	runReq := runner.CppRunRequest{RunRequest: runner.RunRequest{
+	runReq := runner.RunRequest{
 		SubmissionID: "sub-runner-tle",
 		TestID:       "t1",
 		Language:     lang,
@@ -496,11 +496,11 @@ int main(){
 		IOConfig:     runner.IOConfig{Mode: "stdio"},
 		InputPath:    inputPath,
 		Limits:       spec.ResourceLimit{WallTimeMs: 800, CPUTimeMs: 400, MemoryMB: 128, OutputMB: 1},
-	}}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	start := time.Now()
-	runRes, err := r.RunCpp(ctx, runReq)
+	runRes, err := r.Run(ctx, runReq)
 	if err != nil {
 		if strings.Contains(err.Error(), "permission denied") {
 			t.Skipf("sandbox helper not executable: %v", err)
@@ -528,7 +528,7 @@ func buildSandboxHelperInRepo(t *testing.T) string {
 		_ = os.RemoveAll(helperDir)
 	})
 
-	goMod := []byte("module sandboxhelper\n\ngo 1.22\n")
+	goMod := []byte("module sandboxhelper\n\ngo 1.26\n")
 	if err := os.WriteFile(filepath.Join(helperDir, "go.mod"), goMod, 0644); err != nil {
 		t.Fatalf("write helper go.mod: %v", err)
 	}

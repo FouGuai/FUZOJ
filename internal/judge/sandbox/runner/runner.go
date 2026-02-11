@@ -43,16 +43,6 @@ type Runner interface {
 	Run(ctx context.Context, req RunRequest) (result.TestcaseResult, error)
 }
 
-// CppCompileRequest extends CompileRequest for C++ tasks.
-type CppCompileRequest struct {
-	CompileRequest
-}
-
-// CppRunRequest extends RunRequest for C++ tasks.
-type CppRunRequest struct {
-	RunRequest
-}
-
 // IOConfig describes how the program reads input and writes output.
 type IOConfig struct {
 	Mode           string

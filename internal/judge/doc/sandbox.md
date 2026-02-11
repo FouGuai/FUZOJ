@@ -33,10 +33,10 @@
 
 ### 2.2 Runner 实现要点（当前实现）
 
-Runner 负责将语言与任务配置转化为可执行的 `RunSpec`，并调用 Sandbox Engine。当前实现以 **C++ 为优先支持语言**，并通过“基础请求结构 + 语言扩展结构”的方式预留多语言扩展：
+Runner 负责将语言与任务配置转化为可执行的 `RunSpec`，并调用 Sandbox Engine。当前实现以 **C++ 为优先支持语言**，并通过统一请求结构承载通用字段，为多语言扩展保留空间：
 
-- `CompileRequest` / `RunRequest` 作为基础结构，承载通用字段（SubmissionID、WorkDir、语言配置、Profile、资源限制等）。
-- 语言扩展采用结构体嵌入（如 `CppCompileRequest` / `CppRunRequest`），便于后续横向扩展到其它语言。
+- `CompileRequest` / `RunRequest` 作为统一结构，承载通用字段（SubmissionID、WorkDir、语言配置、Profile、资源限制等）。
+- 语言差异通过 `LanguageSpec` 或独立 Runner 实现来体现，而不是扩展请求结构。
 
 Runner 生成 RunSpec 的关键规则：
 

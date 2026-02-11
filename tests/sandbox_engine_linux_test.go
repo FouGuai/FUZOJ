@@ -483,7 +483,7 @@ func buildSandboxHelper(t *testing.T) string {
 		t.Fatalf("create helper dir: %v", err)
 	}
 
-	goMod := []byte("module sandboxhelper\n\ngo 1.22\n")
+	goMod := []byte("module sandboxhelper\n\ngo 1.26\n")
 	if err := os.WriteFile(filepath.Join(helperDir, "go.mod"), goMod, 0644); err != nil {
 		t.Fatalf("write helper go.mod: %v", err)
 	}
