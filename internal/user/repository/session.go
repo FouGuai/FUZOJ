@@ -82,7 +82,7 @@ func (r *MySQLTokenRepository) Create(ctx context.Context, tx db.Transaction, to
 		ipAddress = sql.NullString{String: token.IPAddress, Valid: true}
 	}
 
-	_, err := getQuerier(r.db, tx).Exec(
+	_, err := db.GetQuerier(r.db, tx).Exec(
 		ctx,
 		query,
 		token.UserID,
@@ -132,7 +132,7 @@ func (r *MySQLTokenRepository) GetByHash(ctx context.Context, tx db.Transaction,
 
 func (r *MySQLTokenRepository) RevokeByHash(ctx context.Context, tx db.Transaction, tokenHash string, expiresAt time.Time) error {
 	query := "UPDATE user_tokens SET revoked = TRUE WHERE token_hash = ?"
-	result, err := getQuerier(r.db, tx).Exec(ctx, query, tokenHash)
+	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, tokenHash)
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (r *MySQLTokenRepository) RevokeByHash(ctx context.Context, tx db.Transacti
 func (r *MySQLTokenRepository) RevokeByUser(ctx context.Context, tx db.Transaction, userID int64) error {
 	now := time.Now()
 	queryTokens := "SELECT token_hash, expires_at FROM user_tokens WHERE user_id = ? AND revoked = FALSE AND expires_at > ?"
-	rows, err := getQuerier(r.db, tx).Query(ctx, queryTokens, userID, now)
+	rows, err := db.GetQuerier(r.db, tx).Query(ctx, queryTokens, userID, now)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (r *MySQLTokenRepository) RevokeByUser(ctx context.Context, tx db.Transacti
 	}
 
 	queryRevoke := "UPDATE user_tokens SET revoked = TRUE WHERE user_id = ?"
-	if _, err := getQuerier(r.db, tx).Exec(ctx, queryRevoke, userID); err != nil {
+	if _, err := db.GetQuerier(r.db, tx).Exec(ctx, queryRevoke, userID); err != nil {
 		return err
 	}
 
@@ -215,10 +215,10 @@ func (r *MySQLTokenRepository) blacklistToken(ctx context.Context, tokenHash str
 
 func (r *MySQLTokenRepository) getByHashFromDB(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
 	query := "SELECT " + tokenColumns + " FROM user_tokens WHERE token_hash = ?"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, tokenHash)
+	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, tokenHash)
 	result, err := scanToken(row)
 	if err != nil {
-		if isNoRows(err) {
+		if db.IsNoRows(err) {
 			return nil, ErrTokenNotFound
 		}
 		return nil, err

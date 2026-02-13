@@ -103,9 +103,9 @@ func (r *MySQLUserRepository) Create(ctx context.Context, tx db.Transaction, use
 	}
 
 	query := "INSERT INTO users (username, email, phone, password_hash, role, status) VALUES (?, ?, ?, ?, ?, ?)"
-	result, err := getQuerier(r.db, tx).Exec(ctx, query, user.Username, user.Email, phone, user.PasswordHash, role, status)
+	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, user.Username, user.Email, phone, user.PasswordHash, role, status)
 	if err != nil {
-		if key, ok := uniqueViolation(err); ok {
+		if key, ok := db.UniqueViolation(err); ok {
 			normalizedKey := strings.ToLower(strings.TrimSpace(key))
 			switch {
 			case strings.Contains(normalizedKey, "users_username_uq") || strings.Contains(normalizedKey, "users.username") || strings.Contains(normalizedKey, ".username") || strings.Contains(normalizedKey, "username"):
@@ -230,10 +230,10 @@ func (r *MySQLUserRepository) GetByEmail(ctx context.Context, tx db.Transaction,
 
 func (r *MySQLUserRepository) ExistsByUsername(ctx context.Context, tx db.Transaction, username string) (bool, error) {
 	query := "SELECT 1 FROM users WHERE username = ?"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, username)
+	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, username)
 	var one int
 	if err := row.Scan(&one); err != nil {
-		if isNoRows(err) {
+		if db.IsNoRows(err) {
 			return false, nil
 		}
 		return false, err
@@ -243,10 +243,10 @@ func (r *MySQLUserRepository) ExistsByUsername(ctx context.Context, tx db.Transa
 
 func (r *MySQLUserRepository) ExistsByEmail(ctx context.Context, tx db.Transaction, email string) (bool, error) {
 	query := "SELECT 1 FROM users WHERE email = ?"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, email)
+	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, email)
 	var one int
 	if err := row.Scan(&one); err != nil {
-		if isNoRows(err) {
+		if db.IsNoRows(err) {
 			return false, nil
 		}
 		return false, err
@@ -264,7 +264,7 @@ func (r *MySQLUserRepository) UpdatePassword(ctx context.Context, tx db.Transact
 		}
 	}
 	query := "UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?"
-	result, err := getQuerier(r.db, tx).Exec(ctx, query, newHash, userID)
+	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, newHash, userID)
 	if err != nil {
 		return err
 	}
@@ -292,7 +292,7 @@ func (r *MySQLUserRepository) UpdateStatus(ctx context.Context, tx db.Transactio
 		}
 	}
 	query := "UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?"
-	result, err := getQuerier(r.db, tx).Exec(ctx, query, status, userID)
+	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, status, userID)
 	if err != nil {
 		return err
 	}
@@ -321,10 +321,10 @@ const (
 
 func (r *MySQLUserRepository) getByIDFromDB(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
 	query := "SELECT " + userColumns + " FROM users WHERE id = ?"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, id)
+	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, id)
 	user, err := scanUser(row)
 	if err != nil {
-		if isNoRows(err) {
+		if db.IsNoRows(err) {
 			return nil, ErrUserNotFound
 		}
 		return nil, err
@@ -334,10 +334,10 @@ func (r *MySQLUserRepository) getByIDFromDB(ctx context.Context, tx db.Transacti
 
 func (r *MySQLUserRepository) getByUsernameFromDB(ctx context.Context, tx db.Transaction, username string) (*User, error) {
 	query := "SELECT " + userColumns + " FROM users WHERE username = ?"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, username)
+	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, username)
 	user, err := scanUser(row)
 	if err != nil {
-		if isNoRows(err) {
+		if db.IsNoRows(err) {
 			return nil, ErrUserNotFound
 		}
 		return nil, err
@@ -347,10 +347,10 @@ func (r *MySQLUserRepository) getByUsernameFromDB(ctx context.Context, tx db.Tra
 
 func (r *MySQLUserRepository) getByEmailFromDB(ctx context.Context, tx db.Transaction, email string) (*User, error) {
 	query := "SELECT " + userColumns + " FROM users WHERE email = ?"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, email)
+	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, email)
 	user, err := scanUser(row)
 	if err != nil {
-		if isNoRows(err) {
+		if db.IsNoRows(err) {
 			return nil, ErrUserNotFound
 		}
 		return nil, err
@@ -360,10 +360,10 @@ func (r *MySQLUserRepository) getByEmailFromDB(ctx context.Context, tx db.Transa
 
 func (r *MySQLUserRepository) getUserIdentifiers(ctx context.Context, tx db.Transaction, userID int64) (string, string, error) {
 	query := "SELECT username, email FROM users WHERE id = ?"
-	row := getQuerier(r.db, tx).QueryRow(ctx, query, userID)
+	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, userID)
 	var username, email string
 	if err := row.Scan(&username, &email); err != nil {
-		if isNoRows(err) {
+		if db.IsNoRows(err) {
 			return "", "", ErrUserNotFound
 		}
 		return "", "", err
