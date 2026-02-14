@@ -38,7 +38,9 @@ type ProblemLatestMeta struct {
 type ProblemRepository interface {
 	Create(ctx context.Context, tx db.Transaction, problem *Problem) (int64, error)
 	Delete(ctx context.Context, tx db.Transaction, problemID int64) error
+	Exists(ctx context.Context, tx db.Transaction, problemID int64) (bool, error)
 	GetLatestMeta(ctx context.Context, tx db.Transaction, problemID int64) (ProblemLatestMeta, error)
+	InvalidateLatestMetaCache(ctx context.Context, problemID int64) error
 }
 
 type MySQLProblemRepository struct {
@@ -69,7 +71,7 @@ func NewProblemRepositoryWithTTL(database db.Database, cacheClient cache.Cache, 
 
 func (r *MySQLProblemRepository) GetLatestMeta(ctx context.Context, tx db.Transaction, problemID int64) (ProblemLatestMeta, error) {
 	if r.cache != nil && tx == nil {
-		meta, err := cache.GetWithCached[ProblemLatestMeta](
+		meta, err := cache.GetWithCached(
 			ctx,
 			r.cache,
 			problemLatestKey(problemID),
@@ -98,6 +100,31 @@ func (r *MySQLProblemRepository) GetLatestMeta(ctx context.Context, tx db.Transa
 		return meta, nil
 	}
 	return r.getLatestMetaFromDB(ctx, tx, problemID)
+}
+
+func (r *MySQLProblemRepository) Exists(ctx context.Context, tx db.Transaction, problemID int64) (bool, error) {
+	if problemID <= 0 {
+		return false, errors.New("problemID is required")
+	}
+	q := db.GetQuerier(r.db, tx)
+	var exists int
+	if err := q.QueryRow(ctx, "SELECT 1 FROM problem WHERE id = ?", problemID).Scan(&exists); err != nil {
+		if db.IsNoRows(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *MySQLProblemRepository) InvalidateLatestMetaCache(ctx context.Context, problemID int64) error {
+	if r.cache == nil {
+		return nil
+	}
+	if problemID <= 0 {
+		return errors.New("problemID is required")
+	}
+	return r.cache.Del(ctx, problemLatestKey(problemID))
 }
 
 func (r *MySQLProblemRepository) Create(ctx context.Context, tx db.Transaction, problem *Problem) (int64, error) {

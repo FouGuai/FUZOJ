@@ -7,6 +7,7 @@ import (
 
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/db"
+	"fuzoj/internal/common/storage"
 	"fuzoj/pkg/utils/logger"
 
 	"gopkg.in/yaml.v3"
@@ -39,6 +40,19 @@ type AppConfig struct {
 	Server ServerConfig  `yaml:"server"`
 	GRPC   GRPCConfig    `yaml:"grpc"`
 	Logger logger.Config `yaml:"logger"`
+
+	MinIO  storage.MinIOConfig `yaml:"minio"`
+	Upload UploadConfig        `yaml:"upload"`
+}
+
+// UploadConfig holds problem upload settings.
+type UploadConfig struct {
+	// PartSizeBytes is the multipart upload part size in bytes.
+	PartSizeBytes int64 `yaml:"partSizeBytes"`
+	// SessionTTL defines how long an upload session is valid.
+	SessionTTL time.Duration `yaml:"sessionTTL"`
+	// PresignTTL defines how long presigned URLs are valid.
+	PresignTTL time.Duration `yaml:"presignTTL"`
 }
 
 func loadYAML(path string, out interface{}) error {
@@ -72,6 +86,22 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	}
 	if cfg.GRPC.Addr == "" {
 		cfg.GRPC.Addr = defaultGRPCAddr
+	}
+
+	// Upload defaults.
+	if cfg.Upload.PartSizeBytes <= 0 {
+		cfg.Upload.PartSizeBytes = 16 * 1024 * 1024
+	}
+	if cfg.Upload.SessionTTL == 0 {
+		cfg.Upload.SessionTTL = 2 * time.Hour
+	}
+	if cfg.Upload.PresignTTL == 0 {
+		cfg.Upload.PresignTTL = 15 * time.Minute
+	}
+
+	// Keep MinIOConfig.PresignTTL in sync if not set explicitly.
+	if cfg.MinIO.PresignTTL == 0 {
+		cfg.MinIO.PresignTTL = cfg.Upload.PresignTTL
 	}
 
 	return &cfg, nil

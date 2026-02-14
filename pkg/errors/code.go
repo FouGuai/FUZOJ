@@ -81,6 +81,14 @@ const (
 	ProblemDeleteFailed ErrorCode = 12004
 	ProblemNotPublished ErrorCode = 12005
 
+	// Problem data pack upload (12010-12029)
+	ProblemUploadNotFound            ErrorCode = 12010
+	ProblemUploadExpired             ErrorCode = 12011
+	ProblemUploadStateInvalid        ErrorCode = 12012
+	ProblemUploadConflict            ErrorCode = 12013
+	ProblemUploadObjectStorageFailed ErrorCode = 12014
+	ProblemVersionNotReadyToPublish  ErrorCode = 12015
+
 	// Test cases (12100-12199)
 	TestCaseNotFound     ErrorCode = 12100
 	TestCaseUploadFailed ErrorCode = 12101
@@ -224,6 +232,14 @@ var errorMessages = map[ErrorCode]string{
 	ProblemUpdateFailed: "Failed to update problem",
 	ProblemDeleteFailed: "Failed to delete problem",
 	ProblemNotPublished: "Problem is not published yet",
+
+	// Problem upload
+	ProblemUploadNotFound:            "Problem upload session not found",
+	ProblemUploadExpired:             "Problem upload session has expired",
+	ProblemUploadStateInvalid:        "Problem upload session state is invalid",
+	ProblemUploadConflict:            "Problem upload conflict",
+	ProblemUploadObjectStorageFailed: "Object storage operation failed",
+	ProblemVersionNotReadyToPublish:  "Problem version is not ready to publish",
 
 	// Test cases
 	TestCaseNotFound:     "Test case not found",

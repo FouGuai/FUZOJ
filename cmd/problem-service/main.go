@@ -13,6 +13,7 @@ import (
 
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/db"
+	"fuzoj/internal/common/storage"
 	"fuzoj/internal/problem/controller"
 	"fuzoj/internal/problem/repository"
 	"fuzoj/internal/problem/rpc"
@@ -78,7 +79,22 @@ func main() {
 	problemRepo := repository.NewProblemRepository(mysqlDB, redisCache)
 	problemService := service.NewProblemService(problemRepo)
 
-	httpServer := buildHTTPServer(appCfg.Server, problemService)
+	objStorage, err := storage.NewMinIOStorage(appCfg.MinIO)
+	if err != nil {
+		logger.Error(context.Background(), "init minio failed", zap.Error(err))
+		return
+	}
+
+	uploadRepo := repository.NewProblemUploadRepository(mysqlDB)
+	uploadService := service.NewProblemUploadServiceWithDB(mysqlDB, problemRepo, uploadRepo, objStorage, service.UploadOptions{
+		Bucket:        appCfg.MinIO.Bucket,
+		KeyPrefix:     "problems",
+		PartSizeBytes: appCfg.Upload.PartSizeBytes,
+		SessionTTL:    appCfg.Upload.SessionTTL,
+		PresignTTL:    appCfg.Upload.PresignTTL,
+	})
+
+	httpServer := buildHTTPServer(appCfg.Server, problemService, uploadService)
 	grpcServer := grpc.NewServer()
 	rpc.RegisterProblemService(grpcServer, problemService)
 
@@ -118,7 +134,7 @@ func main() {
 	grpcServer.GracefulStop()
 }
 
-func buildHTTPServer(cfg ServerConfig, problemService *service.ProblemService) *http.Server {
+func buildHTTPServer(cfg ServerConfig, problemService *service.ProblemService, uploadService *service.ProblemUploadService) *http.Server {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(requestLogger())
@@ -128,6 +144,13 @@ func buildHTTPServer(cfg ServerConfig, problemService *service.ProblemService) *
 	api.POST("", problemController.Create)
 	api.GET("/:id/latest", problemController.GetLatest)
 	api.DELETE("/:id", problemController.Delete)
+
+	uploadController := controller.NewProblemUploadController(uploadService)
+	api.POST("/:id/data-pack/uploads:prepare", uploadController.Prepare)
+	api.POST("/:id/data-pack/uploads/:upload_id:sign", uploadController.Sign)
+	api.POST("/:id/data-pack/uploads/:upload_id:complete", uploadController.Complete)
+	api.POST("/:id/data-pack/uploads/:upload_id:abort", uploadController.Abort)
+	api.POST("/:id/versions/:version:publish", uploadController.Publish)
 
 	return &http.Server{
 		Addr:         cfg.Addr,

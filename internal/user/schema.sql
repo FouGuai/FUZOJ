@@ -36,8 +36,7 @@ CREATE TABLE IF NOT EXISTS user_bans (
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   KEY user_bans_user_id_idx (user_id),
   KEY user_bans_status_idx (status),
-  KEY user_bans_end_time_idx (end_time),
-  CONSTRAINT user_bans_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  KEY user_bans_end_time_idx (end_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='User ban history';
 
 CREATE TABLE IF NOT EXISTS user_tokens (
@@ -53,6 +52,5 @@ CREATE TABLE IF NOT EXISTS user_tokens (
   UNIQUE KEY user_tokens_hash_uq (token_hash),
   KEY user_tokens_user_id_idx (user_id),
   KEY user_tokens_expires_idx (expires_at),
-  KEY user_tokens_revoked_idx (revoked),
-  CONSTRAINT user_tokens_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  KEY user_tokens_revoked_idx (revoked)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='User tokens';

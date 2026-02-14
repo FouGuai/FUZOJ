@@ -12,3 +12,16 @@ logger:
   format: "json"
   outputPath: "stdout"
   errorPath: "stderr"
+
+minio:
+  endpoint: "127.0.0.1:9000"
+  accessKey: "minioadmin"
+  secretKey: "minioadmin"
+  useSSL: false
+  bucket: "problem-data"
+  presignTTL: "15m"
+
+upload:
+  partSizeBytes: 16777216
+  sessionTTL: "2h"
+  presignTTL: "15m"
