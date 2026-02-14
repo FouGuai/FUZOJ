@@ -1,0 +1,48 @@
+server:
+  addr: "0.0.0.0:8086"
+  readTimeout: 5s
+  writeTimeout: 10s
+  idleTimeout: 60s
+
+logger:
+  level: "info"
+  format: "json"
+  outputPath: "stdout"
+  errorPath: "stderr"
+
+kafka:
+  brokers: ["127.0.0.1:9092"]
+  clientID: "submit-service"
+
+topics:
+  level0: "judge.level0"
+  level1: "judge.level1"
+  level2: "judge.level2"
+  level3: "judge.level3"
+
+minio:
+  endpoint: "127.0.0.1:9000"
+  accessKey: "minioadmin"
+  secretKey: "minioadmin"
+  useSSL: false
+  bucket: "fuzoj"
+
+submit:
+  sourceBucket: "fuzoj"
+  sourceKeyPrefix: "submissions"
+  maxCodeBytes: 262144
+  idempotencyTTL: 10m
+  batchLimit: 200
+  statusTTL: 24h
+  submissionCacheTTL: 30m
+  submissionEmptyTTL: 5m
+  rateLimit:
+    userMax: 30
+    ipMax: 60
+    window: 1m
+  timeouts:
+    db: 3s
+    cache: 1s
+    mq: 3s
+    storage: 5s
+    status: 2s

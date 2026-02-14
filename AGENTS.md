@@ -155,3 +155,4 @@
 - **Judge Worker**：`docs/judge_worker.md` — 沙箱执行调度单元，负责编译、运行与 SPJ 结果汇总
 - **Problem Module**：`docs/problem_module.md` — 题目元信息管理与数据包上传发布流程说明
 - **Judge Service**：`docs/judge_service.md` — Kafka 判题消费、数据包缓存与状态机查询服务
+- **Submit Service**：`docs/submit_service.md` — 面向前端的判题入口与提交分发服务

@@ -43,6 +43,44 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (model.
 	return resp, nil
 }
 
+// GetBatch returns statuses for multiple submission ids.
+func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string) ([]model.JudgeStatusResponse, []string, error) {
+	if len(submissionIDs) == 0 {
+		return nil, nil, appErr.ValidationError("submission_ids", "required")
+	}
+	if r.cache == nil {
+		return nil, nil, appErr.New(appErr.CacheError).WithMessage("cache client is not initialized")
+	}
+	keys := make([]string, 0, len(submissionIDs))
+	for _, submissionID := range submissionIDs {
+		if submissionID == "" {
+			return nil, nil, appErr.ValidationError("submission_id", "required")
+		}
+		keys = append(keys, statusKeyPrefix+submissionID)
+	}
+	values, err := r.cache.MGet(ctx, keys...)
+	if err != nil {
+		return nil, nil, appErr.Wrapf(err, appErr.CacheError, "batch get status failed")
+	}
+	statuses := make([]model.JudgeStatusResponse, 0, len(submissionIDs))
+	missing := make([]string, 0)
+	for i, raw := range values {
+		if raw == "" {
+			missing = append(missing, submissionIDs[i])
+			continue
+		}
+		var resp model.JudgeStatusResponse
+		if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+			return nil, nil, appErr.Wrapf(err, appErr.CacheError, "decode status failed")
+		}
+		statuses = append(statuses, resp)
+	}
+	if len(values) < len(submissionIDs) {
+		missing = append(missing, submissionIDs[len(values):]...)
+	}
+	return statuses, missing, nil
+}
+
 // Save persists status.
 func (r *StatusRepository) Save(ctx context.Context, status model.JudgeStatusResponse) error {
 	if status.SubmissionID == "" {

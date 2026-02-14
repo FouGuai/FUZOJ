@@ -110,3 +110,44 @@
   - 请求体：`LogoutRequest`
     - `refresh_token`（string，必填）
   - 响应：`SuccessWithMessage`
+
+## Submit Service
+
+### SubmitController
+
+- **Create**：提交代码并投递判题
+  - Header：`Idempotency-Key`（可选）
+  - 请求体：`SubmitRequest`
+    - `problem_id`（int64，必填）
+    - `user_id`（int64，必填）
+    - `language_id`（string，必填）
+    - `source_code`（string，必填）
+    - `contest_id`（string，可选）
+    - `scene`（string，可选）
+    - `extra_compile_flags`（[]string，可选）
+  - 响应体：`SubmitResponse`
+    - `submission_id`（string）
+    - `status`（string）
+    - `received_at`（unix ts）
+
+- **GetStatus**：获取单个提交状态
+  - 路径参数：`id`（submission_id）
+  - 响应体：`JudgeStatusResponse`
+
+- **BatchStatus**：批量获取提交状态
+  - 请求体：`BatchStatusRequest`
+    - `submission_ids`（[]string，必填）
+  - 响应体：`BatchStatusResponse`
+    - `items`（[]JudgeStatusResponse）
+    - `missing`（[]string）
+
+- **GetSource**：获取提交源码
+  - 路径参数：`id`（submission_id）
+  - 响应体：`SourceResponse`
+    - `submission_id`（string）
+    - `problem_id`（int64）
+    - `user_id`（int64）
+    - `contest_id`（string）
+    - `language_id`（string）
+    - `source_code`（string）
+    - `created_at`（RFC3339 string）

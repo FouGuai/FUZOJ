@@ -12,6 +12,10 @@ type ObjectStorage interface {
 	// Caller must close the returned reader.
 	GetObject(ctx context.Context, bucket, objectKey string) (ObjectReader, error)
 
+	// PutObject uploads an object from a reader.
+	// sizeBytes is the total size of the reader.
+	PutObject(ctx context.Context, bucket, objectKey string, reader ObjectReader, sizeBytes int64, contentType string) error
+
 	// CreateMultipartUpload starts a multipart upload and returns the uploadID.
 	CreateMultipartUpload(ctx context.Context, bucket, objectKey, contentType string) (string, error)
 

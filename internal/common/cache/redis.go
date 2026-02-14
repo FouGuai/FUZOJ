@@ -117,6 +117,32 @@ func (r *RedisCache) Get(ctx context.Context, key string) (string, error) {
 	return value, err
 }
 
+func (r *RedisCache) MGet(ctx context.Context, keys ...string) ([]string, error) {
+	if len(keys) == 0 {
+		return []string{}, nil
+	}
+	values, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	results := make([]string, 0, len(values))
+	for _, val := range values {
+		if val == nil {
+			results = append(results, "")
+			continue
+		}
+		switch v := val.(type) {
+		case string:
+			results = append(results, v)
+		case []byte:
+			results = append(results, string(v))
+		default:
+			results = append(results, "")
+		}
+	}
+	return results, nil
+}
+
 func (r *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	return r.client.Set(ctx, key, value, ttl).Err()
 }

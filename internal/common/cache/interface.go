@@ -29,6 +29,9 @@ type BasicOps interface {
 	// Get retrieves the value for the given key
 	Get(ctx context.Context, key string) (string, error)
 
+	// MGet retrieves values for multiple keys
+	MGet(ctx context.Context, keys ...string) ([]string, error)
+
 	// Set stores a key-value pair with optional TTL
 	// If ttl is 0, the key will not expire
 	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error

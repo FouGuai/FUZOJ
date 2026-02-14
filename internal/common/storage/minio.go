@@ -68,6 +68,24 @@ func (s *MinIOStorage) GetObject(ctx context.Context, bucket, objectKey string) 
 	return obj, nil
 }
 
+func (s *MinIOStorage) PutObject(ctx context.Context, bucket, objectKey string, reader ObjectReader, sizeBytes int64, contentType string) error {
+	if reader == nil {
+		return fmt.Errorf("reader is required")
+	}
+	if objectKey == "" {
+		return fmt.Errorf("objectKey is required")
+	}
+	opts := minio.PutObjectOptions{}
+	if contentType != "" {
+		opts.ContentType = contentType
+	}
+	_, err := s.core.PutObject(ctx, bucket, objectKey, reader, sizeBytes, opts)
+	if err != nil {
+		return fmt.Errorf("minio put object failed: %w", err)
+	}
+	return nil
+}
+
 func (s *MinIOStorage) PresignUploadPart(ctx context.Context, bucket, objectKey, uploadID string, partNumber int, ttl time.Duration, contentType string) (string, error) {
 	if uploadID == "" {
 		return "", fmt.Errorf("uploadID is required")
