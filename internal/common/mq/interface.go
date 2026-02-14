@@ -24,16 +24,8 @@ type Producer interface {
 	// Publish publishes a message to the specified topic/queue
 	Publish(ctx context.Context, topic string, message *Message) error
 
-	// PublishWithPriority publishes a message with a specific priority
-	// Priority: 0 (highest) to 255 (lowest)
-	// For FuzOJ: 0=Contest, 1=Practice, 2=CustomTest, 3=Rejudge
-	PublishWithPriority(ctx context.Context, topic string, message *Message, priority uint8) error
-
 	// PublishBatch publishes multiple messages in a batch
 	PublishBatch(ctx context.Context, topic string, messages []*Message) error
-
-	// PublishDelayed publishes a message that will be delivered after a delay
-	PublishDelayed(ctx context.Context, topic string, message *Message, delay time.Duration) error
 }
 
 // Consumer defines the interface for consuming messages
@@ -95,10 +87,6 @@ type SubscribeOptions struct {
 	// ConsumerGroup is the consumer group name (for Kafka)
 	ConsumerGroup string
 
-	// AutoAck enables automatic acknowledgment of messages
-	// If false, the handler must manually acknowledge
-	AutoAck bool
-
 	// PrefetchCount sets the number of messages to prefetch
 	// Default: 1 (fair dispatch for judge tasks)
 	PrefetchCount int
@@ -121,20 +109,6 @@ type SubscribeOptions struct {
 	// MessageTTL sets the time-to-live for messages in the queue
 	MessageTTL time.Duration
 }
-
-// AckOption represents acknowledgment options
-type AckOption int
-
-const (
-	// AckSuccess acknowledges the message as successfully processed
-	AckSuccess AckOption = iota
-
-	// AckRetry requeues the message for retry
-	AckRetry
-
-	// AckReject rejects the message and sends it to dead letter queue
-	AckReject
-)
 
 // SetDefaults sets default values for subscribe options
 func (o *SubscribeOptions) SetDefaults() {
