@@ -179,6 +179,14 @@ func (c *fakeCache) Get(ctx context.Context, key string) (string, error) {
 	return c.values[key], nil
 }
 
+func (c *fakeCache) MGet(ctx context.Context, keys ...string) ([]string, error) {
+	values := make([]string, 0, len(keys))
+	for _, key := range keys {
+		values = append(values, c.values[key])
+	}
+	return values, nil
+}
+
 func (c *fakeCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	c.values[key] = fmt.Sprint(value)
 	return nil

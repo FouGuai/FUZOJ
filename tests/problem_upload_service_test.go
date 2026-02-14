@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -377,6 +378,17 @@ func (s *fakeObjectStorage) CreateMultipartUpload(ctx context.Context, bucket, o
 	return uploadID, nil
 }
 
+func (s *fakeObjectStorage) GetObject(ctx context.Context, bucket, objectKey string) (storage.ObjectReader, error) {
+	return &fakeObjectReader{Reader: bytes.NewReader([]byte{})}, nil
+}
+
+func (s *fakeObjectStorage) PutObject(ctx context.Context, bucket, objectKey string, reader storage.ObjectReader, sizeBytes int64, contentType string) error {
+	if bucket == "" || objectKey == "" {
+		return errors.New("bucket and objectKey are required")
+	}
+	return nil
+}
+
 func (s *fakeObjectStorage) PresignUploadPart(ctx context.Context, bucket, objectKey, uploadID string, partNumber int, ttl time.Duration, contentType string) (string, error) {
 	if uploadID == "" || partNumber <= 0 {
 		return "", errors.New("invalid upload part request")
@@ -420,6 +432,14 @@ func (s *fakeObjectStorage) StatObject(ctx context.Context, bucket, objectKey st
 		return storage.ObjectStat{}, errors.New("object not found")
 	}
 	return stat, nil
+}
+
+type fakeObjectReader struct {
+	*bytes.Reader
+}
+
+func (r *fakeObjectReader) Close() error {
+	return nil
 }
 
 type fakeDB struct {

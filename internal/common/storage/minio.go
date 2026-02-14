@@ -79,7 +79,7 @@ func (s *MinIOStorage) PutObject(ctx context.Context, bucket, objectKey string, 
 	if contentType != "" {
 		opts.ContentType = contentType
 	}
-	_, err := s.core.PutObject(ctx, bucket, objectKey, reader, sizeBytes, opts)
+	_, err := s.core.PutObject(ctx, bucket, objectKey, reader, sizeBytes, "", "", opts)
 	if err != nil {
 		return fmt.Errorf("minio put object failed: %w", err)
 	}
