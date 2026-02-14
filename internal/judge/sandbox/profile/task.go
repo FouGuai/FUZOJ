@@ -15,6 +15,7 @@ const (
 
 // TaskProfile defines sandbox resources and security settings for a task type.
 type TaskProfile struct {
+	LanguageID     string
 	TaskType       TaskType
 	RootFS         string
 	SeccompProfile string

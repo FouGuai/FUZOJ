@@ -60,6 +60,14 @@ func (s *MinIOStorage) CreateMultipartUpload(ctx context.Context, bucket, object
 	return uploadID, nil
 }
 
+func (s *MinIOStorage) GetObject(ctx context.Context, bucket, objectKey string) (ObjectReader, error) {
+	obj, _, _, err := s.core.GetObject(ctx, bucket, objectKey, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("minio get object failed: %w", err)
+	}
+	return obj, nil
+}
+
 func (s *MinIOStorage) PresignUploadPart(ctx context.Context, bucket, objectKey, uploadID string, partNumber int, ttl time.Duration, contentType string) (string, error) {
 	if uploadID == "" {
 		return "", fmt.Errorf("uploadID is required")

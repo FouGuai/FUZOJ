@@ -1,7 +1,211 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"fuzoj/internal/common/cache"
+	"fuzoj/internal/common/mq"
+	"fuzoj/internal/common/storage"
+	judgecache "fuzoj/internal/judge/cache"
+	"fuzoj/internal/judge/controller"
+	"fuzoj/internal/judge/problemclient"
+	"fuzoj/internal/judge/repository"
+	"fuzoj/internal/judge/sandbox"
+	"fuzoj/internal/judge/sandbox/config"
+	"fuzoj/internal/judge/sandbox/engine"
+	"fuzoj/internal/judge/sandbox/runner"
+	"fuzoj/internal/judge/service"
+	"fuzoj/pkg/utils/logger"
+
+	problemv1 "fuzoj/api/gen/problem/v1"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+const (
+	appConfigPath = "configs/judge_service.yaml"
+)
 
 func main() {
-	fmt.Println("Starting Judge Service...")
+	appCfg, err := loadAppConfig(appConfigPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load app config failed: %v\n", err)
+		return
+	}
+
+	if err := logger.Init(appCfg.Logger); err != nil {
+		fmt.Fprintf(os.Stderr, "init logger failed: %v\n", err)
+		return
+	}
+	defer func() {
+		_ = logger.Sync()
+	}()
+
+	redisCache, err := cache.NewRedisCacheWithConfig(&appCfg.Redis)
+	if err != nil {
+		logger.Error(context.Background(), "init redis failed", zap.Error(err))
+		return
+	}
+	defer func() {
+		_ = redisCache.Close()
+	}()
+
+	objStorage, err := storage.NewMinIOStorage(appCfg.MinIO)
+	if err != nil {
+		logger.Error(context.Background(), "init minio failed", zap.Error(err))
+		return
+	}
+
+	localRepo := config.NewLocalRepository(appCfg.Language.Languages, appCfg.Language.Profiles)
+	eng, err := engine.NewEngine(appCfg.Sandbox.toEngineConfig(), localRepo)
+	if err != nil {
+		logger.Error(context.Background(), "init sandbox engine failed", zap.Error(err))
+		return
+	}
+	jobRunner := runner.NewRunner(eng)
+	worker := sandbox.NewWorker(jobRunner, localRepo, localRepo)
+
+	statusRepo := repository.NewStatusRepository(redisCache, appCfg.Status.TTL)
+	dataCache := judgecache.NewDataPackCache(appCfg.Cache.RootDir, appCfg.Cache.TTL, appCfg.Cache.LockWait, appCfg.Cache.MaxEntries, appCfg.Cache.MaxBytes, appCfg.MinIO.Bucket, objStorage, redisCache)
+
+	grpcConn, err := grpc.Dial(appCfg.Problem.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Error(context.Background(), "init problem grpc client failed", zap.Error(err))
+		return
+	}
+	defer func() {
+		_ = grpcConn.Close()
+	}()
+
+	problemClient := problemclient.NewClient(problemv1.NewProblemServiceClient(grpcConn))
+	judgeSvc, err := service.NewService(service.Config{
+		Worker:         worker,
+		StatusRepo:     statusRepo,
+		ProblemClient:  problemClient,
+		DataCache:      dataCache,
+		Storage:        objStorage,
+		SourceBucket:   appCfg.Source.Bucket,
+		WorkRoot:       appCfg.Judge.WorkRoot,
+		WorkerTimeout:  appCfg.Worker.Timeout,
+		ProblemTimeout: appCfg.Problem.Timeout,
+		StorageTimeout: appCfg.Source.Timeout,
+		StatusTimeout:  appCfg.Status.Timeout,
+		MetaTTL:        appCfg.Problem.MetaTTL,
+		WorkerPoolSize: appCfg.Worker.PoolSize,
+	})
+	if err != nil {
+		logger.Error(context.Background(), "init judge service failed", zap.Error(err))
+		return
+	}
+
+	mqClient, err := mq.NewKafkaQueue(appCfg.Kafka.toMQConfig())
+	if err != nil {
+		logger.Error(context.Background(), "init kafka failed", zap.Error(err))
+		return
+	}
+	defer func() {
+		_ = mqClient.Close()
+	}()
+
+	for _, topic := range appCfg.Kafka.Topics {
+		err := mqClient.SubscribeWithOptions(context.Background(), topic, judgeSvc.HandleMessage, &mq.SubscribeOptions{
+			ConsumerGroup:   appCfg.Kafka.ConsumerGroup,
+			PrefetchCount:   appCfg.Kafka.PrefetchCount,
+			Concurrency:     appCfg.Kafka.Concurrency,
+			MaxRetries:      appCfg.Kafka.MaxRetries,
+			RetryDelay:      appCfg.Kafka.RetryDelay,
+			DeadLetterTopic: appCfg.Kafka.DeadLetter,
+			MessageTTL:      appCfg.Kafka.MessageTTL,
+		})
+		if err != nil {
+			logger.Error(context.Background(), "subscribe kafka failed", zap.String("topic", topic), zap.Error(err))
+			return
+		}
+	}
+	if err := mqClient.Start(); err != nil {
+		logger.Error(context.Background(), "start kafka consumer failed", zap.Error(err))
+		return
+	}
+
+	httpServer := buildHTTPServer(appCfg.Server, statusRepo)
+	listener, err := net.Listen("tcp", appCfg.Server.Addr)
+	if err != nil {
+		logger.Error(context.Background(), "init http listener failed", zap.Error(err))
+		return
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info(context.Background(), "judge http server started", zap.String("addr", appCfg.Server.Addr))
+		errCh <- httpServer.Serve(listener)
+	}()
+
+	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error(context.Background(), "http server stopped", zap.Error(err))
+		}
+	case <-shutdownCtx.Done():
+		logger.Info(context.Background(), "shutdown signal received")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
+	defer cancel()
+	if err := httpServer.Shutdown(ctx); err != nil {
+		logger.Error(context.Background(), "http server shutdown failed", zap.Error(err))
+	}
+	_ = mqClient.Stop()
+}
+
+func buildHTTPServer(cfg ServerConfig, statusRepo *repository.StatusRepository) *http.Server {
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(requestLogger())
+
+	api := router.Group("/api/v1/judge")
+	judgeController := controller.NewJudgeController(statusRepo)
+	api.GET("/submissions/:id", judgeController.GetStatus)
+
+	return &http.Server{
+		Addr:         cfg.Addr,
+		Handler:      router,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		IdleTimeout:  cfg.IdleTimeout,
+	}
+}
+
+func requestLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+
+		logger.Info(
+			c.Request.Context(),
+			"request completed",
+			zap.String("method", c.Request.Method),
+			zap.String("path", path),
+			zap.Int("status", c.Writer.Status()),
+			zap.Duration("latency", time.Since(start)),
+			zap.String("client_ip", c.ClientIP()),
+		)
+	}
 }

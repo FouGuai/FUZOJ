@@ -8,6 +8,10 @@ import (
 // ObjectStorage defines minimal object storage operations required by the problem upload flow.
 // It is intentionally small so we can swap MinIO/AWS-S3 implementations without touching business logic.
 type ObjectStorage interface {
+	// GetObject opens a reader for an object.
+	// Caller must close the returned reader.
+	GetObject(ctx context.Context, bucket, objectKey string) (ObjectReader, error)
+
 	// CreateMultipartUpload starts a multipart upload and returns the uploadID.
 	CreateMultipartUpload(ctx context.Context, bucket, objectKey, contentType string) (string, error)
 
@@ -22,6 +26,12 @@ type ObjectStorage interface {
 
 	// StatObject returns size and ETag for an object.
 	StatObject(ctx context.Context, bucket, objectKey string) (ObjectStat, error)
+}
+
+// ObjectReader is a streaming reader for object data.
+type ObjectReader interface {
+	Read(p []byte) (int, error)
+	Close() error
 }
 
 // CompletedPart describes one uploaded part for completing multipart uploads.

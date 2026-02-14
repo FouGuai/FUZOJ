@@ -1,0 +1,117 @@
+server:
+  addr: "0.0.0.0:8085"
+  readTimeout: 5s
+  writeTimeout: 10s
+  idleTimeout: 60s
+
+logger:
+  level: "info"
+  format: "json"
+  outputPath: "stdout"
+  errorPath: "stderr"
+
+kafka:
+  brokers: ["127.0.0.1:9092"]
+  clientID: "judge-service"
+  topics: ["judge.level0", "judge.level1", "judge.level2", "judge.level3"]
+  consumerGroup: "judge-service"
+  prefetchCount: 1
+  concurrency: 4
+  maxRetries: 3
+  retryDelay: 1s
+  deadLetterTopic: "judge.dead"
+  messageTTL: 10m
+
+redis:
+  addr: "127.0.0.1:6379"
+
+minio:
+  endpoint: "127.0.0.1:9000"
+  accessKey: "minioadmin"
+  secretKey: "minioadmin"
+  useSSL: false
+  bucket: "fuzoj"
+
+problemRPC:
+  addr: "127.0.0.1:9093"
+  timeout: 3s
+  metaTTL: 30s
+
+cache:
+  rootDir: "/tmp/fuzoj-cache"
+  ttl: 30m
+  lockWait: 30s
+  maxEntries: 64
+  maxBytes: 10737418240
+
+worker:
+  poolSize: 4
+  timeout: 10m
+
+source:
+  bucket: "fuzoj"
+  timeout: 30s
+
+status:
+  ttl: 24h
+  timeout: 2s
+
+judge:
+  workRoot: "/tmp/fuzoj-work"
+
+sandbox:
+  cgroupRoot: "/sys/fs/cgroup"
+  seccompDir: "configs/seccomp"
+  helperPath: "sandbox-init"
+  stdoutStderrMaxBytes: 1048576
+  enableSeccomp: true
+  enableCgroup: true
+  enableNamespaces: true
+
+language:
+  languages:
+    - id: "cpp"
+      name: "C++"
+      version: "gnu++17"
+      sourceFile: "main.cpp"
+      binaryFile: "main"
+      compileEnabled: true
+      compileCmdTpl: "g++ -std=gnu++17 -O2 -pipe {extraFlags} -o {bin} {src}"
+      runCmdTpl: "{bin}"
+      env: ["LANG=C", "LC_ALL=C"]
+      timeMultiplier: 1.0
+      memoryMultiplier: 1.0
+  profiles:
+    - languageID: "cpp"
+      taskType: "compile"
+      rootfs: "cpp-compile-rootfs"
+      seccompProfile: "cpp-compile.json"
+      defaultLimits:
+        timeMs: 5000
+        wallTimeMs: 8000
+        memoryMB: 1024
+        stackMB: 256
+        outputMB: 32
+        processes: 128
+    - languageID: "cpp"
+      taskType: "run"
+      rootfs: "cpp-run-rootfs"
+      seccompProfile: "cpp-run.json"
+      defaultLimits:
+        timeMs: 1000
+        wallTimeMs: 2000
+        memoryMB: 256
+        stackMB: 64
+        outputMB: 32
+        processes: 64
+    - languageID: "cpp"
+      taskType: "checker"
+      rootfs: "cpp-checker-rootfs"
+      seccompProfile: "cpp-checker.json"
+      defaultLimits:
+        timeMs: 1000
+        wallTimeMs: 2000
+        memoryMB: 256
+        stackMB: 64
+        outputMB: 32
+        processes: 64
