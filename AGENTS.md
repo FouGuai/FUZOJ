@@ -67,6 +67,7 @@
   - 查看 **已实现的模块文档** 中的 `Common Cache Interface` 和 `User Cache Repository`
   - 复用现有的缓存实现，不要重复造轮子
 
+
 ### 高并发优化
 
 - **连接池**：数据库、Redis、MQ 都要使用连接池，单个连接池共享（不是一个 Repository 一个池）
@@ -89,7 +90,12 @@
 ## 数据库设计
 数据库设计不能使用外键, 对于外键的语义，应当在业务逻辑成显式的实现
 
-## 语言使用约定（补充）
+## 接口设计
+接口应该简洁，幂等，只实现一种语义
+- 对于服务内部的接口请使用 gRPC 调用
+- 前端空用 HTTPS
+
+## 语言使用约定
 
 - **日常对话与讨论默认使用中文**
 - **代码注释、错误信息、日志内容统一使用英文**
@@ -124,6 +130,11 @@
 - 长度：200-500 字为宜，简明扼要
 - 示例见：`docs/user_repository.md`
 
+
+### 接口文档
+- **Controller API Index**：`docs/controller_api.md` — Controller 层接口汇总（按 Service 划分）
+- 接口请放在 `docs/controller_api.md`
+
 ### 在 AGENTS.md 中的注册方式
 
 - 在本文件末尾的 **已实现的模块文档** 部分添加条目
@@ -143,3 +154,4 @@
 - **Sandbox Runner**：`docs/sandbox_runner.md` — 判题编排层，负责生成 RunSpec 并执行编译、运行与 SPJ
 - **Judge Worker**：`docs/judge_worker.md` — 沙箱执行调度单元，负责编译、运行与 SPJ 结果汇总
 - **Problem Module**：`docs/problem_module.md` — 题目元信息管理与数据包上传发布流程说明
+
