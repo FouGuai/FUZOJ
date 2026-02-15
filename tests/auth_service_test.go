@@ -273,11 +273,11 @@ func newAuthServiceWithFakes(userRepo *fakeUserRepo, tokenRepo *fakeTokenRepo, c
 		LoginFailLimit:  5,
 	}
 
-	return service.NewAuthService(nil, userRepo, tokenRepo, cache, cfg)
+	return service.NewAuthService(db.NewStaticProvider(nil), userRepo, tokenRepo, cache, cfg)
 }
 
 func newAuthServiceWithConfig(userRepo *fakeUserRepo, tokenRepo *fakeTokenRepo, cache *fakeCache, cfg service.AuthServiceConfig) *service.AuthService {
-	return service.NewAuthService(nil, userRepo, tokenRepo, cache, cfg)
+	return service.NewAuthService(db.NewStaticProvider(nil), userRepo, tokenRepo, cache, cfg)
 }
 
 func TestAuthService_Register(t *testing.T) {

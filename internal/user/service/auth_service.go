@@ -35,7 +35,7 @@ type AuthServiceConfig struct {
 
 // AuthService handles user authentication flows.
 type AuthService struct {
-	db             db.Database
+	dbProvider     db.Provider
 	users          repository.UserRepository
 	tokens         repository.TokenRepository
 	loginFailCache cache.BasicOps
@@ -44,7 +44,7 @@ type AuthService struct {
 
 // NewAuthService creates a new AuthService.
 func NewAuthService(
-	database db.Database,
+	provider db.Provider,
 	users repository.UserRepository,
 	tokens repository.TokenRepository,
 	loginFailCache cache.BasicOps,
@@ -67,7 +67,7 @@ func NewAuthService(
 	}
 
 	return &AuthService{
-		db:             database,
+		dbProvider:     provider,
 		users:          users,
 		tokens:         tokens,
 		loginFailCache: loginFailCache,
@@ -323,10 +323,11 @@ func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
 }
 
 func (s *AuthService) withTransaction(ctx context.Context, fn func(tx db.Transaction) error) error {
-	if s.db == nil {
+	database, err := db.CurrentDatabase(s.dbProvider)
+	if err != nil {
 		return fn(nil)
 	}
-	if err := s.db.Transaction(ctx, fn); err != nil {
+	if err := database.Transaction(ctx, fn); err != nil {
 		if _, ok := err.(*pkgerrors.Error); ok {
 			return err
 		}

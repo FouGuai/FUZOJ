@@ -44,17 +44,17 @@ type ProblemRepository interface {
 }
 
 type MySQLProblemRepository struct {
-	db       db.Database
-	cache    cache.Cache
-	ttl      time.Duration
-	emptyTTL time.Duration
+	dbProvider db.Provider
+	cache      cache.Cache
+	ttl        time.Duration
+	emptyTTL   time.Duration
 }
 
-func NewProblemRepository(database db.Database, cacheClient cache.Cache) ProblemRepository {
-	return NewProblemRepositoryWithTTL(database, cacheClient, defaultProblemLatestTTL, defaultProblemLatestEmptyTTL)
+func NewProblemRepository(provider db.Provider, cacheClient cache.Cache) ProblemRepository {
+	return NewProblemRepositoryWithTTL(provider, cacheClient, defaultProblemLatestTTL, defaultProblemLatestEmptyTTL)
 }
 
-func NewProblemRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl, emptyTTL time.Duration) ProblemRepository {
+func NewProblemRepositoryWithTTL(provider db.Provider, cacheClient cache.Cache, ttl, emptyTTL time.Duration) ProblemRepository {
 	if ttl <= 0 {
 		ttl = defaultProblemLatestTTL
 	}
@@ -62,10 +62,10 @@ func NewProblemRepositoryWithTTL(database db.Database, cacheClient cache.Cache, 
 		emptyTTL = defaultProblemLatestEmptyTTL
 	}
 	return &MySQLProblemRepository{
-		db:       database,
-		cache:    cacheClient,
-		ttl:      ttl,
-		emptyTTL: emptyTTL,
+		dbProvider: provider,
+		cache:      cacheClient,
+		ttl:        ttl,
+		emptyTTL:   emptyTTL,
 	}
 }
 
@@ -106,7 +106,10 @@ func (r *MySQLProblemRepository) Exists(ctx context.Context, tx db.Transaction, 
 	if problemID <= 0 {
 		return false, errors.New("problemID is required")
 	}
-	q := db.GetQuerier(r.db, tx)
+	q, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return false, err
+	}
 	var exists int
 	if err := q.QueryRow(ctx, "SELECT 1 FROM problem WHERE id = ?", problemID).Scan(&exists); err != nil {
 		if db.IsNoRows(err) {
@@ -136,7 +139,11 @@ func (r *MySQLProblemRepository) Create(ctx context.Context, tx db.Transaction, 
 	}
 
 	query := "INSERT INTO problem (title, status, owner_id) VALUES (?, ?, ?)"
-	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, problem.Title, problem.Status, problem.OwnerID)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return 0, err
+	}
+	result, err := querier.Exec(ctx, query, problem.Title, problem.Status, problem.OwnerID)
 	if err != nil {
 		return 0, err
 	}
@@ -150,7 +157,11 @@ func (r *MySQLProblemRepository) Create(ctx context.Context, tx db.Transaction, 
 
 func (r *MySQLProblemRepository) Delete(ctx context.Context, tx db.Transaction, problemID int64) error {
 	query := "DELETE FROM problem WHERE id = ?"
-	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, problemID)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	result, err := querier.Exec(ctx, query, problemID)
 	if err != nil {
 		return err
 	}
@@ -172,7 +183,11 @@ func (r *MySQLProblemRepository) getLatestMetaFromDB(ctx context.Context, tx db.
 		ORDER BY version DESC
 		LIMIT 1`
 
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, problemID, problemVersionStatePublished)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return ProblemLatestMeta{}, err
+	}
+	row := querier.QueryRow(ctx, query, problemID, problemVersionStatePublished)
 	meta, err := scanProblemLatestMeta(row)
 	if err != nil {
 		if db.IsNoRows(err) {

@@ -42,7 +42,7 @@ func TestProblemUploadServiceFullFlow(t *testing.T) {
 			fakeStorage := newFakeObjectStorage()
 			fakeDB := &fakeDB{}
 
-			svc := service.NewProblemUploadServiceWithDB(fakeDB, metaRepo, uploadRepo, fakeStorage, service.UploadOptions{
+			svc := service.NewProblemUploadServiceWithDB(db.NewStaticProvider(fakeDB), metaRepo, uploadRepo, fakeStorage, service.UploadOptions{
 				Bucket:        "problem-bucket",
 				KeyPrefix:     "problems",
 				PartSizeBytes: 8 * 1024 * 1024,

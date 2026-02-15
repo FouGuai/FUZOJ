@@ -502,9 +502,10 @@ func loadSchemaStatements(t *testing.T) []string {
 }
 
 func setupAuthRouter(mysqlDB db.Database, redisCache cache.Cache) http.Handler {
-	userRepo := repository.NewUserRepository(mysqlDB, redisCache)
-	tokenRepo := repository.NewTokenRepository(mysqlDB, redisCache)
-	authService := service.NewAuthService(mysqlDB, userRepo, tokenRepo, redisCache, service.AuthServiceConfig{
+	dbProvider := db.NewStaticProvider(mysqlDB)
+	userRepo := repository.NewUserRepository(dbProvider, redisCache)
+	tokenRepo := repository.NewTokenRepository(dbProvider, redisCache)
+	authService := service.NewAuthService(dbProvider, userRepo, tokenRepo, redisCache, service.AuthServiceConfig{
 		JWTSecret:       []byte("e2e-secret"),
 		JWTIssuer:       "fuzoj-e2e",
 		AccessTokenTTL:  10 * time.Minute,

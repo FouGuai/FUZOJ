@@ -88,11 +88,15 @@ type CreateUploadSessionInput struct {
 }
 
 type MySQLProblemUploadRepository struct {
-	db db.Database
+	dbProvider db.Provider
 }
 
-func NewProblemUploadRepository(database db.Database) ProblemUploadRepository {
-	return &MySQLProblemUploadRepository{db: database}
+func NewProblemUploadRepository(provider db.Provider) ProblemUploadRepository {
+	return &MySQLProblemUploadRepository{dbProvider: provider}
+}
+
+func (r *MySQLProblemUploadRepository) querier(tx db.Transaction) (db.Querier, error) {
+	return db.GetProviderQuerier(r.dbProvider, tx)
 }
 
 func (r *MySQLProblemUploadRepository) AllocateNextVersion(ctx context.Context, tx db.Transaction, problemID int64) (int32, error) {
@@ -100,10 +104,13 @@ func (r *MySQLProblemUploadRepository) AllocateNextVersion(ctx context.Context, 
 		return 0, errors.New("problemID is required")
 	}
 
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return 0, err
+	}
 
 	// Ensure row exists.
-	_, err := q.Exec(ctx, "INSERT IGNORE INTO problem_version_seq (problem_id, next_version) VALUES (?, 1)", problemID)
+	_, err = q.Exec(ctx, "INSERT IGNORE INTO problem_version_seq (problem_id, next_version) VALUES (?, 1)", problemID)
 	if err != nil {
 		return 0, err
 	}
@@ -144,7 +151,10 @@ func (r *MySQLProblemUploadRepository) CreateUploadSession(ctx context.Context, 
 		return UploadSession{}, errors.New("expiresAt is required")
 	}
 
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return UploadSession{}, err
+	}
 
 	res, err := q.Exec(ctx, `
 		INSERT INTO problem_data_pack_upload
@@ -180,7 +190,10 @@ func (r *MySQLProblemUploadRepository) CreateUploadSession(ctx context.Context, 
 }
 
 func (r *MySQLProblemUploadRepository) GetUploadSessionByID(ctx context.Context, tx db.Transaction, uploadSessionID int64) (UploadSession, error) {
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return UploadSession{}, err
+	}
 	row := q.QueryRow(ctx, `
 		SELECT id, problem_id, version, idempotency_key, bucket, object_key, upload_id,
 		       expected_size_bytes, expected_sha256, content_type,
@@ -218,7 +231,10 @@ func (r *MySQLProblemUploadRepository) UpdateUploadIDIfEmpty(ctx context.Context
 	if uploadID == "" {
 		return false, errors.New("uploadID is required")
 	}
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return false, err
+	}
 	res, err := q.Exec(ctx, "UPDATE problem_data_pack_upload SET upload_id = ? WHERE id = ? AND upload_id = ''", uploadID, uploadSessionID)
 	if err != nil {
 		return false, err
@@ -243,7 +259,10 @@ func (r *MySQLProblemUploadRepository) MarkUploadExpired(ctx context.Context, tx
 }
 
 func (r *MySQLProblemUploadRepository) updateUploadState(ctx context.Context, tx db.Transaction, uploadSessionID int64, state int32) error {
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return err
+	}
 	res, err := q.Exec(ctx, "UPDATE problem_data_pack_upload SET state = ? WHERE id = ?", state, uploadSessionID)
 	if err != nil {
 		return err
@@ -259,7 +278,10 @@ func (r *MySQLProblemUploadRepository) updateUploadState(ctx context.Context, tx
 }
 
 func (r *MySQLProblemUploadRepository) GetProblemVersionID(ctx context.Context, tx db.Transaction, problemID int64, version int32) (int64, error) {
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return 0, err
+	}
 	row := q.QueryRow(ctx, "SELECT id FROM problem_version WHERE problem_id = ? AND version = ?", problemID, version)
 	var id int64
 	if err := row.Scan(&id); err != nil {
@@ -272,7 +294,10 @@ func (r *MySQLProblemUploadRepository) GetProblemVersionID(ctx context.Context, 
 }
 
 func (r *MySQLProblemUploadRepository) GetProblemVersionMeta(ctx context.Context, tx db.Transaction, problemID int64, version int32) (ProblemVersionMeta, error) {
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return ProblemVersionMeta{}, err
+	}
 	row := q.QueryRow(ctx, `
 		SELECT problem_id, version, state, manifest_hash, data_pack_key, data_pack_hash
 		FROM problem_version
@@ -291,7 +316,10 @@ func (r *MySQLProblemUploadRepository) UpdateProblemVersionDraftMeta(ctx context
 	if len(configJSON) == 0 {
 		configJSON = []byte(`{}`)
 	}
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return err
+	}
 	res, err := q.Exec(ctx, `
 		UPDATE problem_version
 		SET config_json = ?, manifest_hash = ?, data_pack_key = ?, data_pack_hash = ?
@@ -312,8 +340,11 @@ func (r *MySQLProblemUploadRepository) UpdateProblemVersionDraftMeta(ctx context
 }
 
 func (r *MySQLProblemUploadRepository) UpsertManifest(ctx context.Context, tx db.Transaction, problemVersionID int64, manifestJSON []byte) error {
-	q := db.GetQuerier(r.db, tx)
-	_, err := q.Exec(ctx, `
+	q, err := r.querier(tx)
+	if err != nil {
+		return err
+	}
+	_, err = q.Exec(ctx, `
 		INSERT INTO problem_manifest (problem_version_id, manifest_json)
 		VALUES (?, ?)
 		ON DUPLICATE KEY UPDATE manifest_json = VALUES(manifest_json)`,
@@ -323,8 +354,11 @@ func (r *MySQLProblemUploadRepository) UpsertManifest(ctx context.Context, tx db
 }
 
 func (r *MySQLProblemUploadRepository) UpsertDataPack(ctx context.Context, tx db.Transaction, problemVersionID int64, objectKey string, sizeBytes int64, md5, sha256 string) error {
-	q := db.GetQuerier(r.db, tx)
-	_, err := q.Exec(ctx, `
+	q, err := r.querier(tx)
+	if err != nil {
+		return err
+	}
+	_, err = q.Exec(ctx, `
 		INSERT INTO problem_data_pack (problem_version_id, object_key, size_bytes, md5, sha256)
 		VALUES (?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE object_key = VALUES(object_key), size_bytes = VALUES(size_bytes), md5 = VALUES(md5), sha256 = VALUES(sha256)`,
@@ -334,7 +368,10 @@ func (r *MySQLProblemUploadRepository) UpsertDataPack(ctx context.Context, tx db
 }
 
 func (r *MySQLProblemUploadRepository) PublishVersion(ctx context.Context, tx db.Transaction, problemID int64, version int32) error {
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return err
+	}
 	res, err := q.Exec(ctx, `
 		UPDATE problem_version
 		SET state = 1
@@ -364,7 +401,10 @@ func (r *MySQLProblemUploadRepository) PublishVersion(ctx context.Context, tx db
 }
 
 func (r *MySQLProblemUploadRepository) getUploadSessionByIdempotencyKey(ctx context.Context, tx db.Transaction, problemID int64, idempotencyKey string) (UploadSession, error) {
-	q := db.GetQuerier(r.db, tx)
+	q, err := r.querier(tx)
+	if err != nil {
+		return UploadSession{}, err
+	}
 	row := q.QueryRow(ctx, `
 		SELECT id, problem_id, version, idempotency_key, bucket, object_key, upload_id,
 		       expected_size_bytes, expected_sha256, content_type,

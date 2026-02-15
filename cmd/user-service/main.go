@@ -46,6 +46,7 @@ func main() {
 	defer func() {
 		_ = mysqlDB.Close()
 	}()
+	dbProvider := db.NewManager(mysqlDB)
 
 	redisCache, err := cache.NewRedisCacheWithConfig(&appCfg.Redis)
 	if err != nil {
@@ -56,11 +57,11 @@ func main() {
 		_ = redisCache.Close()
 	}()
 
-	userRepo := repository.NewUserRepository(mysqlDB, redisCache)
-	tokenRepo := repository.NewTokenRepository(mysqlDB, redisCache)
+	userRepo := repository.NewUserRepository(dbProvider, redisCache)
+	tokenRepo := repository.NewTokenRepository(dbProvider, redisCache)
 
 	authService := service.NewAuthService(
-		mysqlDB,
+		dbProvider,
 		userRepo,
 		tokenRepo,
 		redisCache,

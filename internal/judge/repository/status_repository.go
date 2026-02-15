@@ -18,14 +18,14 @@ const statusKeyPrefix = "judge:status:"
 
 // StatusRepository handles status persistence.
 type StatusRepository struct {
-	cache cache.Cache
-	db    db.Database
-	TTL   time.Duration
+	cache      cache.Cache
+	dbProvider db.Provider
+	TTL        time.Duration
 }
 
 // NewStatusRepository creates a new repository.
-func NewStatusRepository(cacheClient cache.Cache, database db.Database, ttl time.Duration) *StatusRepository {
-	return &StatusRepository{cache: cacheClient, db: database, TTL: ttl}
+func NewStatusRepository(cacheClient cache.Cache, provider db.Provider, ttl time.Duration) *StatusRepository {
+	return &StatusRepository{cache: cacheClient, dbProvider: provider, TTL: ttl}
 }
 
 // Get returns status by submission id.
@@ -43,10 +43,11 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (model.
 			return resp, nil
 		}
 	}
-	if r.db == nil {
+	database, err := db.CurrentDatabase(r.dbProvider)
+	if err != nil {
 		return model.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 	}
-	resp, err := r.getFinalStatus(ctx, submissionID)
+	resp, err := r.getFinalStatus(ctx, database, submissionID)
 	if err != nil {
 		return model.JudgeStatusResponse{}, err
 	}
@@ -94,8 +95,9 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 	} else {
 		missing = append(missing, submissionIDs...)
 	}
-	if r.db != nil && len(missing) > 0 {
-		dbStatuses, dbMissing, err := r.getFinalStatusBatch(ctx, missing)
+	database, err := db.CurrentDatabase(r.dbProvider)
+	if err == nil && len(missing) > 0 {
+		dbStatuses, dbMissing, err := r.getFinalStatusBatch(ctx, database, missing)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -119,9 +121,12 @@ func (r *StatusRepository) Save(ctx context.Context, status model.JudgeStatusRes
 	if status.SubmissionID == "" {
 		return appErr.ValidationError("submission_id", "required")
 	}
-	if isFinalStatus(status.Status) && r.db != nil {
-		if err := r.storeFinalStatus(ctx, status); err != nil {
-			return err
+	if isFinalStatus(status.Status) {
+		database, err := db.CurrentDatabase(r.dbProvider)
+		if err == nil {
+			if err := r.storeFinalStatus(ctx, database, status); err != nil {
+				return err
+			}
 		}
 	}
 	if r.cache != nil {
@@ -136,7 +141,10 @@ func (r *StatusRepository) Save(ctx context.Context, status model.JudgeStatusRes
 	return nil
 }
 
-func (r *StatusRepository) storeFinalStatus(ctx context.Context, status model.JudgeStatusResponse) error {
+func (r *StatusRepository) storeFinalStatus(ctx context.Context, database db.Database, status model.JudgeStatusResponse) error {
+	if database == nil {
+		return appErr.New(appErr.NotFound).WithMessage("submission status not found")
+	}
 	payload, err := json.Marshal(status)
 	if err != nil {
 		return fmt.Errorf("marshal final status failed: %w", err)
@@ -150,7 +158,7 @@ func (r *StatusRepository) storeFinalStatus(ctx context.Context, status model.Ju
 		SET final_status = ?, final_status_at = ?
 		WHERE submission_id = ?
 	`
-	res, err := r.db.Exec(ctx, query, string(payload), finishedAt, status.SubmissionID)
+	res, err := database.Exec(ctx, query, string(payload), finishedAt, status.SubmissionID)
 	if err != nil {
 		return appErr.Wrapf(err, appErr.DatabaseError, "store final status failed")
 	}
@@ -161,14 +169,17 @@ func (r *StatusRepository) storeFinalStatus(ctx context.Context, status model.Ju
 	return nil
 }
 
-func (r *StatusRepository) getFinalStatus(ctx context.Context, submissionID string) (model.JudgeStatusResponse, error) {
+func (r *StatusRepository) getFinalStatus(ctx context.Context, database db.Database, submissionID string) (model.JudgeStatusResponse, error) {
+	if database == nil {
+		return model.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
+	}
 	query := `
 		SELECT final_status
 		FROM submissions
 		WHERE submission_id = ? AND final_status IS NOT NULL
 		LIMIT 1
 	`
-	row := r.db.QueryRow(ctx, query, submissionID)
+	row := database.QueryRow(ctx, query, submissionID)
 	var payload string
 	if err := row.Scan(&payload); err != nil {
 		if db.IsNoRows(err) {
@@ -183,7 +194,10 @@ func (r *StatusRepository) getFinalStatus(ctx context.Context, submissionID stri
 	return resp, nil
 }
 
-func (r *StatusRepository) getFinalStatusBatch(ctx context.Context, submissionIDs []string) ([]model.JudgeStatusResponse, []string, error) {
+func (r *StatusRepository) getFinalStatusBatch(ctx context.Context, database db.Database, submissionIDs []string) ([]model.JudgeStatusResponse, []string, error) {
+	if database == nil {
+		return nil, submissionIDs, nil
+	}
 	if len(submissionIDs) == 0 {
 		return nil, nil, nil
 	}
@@ -200,7 +214,7 @@ func (r *StatusRepository) getFinalStatusBatch(ctx context.Context, submissionID
 		"SELECT submission_id, final_status FROM submissions WHERE submission_id IN (%s) AND final_status IS NOT NULL",
 		strings.Join(placeholders, ","),
 	)
-	rows, err := r.db.Query(ctx, query, args...)
+	rows, err := database.Query(ctx, query, args...)
 	if err != nil {
 		return nil, nil, appErr.Wrapf(err, appErr.DatabaseError, "batch get final status failed")
 	}

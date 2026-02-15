@@ -56,17 +56,17 @@ type UserRepository interface {
 }
 
 type MySQLUserRepository struct {
-	db       db.Database
-	cache    cache.Cache
-	ttl      time.Duration
-	emptyTTL time.Duration
+	dbProvider db.Provider
+	cache      cache.Cache
+	ttl        time.Duration
+	emptyTTL   time.Duration
 }
 
-func NewUserRepository(database db.Database, cacheClient cache.Cache) UserRepository {
-	return NewUserRepositoryWithTTL(database, cacheClient, defaultUserCacheTTL, defaultUserCacheEmptyTTL)
+func NewUserRepository(provider db.Provider, cacheClient cache.Cache) UserRepository {
+	return NewUserRepositoryWithTTL(provider, cacheClient, defaultUserCacheTTL, defaultUserCacheEmptyTTL)
 }
 
-func NewUserRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl, emptyTTL time.Duration) UserRepository {
+func NewUserRepositoryWithTTL(provider db.Provider, cacheClient cache.Cache, ttl, emptyTTL time.Duration) UserRepository {
 	if ttl <= 0 {
 		ttl = defaultUserCacheTTL
 	}
@@ -74,10 +74,10 @@ func NewUserRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl
 		emptyTTL = defaultUserCacheEmptyTTL
 	}
 	return &MySQLUserRepository{
-		db:       database,
-		cache:    cacheClient,
-		ttl:      ttl,
-		emptyTTL: emptyTTL,
+		dbProvider: provider,
+		cache:      cacheClient,
+		ttl:        ttl,
+		emptyTTL:   emptyTTL,
 	}
 }
 
@@ -103,7 +103,11 @@ func (r *MySQLUserRepository) Create(ctx context.Context, tx db.Transaction, use
 	}
 
 	query := "INSERT INTO users (username, email, phone, password_hash, role, status) VALUES (?, ?, ?, ?, ?, ?)"
-	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, user.Username, user.Email, phone, user.PasswordHash, role, status)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return 0, err
+	}
+	result, err := querier.Exec(ctx, query, user.Username, user.Email, phone, user.PasswordHash, role, status)
 	if err != nil {
 		if key, ok := db.UniqueViolation(err); ok {
 			normalizedKey := strings.ToLower(strings.TrimSpace(key))
@@ -230,7 +234,11 @@ func (r *MySQLUserRepository) GetByEmail(ctx context.Context, tx db.Transaction,
 
 func (r *MySQLUserRepository) ExistsByUsername(ctx context.Context, tx db.Transaction, username string) (bool, error) {
 	query := "SELECT 1 FROM users WHERE username = ?"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, username)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return false, err
+	}
+	row := querier.QueryRow(ctx, query, username)
 	var one int
 	if err := row.Scan(&one); err != nil {
 		if db.IsNoRows(err) {
@@ -243,7 +251,11 @@ func (r *MySQLUserRepository) ExistsByUsername(ctx context.Context, tx db.Transa
 
 func (r *MySQLUserRepository) ExistsByEmail(ctx context.Context, tx db.Transaction, email string) (bool, error) {
 	query := "SELECT 1 FROM users WHERE email = ?"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, email)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return false, err
+	}
+	row := querier.QueryRow(ctx, query, email)
 	var one int
 	if err := row.Scan(&one); err != nil {
 		if db.IsNoRows(err) {
@@ -264,7 +276,11 @@ func (r *MySQLUserRepository) UpdatePassword(ctx context.Context, tx db.Transact
 		}
 	}
 	query := "UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?"
-	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, newHash, userID)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	result, err := querier.Exec(ctx, query, newHash, userID)
 	if err != nil {
 		return err
 	}
@@ -292,7 +308,11 @@ func (r *MySQLUserRepository) UpdateStatus(ctx context.Context, tx db.Transactio
 		}
 	}
 	query := "UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?"
-	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, status, userID)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	result, err := querier.Exec(ctx, query, status, userID)
 	if err != nil {
 		return err
 	}
@@ -321,7 +341,11 @@ const (
 
 func (r *MySQLUserRepository) getByIDFromDB(ctx context.Context, tx db.Transaction, id int64) (*User, error) {
 	query := "SELECT " + userColumns + " FROM users WHERE id = ?"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, id)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return nil, err
+	}
+	row := querier.QueryRow(ctx, query, id)
 	user, err := scanUser(row)
 	if err != nil {
 		if db.IsNoRows(err) {
@@ -334,7 +358,11 @@ func (r *MySQLUserRepository) getByIDFromDB(ctx context.Context, tx db.Transacti
 
 func (r *MySQLUserRepository) getByUsernameFromDB(ctx context.Context, tx db.Transaction, username string) (*User, error) {
 	query := "SELECT " + userColumns + " FROM users WHERE username = ?"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, username)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return nil, err
+	}
+	row := querier.QueryRow(ctx, query, username)
 	user, err := scanUser(row)
 	if err != nil {
 		if db.IsNoRows(err) {
@@ -347,7 +375,11 @@ func (r *MySQLUserRepository) getByUsernameFromDB(ctx context.Context, tx db.Tra
 
 func (r *MySQLUserRepository) getByEmailFromDB(ctx context.Context, tx db.Transaction, email string) (*User, error) {
 	query := "SELECT " + userColumns + " FROM users WHERE email = ?"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, email)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return nil, err
+	}
+	row := querier.QueryRow(ctx, query, email)
 	user, err := scanUser(row)
 	if err != nil {
 		if db.IsNoRows(err) {
@@ -360,7 +392,11 @@ func (r *MySQLUserRepository) getByEmailFromDB(ctx context.Context, tx db.Transa
 
 func (r *MySQLUserRepository) getUserIdentifiers(ctx context.Context, tx db.Transaction, userID int64) (string, string, error) {
 	query := "SELECT username, email FROM users WHERE id = ?"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, userID)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return "", "", err
+	}
+	row := querier.QueryRow(ctx, query, userID)
 	var username, email string
 	if err := row.Scan(&username, &email); err != nil {
 		if db.IsNoRows(err) {

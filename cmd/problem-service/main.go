@@ -50,6 +50,7 @@ func main() {
 	defer func() {
 		_ = mysqlDB.Close()
 	}()
+	dbProvider := db.NewManager(mysqlDB)
 
 	redisCache, err := cache.NewRedisCacheWithConfig(&appCfg.Redis)
 	if err != nil {
@@ -60,7 +61,7 @@ func main() {
 		_ = redisCache.Close()
 	}()
 
-	problemRepo := repository.NewProblemRepository(mysqlDB, redisCache)
+	problemRepo := repository.NewProblemRepository(dbProvider, redisCache)
 	problemService := service.NewProblemService(problemRepo)
 
 	objStorage, err := storage.NewMinIOStorage(appCfg.MinIO)
@@ -69,8 +70,8 @@ func main() {
 		return
 	}
 
-	uploadRepo := repository.NewProblemUploadRepository(mysqlDB)
-	uploadService := service.NewProblemUploadServiceWithDB(mysqlDB, problemRepo, uploadRepo, objStorage, service.UploadOptions{
+	uploadRepo := repository.NewProblemUploadRepository(dbProvider)
+	uploadService := service.NewProblemUploadServiceWithDB(dbProvider, problemRepo, uploadRepo, objStorage, service.UploadOptions{
 		Bucket:        appCfg.MinIO.Bucket,
 		KeyPrefix:     "problems",
 		PartSizeBytes: appCfg.Upload.PartSizeBytes,

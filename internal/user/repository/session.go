@@ -40,24 +40,24 @@ type TokenRepository interface {
 }
 
 type MySQLTokenRepository struct {
-	db       db.Database
-	cache    cache.Cache
-	ttl      time.Duration
-	emptyTTL time.Duration
+	dbProvider db.Provider
+	cache      cache.Cache
+	ttl        time.Duration
+	emptyTTL   time.Duration
 }
 
-func NewTokenRepository(database db.Database, cacheClient cache.Cache) TokenRepository {
-	return NewTokenRepositoryWithTTL(database, cacheClient, defaultTokenCacheTTL, defaultTokenCacheEmptyTTL)
+func NewTokenRepository(provider db.Provider, cacheClient cache.Cache) TokenRepository {
+	return NewTokenRepositoryWithTTL(provider, cacheClient, defaultTokenCacheTTL, defaultTokenCacheEmptyTTL)
 }
 
-func NewTokenRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl, emptyTTL time.Duration) TokenRepository {
+func NewTokenRepositoryWithTTL(provider db.Provider, cacheClient cache.Cache, ttl, emptyTTL time.Duration) TokenRepository {
 	if ttl <= 0 {
 		ttl = defaultTokenCacheTTL
 	}
 	if emptyTTL <= 0 {
 		emptyTTL = defaultTokenCacheEmptyTTL
 	}
-	return &MySQLTokenRepository{db: database, cache: cacheClient, ttl: ttl, emptyTTL: emptyTTL}
+	return &MySQLTokenRepository{dbProvider: provider, cache: cacheClient, ttl: ttl, emptyTTL: emptyTTL}
 }
 
 const tokenColumns = "id, user_id, token_hash, token_type, device_info, ip_address, expires_at, revoked, created_at"
@@ -82,7 +82,11 @@ func (r *MySQLTokenRepository) Create(ctx context.Context, tx db.Transaction, to
 		ipAddress = sql.NullString{String: token.IPAddress, Valid: true}
 	}
 
-	_, err := db.GetQuerier(r.db, tx).Exec(
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	_, err = querier.Exec(
 		ctx,
 		query,
 		token.UserID,
@@ -132,7 +136,11 @@ func (r *MySQLTokenRepository) GetByHash(ctx context.Context, tx db.Transaction,
 
 func (r *MySQLTokenRepository) RevokeByHash(ctx context.Context, tx db.Transaction, tokenHash string, expiresAt time.Time) error {
 	query := "UPDATE user_tokens SET revoked = TRUE WHERE token_hash = ?"
-	result, err := db.GetQuerier(r.db, tx).Exec(ctx, query, tokenHash)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	result, err := querier.Exec(ctx, query, tokenHash)
 	if err != nil {
 		return err
 	}
@@ -154,7 +162,11 @@ func (r *MySQLTokenRepository) RevokeByHash(ctx context.Context, tx db.Transacti
 func (r *MySQLTokenRepository) RevokeByUser(ctx context.Context, tx db.Transaction, userID int64) error {
 	now := time.Now()
 	queryTokens := "SELECT token_hash, expires_at FROM user_tokens WHERE user_id = ? AND revoked = FALSE AND expires_at > ?"
-	rows, err := db.GetQuerier(r.db, tx).Query(ctx, queryTokens, userID, now)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	rows, err := querier.Query(ctx, queryTokens, userID, now)
 	if err != nil {
 		return err
 	}
@@ -173,7 +185,7 @@ func (r *MySQLTokenRepository) RevokeByUser(ctx context.Context, tx db.Transacti
 	}
 
 	queryRevoke := "UPDATE user_tokens SET revoked = TRUE WHERE user_id = ?"
-	if _, err := db.GetQuerier(r.db, tx).Exec(ctx, queryRevoke, userID); err != nil {
+	if _, err := querier.Exec(ctx, queryRevoke, userID); err != nil {
 		return err
 	}
 
@@ -215,7 +227,11 @@ func (r *MySQLTokenRepository) blacklistToken(ctx context.Context, tokenHash str
 
 func (r *MySQLTokenRepository) getByHashFromDB(ctx context.Context, tx db.Transaction, tokenHash string) (*UserToken, error) {
 	query := "SELECT " + tokenColumns + " FROM user_tokens WHERE token_hash = ?"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, tokenHash)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return nil, err
+	}
+	row := querier.QueryRow(ctx, query, tokenHash)
 	result, err := scanToken(row)
 	if err != nil {
 		if db.IsNoRows(err) {

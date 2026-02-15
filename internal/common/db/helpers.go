@@ -24,6 +24,18 @@ func GetQuerier(database Database, tx Transaction) Querier {
 	return database
 }
 
+// GetProviderQuerier returns transaction if provided, otherwise uses database from provider.
+func GetProviderQuerier(provider Provider, tx Transaction) (Querier, error) {
+	if tx != nil {
+		return tx, nil
+	}
+	database, err := CurrentDatabase(provider)
+	if err != nil {
+		return nil, err
+	}
+	return database, nil
+}
+
 // IsNoRows checks if the error is sql.ErrNoRows.
 func IsNoRows(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)

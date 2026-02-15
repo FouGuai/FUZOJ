@@ -58,6 +58,7 @@ func main() {
 	defer func() {
 		_ = mysqlDB.Close()
 	}()
+	dbProvider := db.NewManager(mysqlDB)
 
 	redisCache, err := cache.NewRedisCacheWithConfig(&appCfg.Redis)
 	if err != nil {
@@ -83,7 +84,7 @@ func main() {
 	jobRunner := runner.NewRunner(eng)
 	worker := sandbox.NewWorker(jobRunner, localRepo, localRepo)
 
-	statusRepo := repository.NewStatusRepository(redisCache, mysqlDB, appCfg.Status.TTL)
+	statusRepo := repository.NewStatusRepository(redisCache, dbProvider, appCfg.Status.TTL)
 	dataCache := judgecache.NewDataPackCache(appCfg.Cache.RootDir, appCfg.Cache.TTL, appCfg.Cache.LockWait, appCfg.Cache.MaxEntries, appCfg.Cache.MaxBytes, appCfg.MinIO.Bucket, objStorage, redisCache)
 
 	grpcConn, err := grpc.Dial(appCfg.Problem.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))

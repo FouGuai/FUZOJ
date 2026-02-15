@@ -15,7 +15,7 @@ import (
 
 // ProblemUploadService handles large data pack uploads via object storage.
 type ProblemUploadService struct {
-	database   db.Database
+	dbProvider db.Provider
 	metaRepo   repository.ProblemRepository
 	uploadRepo repository.ProblemUploadRepository
 	storage    storage.ObjectStorage
@@ -50,7 +50,7 @@ func NewProblemUploadService(metaRepo repository.ProblemRepository, uploadRepo r
 		opts.PresignTTL = 15 * time.Minute
 	}
 	return &ProblemUploadService{
-		database:      nil,
+		dbProvider:    nil,
 		metaRepo:      metaRepo,
 		uploadRepo:    uploadRepo,
 		storage:       obj,
@@ -62,9 +62,9 @@ func NewProblemUploadService(metaRepo repository.ProblemRepository, uploadRepo r
 	}
 }
 
-func NewProblemUploadServiceWithDB(database db.Database, metaRepo repository.ProblemRepository, uploadRepo repository.ProblemUploadRepository, obj storage.ObjectStorage, opts UploadOptions) *ProblemUploadService {
+func NewProblemUploadServiceWithDB(provider db.Provider, metaRepo repository.ProblemRepository, uploadRepo repository.ProblemUploadRepository, obj storage.ObjectStorage, opts UploadOptions) *ProblemUploadService {
 	svc := NewProblemUploadService(metaRepo, uploadRepo, obj, opts)
-	svc.database = database
+	svc.dbProvider = provider
 	return svc
 }
 
@@ -487,11 +487,12 @@ type repositoryTx interface {
 }
 
 func (s *ProblemUploadService) withTx(ctx context.Context, fn func(tx repositoryTx) error) error {
-	if s.database == nil {
+	database, err := db.CurrentDatabase(s.dbProvider)
+	if err != nil {
 		// Should not happen in production. Keep behavior safe and explicit.
 		return errors.New("database is nil")
 	}
-	return s.database.Transaction(ctx, func(tx db.Transaction) error {
+	return database.Transaction(ctx, func(tx db.Transaction) error {
 		return fn(tx)
 	})
 }

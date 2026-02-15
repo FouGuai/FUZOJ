@@ -42,19 +42,19 @@ type SubmissionRepository interface {
 
 // MySQLSubmissionRepository implements SubmissionRepository with MySQL.
 type MySQLSubmissionRepository struct {
-	db       db.Database
-	cache    cache.Cache
-	ttl      time.Duration
-	emptyTTL time.Duration
+	dbProvider db.Provider
+	cache      cache.Cache
+	ttl        time.Duration
+	emptyTTL   time.Duration
 }
 
 // NewSubmissionRepository creates a submission repository with defaults.
-func NewSubmissionRepository(database db.Database, cacheClient cache.Cache) SubmissionRepository {
-	return NewSubmissionRepositoryWithTTL(database, cacheClient, defaultSubmissionCacheTTL, defaultSubmissionCacheEmptyTTL)
+func NewSubmissionRepository(provider db.Provider, cacheClient cache.Cache) SubmissionRepository {
+	return NewSubmissionRepositoryWithTTL(provider, cacheClient, defaultSubmissionCacheTTL, defaultSubmissionCacheEmptyTTL)
 }
 
 // NewSubmissionRepositoryWithTTL creates a submission repository with custom TTL.
-func NewSubmissionRepositoryWithTTL(database db.Database, cacheClient cache.Cache, ttl, emptyTTL time.Duration) SubmissionRepository {
+func NewSubmissionRepositoryWithTTL(provider db.Provider, cacheClient cache.Cache, ttl, emptyTTL time.Duration) SubmissionRepository {
 	if ttl <= 0 {
 		ttl = defaultSubmissionCacheTTL
 	}
@@ -62,10 +62,10 @@ func NewSubmissionRepositoryWithTTL(database db.Database, cacheClient cache.Cach
 		emptyTTL = defaultSubmissionCacheEmptyTTL
 	}
 	return &MySQLSubmissionRepository{
-		db:       database,
-		cache:    cacheClient,
-		ttl:      ttl,
-		emptyTTL: emptyTTL,
+		dbProvider: provider,
+		cache:      cacheClient,
+		ttl:        ttl,
+		emptyTTL:   emptyTTL,
 	}
 }
 
@@ -100,7 +100,11 @@ func (r *MySQLSubmissionRepository) Create(ctx context.Context, tx db.Transactio
 		(submission_id, problem_id, user_id, contest_id, language_id, source_code, source_key, source_hash, scene)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	_, err := db.GetQuerier(r.db, tx).Exec(
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	_, err = querier.Exec(
 		ctx,
 		query,
 		submission.SubmissionID,
@@ -161,7 +165,11 @@ func (r *MySQLSubmissionRepository) GetByID(ctx context.Context, tx db.Transacti
 
 func (r *MySQLSubmissionRepository) getByIDFromDB(ctx context.Context, tx db.Transaction, submissionID string) (*Submission, error) {
 	query := "SELECT " + submissionColumns + " FROM submissions WHERE submission_id = ? LIMIT 1"
-	row := db.GetQuerier(r.db, tx).QueryRow(ctx, query, submissionID)
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return nil, err
+	}
+	row := querier.QueryRow(ctx, query, submissionID)
 	submission := &Submission{}
 	var contestID *string
 	if err := row.Scan(

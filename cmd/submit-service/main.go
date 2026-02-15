@@ -50,6 +50,7 @@ func main() {
 	defer func() {
 		_ = mysqlDB.Close()
 	}()
+	dbProvider := db.NewManager(mysqlDB)
 
 	redisCache, err := cache.NewRedisCacheWithConfig(&appCfg.Redis)
 	if err != nil {
@@ -75,8 +76,8 @@ func main() {
 		return
 	}
 
-	statusRepo := repository.NewStatusRepository(redisCache, mysqlDB, appCfg.Submit.StatusTTL)
-	submissionRepo := submitRepo.NewSubmissionRepositoryWithTTL(mysqlDB, redisCache, appCfg.Submit.SubmissionCacheTTL, appCfg.Submit.SubmissionEmptyTTL)
+	statusRepo := repository.NewStatusRepository(redisCache, dbProvider, appCfg.Submit.StatusTTL)
+	submissionRepo := submitRepo.NewSubmissionRepositoryWithTTL(dbProvider, redisCache, appCfg.Submit.SubmissionCacheTTL, appCfg.Submit.SubmissionEmptyTTL)
 
 	submitService, err := service.NewSubmitService(service.Config{
 		SubmissionRepo: submissionRepo,
