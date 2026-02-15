@@ -32,6 +32,7 @@
 
 ## 测试规范
 
+- 每次完成一个模块都一个写一个完整的测试
 - 测试代码统一放在 `tests/` 目录下，包含测试套件与辅助工具
 - 优先使用**表驱动测试**
 - 命名规范：
@@ -40,6 +41,7 @@
 
 - 外部依赖（数据库 / 网络等）必须 mock，保证单元测试隔离性
 - CI 会在 push / PR 时自动运行测试并上传覆盖率产物
+- 如果完成整个模块请写一个整个模块的端到端测试
 
 ## 提交与 Pull Request 规范
 
@@ -156,3 +158,4 @@
 - **Problem Module**：`docs/problem_module.md` — 题目元信息管理与数据包上传发布流程说明
 - **Judge Service**：`docs/judge_service.md` — Kafka 判题消费、数据包缓存与状态机查询服务
 - **Submit Service**：`docs/submit_service.md` — 面向前端的判题入口与提交分发服务
+- **Gateway**：`docs/gateway.md` — 统一流量入口的鉴权、限流与反向代理网关

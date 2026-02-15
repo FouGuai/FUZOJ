@@ -1,0 +1,145 @@
+server:
+  addr: "0.0.0.0:8080"
+  readTimeout: 5s
+  writeTimeout: 10s
+  idleTimeout: 60s
+  maxHeaderBytes: 1048576
+
+logger:
+  level: "info"
+  format: "json"
+  outputPath: "stdout"
+  errorPath: "stderr"
+
+auth:
+  jwtSecret: "replace-with-strong-secret"
+  jwtIssuer: "fuzoj"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+  poolSize: 50
+  minIdleConns: 5
+
+kafka:
+  brokers: ["127.0.0.1:9092"]
+  clientID: "fuzoj-gateway"
+
+banEvent:
+  enabled: true
+  topic: "user.events"
+  consumerGroup: "fuzoj-gateway-bans"
+
+cache:
+  banLocalTTL: 30m
+  banLocalSize: 100000
+  tokenBlacklistCacheTTL: 2m
+
+rateLimit:
+  window: 1m
+  userMax: 200
+  ipMax: 500
+  routeMax: 1000
+
+proxy:
+  maxIdleConns: 2048
+  maxIdleConnsPerHost: 256
+  idleConnTimeout: 90s
+  responseHeaderTimeout: 5s
+  tlsHandshakeTimeout: 5s
+  dialTimeout: 3s
+
+cors:
+  enabled: true
+  allowedOrigins: ["*"]
+  allowedMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+  allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Trace-Id"]
+  exposedHeaders: ["X-Trace-Id", "X-Request-Id"]
+  allowCredentials: false
+  maxAge: 12h
+
+upstreams:
+  - name: "user"
+    baseURL: "http://127.0.0.1:8081"
+  - name: "problem"
+    baseURL: "http://127.0.0.1:8083"
+  - name: "submit"
+    baseURL: "http://127.0.0.1:8086"
+  - name: "judge"
+    baseURL: "http://127.0.0.1:8085"
+  - name: "minio"
+    baseURL: "http://127.0.0.1:9000"
+
+routes:
+  - name: "user.register"
+    methods: ["POST"]
+    path: "/api/v1/user/register"
+    upstream: "user"
+    auth:
+      mode: "public"
+
+  - name: "user.login"
+    methods: ["POST"]
+    path: "/api/v1/user/login"
+    upstream: "user"
+    auth:
+      mode: "public"
+
+  - name: "user.refresh"
+    methods: ["POST"]
+    path: "/api/v1/user/refresh-token"
+    upstream: "user"
+    auth:
+      mode: "public"
+
+  - name: "user.logout"
+    methods: ["POST"]
+    path: "/api/v1/user/logout"
+    upstream: "user"
+    auth:
+      mode: "protected"
+
+  - name: "problem.public"
+    methods: ["GET"]
+    path: "/api/v1/problems/*any"
+    upstream: "problem"
+    auth:
+      mode: "public"
+
+  - name: "problem.manage"
+    methods: ["POST", "PUT", "DELETE"]
+    path: "/api/v1/problems/*any"
+    upstream: "problem"
+    auth:
+      mode: "protected"
+      roles: ["problem_setter", "admin", "super_admin"]
+
+  - name: "submit.create"
+    methods: ["POST"]
+    path: "/api/v1/submissions"
+    upstream: "submit"
+    auth:
+      mode: "protected"
+
+  - name: "submit.query"
+    methods: ["GET", "POST"]
+    path: "/api/v1/submissions/*any"
+    upstream: "submit"
+    auth:
+      mode: "protected"
+
+  - name: "judge.status"
+    methods: ["GET"]
+    path: "/api/v1/judge/*any"
+    upstream: "judge"
+    auth:
+      mode: "protected"
+      roles: ["admin", "super_admin"]
+
+  - name: "objects.download"
+    methods: ["GET"]
+    path: "/objects/*any"
+    upstream: "minio"
+    auth:
+      mode: "public"
