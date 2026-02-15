@@ -76,7 +76,7 @@ func main() {
 		return
 	}
 
-	statusRepo := repository.NewStatusRepository(redisCache, dbProvider, appCfg.Submit.StatusTTL)
+	statusRepo := repository.NewStatusRepository(redisCache, dbProvider, appCfg.Submit.StatusTTL, nil)
 	submissionRepo := submitRepo.NewSubmissionRepositoryWithTTL(dbProvider, redisCache, appCfg.Submit.SubmissionCacheTTL, appCfg.Submit.SubmissionEmptyTTL)
 
 	submitService, err := service.NewSubmitService(service.Config{
@@ -101,6 +101,17 @@ func main() {
 	})
 	if err != nil {
 		logger.Error(context.Background(), "init submit service failed", zap.Error(err))
+		return
+	}
+
+	statusConsumerOpts := appCfg.Submit.StatusFinalConsumer.toSubscribeOptions()
+	statusConsumerOpts.SetDefaults()
+	if err := mqClient.SubscribeWithOptions(context.Background(), appCfg.Submit.StatusFinalTopic, submitService.HandleFinalStatusMessage, &statusConsumerOpts); err != nil {
+		logger.Error(context.Background(), "subscribe status final topic failed", zap.Error(err))
+		return
+	}
+	if err := mqClient.Start(); err != nil {
+		logger.Error(context.Background(), "start kafka consumer failed", zap.Error(err))
 		return
 	}
 
@@ -134,6 +145,7 @@ func main() {
 	if err := httpServer.Shutdown(ctx); err != nil {
 		logger.Error(context.Background(), "http server shutdown failed", zap.Error(err))
 	}
+	_ = mqClient.Stop()
 }
 
 func buildHTTPServer(cfg ServerConfig, submitService *service.SubmitService) *http.Server {

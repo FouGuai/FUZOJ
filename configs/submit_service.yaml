@@ -57,6 +57,15 @@ submit:
   idempotencyTTL: 10m
   batchLimit: 200
   statusTTL: 24h
+  statusFinalTopic: "judge.status.final"
+  statusFinalConsumer:
+    consumerGroup: "submit-service-status-final"
+    prefetchCount: 1
+    concurrency: 2
+    maxRetries: 3
+    retryDelay: 1s
+    deadLetterTopic: "judge.status.final.dead"
+    messageTTL: 10m
   submissionCacheTTL: 30m
   submissionEmptyTTL: 5m
   rateLimit:

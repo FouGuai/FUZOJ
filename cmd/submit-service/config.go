@@ -41,16 +41,41 @@ type TopicConfig struct {
 
 // SubmitConfig holds submission settings.
 type SubmitConfig struct {
-	SourceBucket       string                  `yaml:"sourceBucket"`
-	SourceKeyPrefix    string                  `yaml:"sourceKeyPrefix"`
-	MaxCodeBytes       int                     `yaml:"maxCodeBytes"`
-	IdempotencyTTL     time.Duration           `yaml:"idempotencyTTL"`
-	BatchLimit         int                     `yaml:"batchLimit"`
-	StatusTTL          time.Duration           `yaml:"statusTTL"`
-	SubmissionCacheTTL time.Duration           `yaml:"submissionCacheTTL"`
-	SubmissionEmptyTTL time.Duration           `yaml:"submissionEmptyTTL"`
-	RateLimit          service.RateLimitConfig `yaml:"rateLimit"`
-	Timeouts           service.TimeoutConfig   `yaml:"timeouts"`
+	SourceBucket        string                    `yaml:"sourceBucket"`
+	SourceKeyPrefix     string                    `yaml:"sourceKeyPrefix"`
+	MaxCodeBytes        int                       `yaml:"maxCodeBytes"`
+	IdempotencyTTL      time.Duration             `yaml:"idempotencyTTL"`
+	BatchLimit          int                       `yaml:"batchLimit"`
+	StatusTTL           time.Duration             `yaml:"statusTTL"`
+	StatusFinalTopic    string                    `yaml:"statusFinalTopic"`
+	StatusFinalConsumer StatusFinalConsumerConfig `yaml:"statusFinalConsumer"`
+	SubmissionCacheTTL  time.Duration             `yaml:"submissionCacheTTL"`
+	SubmissionEmptyTTL  time.Duration             `yaml:"submissionEmptyTTL"`
+	RateLimit           service.RateLimitConfig   `yaml:"rateLimit"`
+	Timeouts            service.TimeoutConfig     `yaml:"timeouts"`
+}
+
+// StatusFinalConsumerConfig holds status final event consumer settings.
+type StatusFinalConsumerConfig struct {
+	ConsumerGroup   string        `yaml:"consumerGroup"`
+	PrefetchCount   int           `yaml:"prefetchCount"`
+	Concurrency     int           `yaml:"concurrency"`
+	MaxRetries      int           `yaml:"maxRetries"`
+	RetryDelay      time.Duration `yaml:"retryDelay"`
+	DeadLetterTopic string        `yaml:"deadLetterTopic"`
+	MessageTTL      time.Duration `yaml:"messageTTL"`
+}
+
+func (cfg StatusFinalConsumerConfig) toSubscribeOptions() mq.SubscribeOptions {
+	return mq.SubscribeOptions{
+		ConsumerGroup:   cfg.ConsumerGroup,
+		PrefetchCount:   cfg.PrefetchCount,
+		Concurrency:     cfg.Concurrency,
+		MaxRetries:      cfg.MaxRetries,
+		RetryDelay:      cfg.RetryDelay,
+		DeadLetterTopic: cfg.DeadLetterTopic,
+		MessageTTL:      cfg.MessageTTL,
+	}
 }
 
 // AppConfig holds submit-service configuration.
@@ -125,6 +150,9 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	}
 	if cfg.Submit.StatusTTL == 0 {
 		cfg.Submit.StatusTTL = 24 * time.Hour
+	}
+	if cfg.Submit.StatusFinalTopic == "" {
+		cfg.Submit.StatusFinalTopic = "judge.status.final"
 	}
 	if cfg.Submit.SubmissionCacheTTL == 0 {
 		cfg.Submit.SubmissionCacheTTL = 30 * time.Minute

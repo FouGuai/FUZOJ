@@ -37,17 +37,6 @@ CREATE TABLE IF NOT EXISTS problem_manifest (
   UNIQUE KEY problem_manifest_version_uq (problem_version_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Problem manifests';
 
-CREATE TABLE IF NOT EXISTS problem_data_pack (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  problem_version_id BIGINT NOT NULL,
-  object_key VARCHAR(256) NOT NULL,
-  size_bytes BIGINT NOT NULL DEFAULT 0,
-  md5 VARCHAR(64) NOT NULL,
-  sha256 VARCHAR(128) NOT NULL,
-  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY problem_data_pack_version_uq (problem_version_id),
-  KEY problem_data_pack_version_idx (problem_version_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Problem data packs';
 
 -- problem_version_seq stores per-problem version sequence to avoid MAX(version) scans under high concurrency.
 CREATE TABLE IF NOT EXISTS problem_version_seq (

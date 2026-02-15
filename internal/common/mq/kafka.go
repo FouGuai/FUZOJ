@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -115,7 +116,9 @@ func NewKafkaQueue(cfg KafkaConfig) (*KafkaQueue, error) {
 		BatchTimeout: cfg.BatchTimeout,
 		Compression:  cfg.Compression,
 		Transport: &kafka.Transport{
-			Dial:     dialer.DialContext,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, address)
+			},
 			ClientID: cfg.ClientID,
 		},
 	}

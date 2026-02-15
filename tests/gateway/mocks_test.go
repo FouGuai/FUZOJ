@@ -54,6 +54,16 @@ func (m *mockSetCache) SIsMember(ctx context.Context, key string, member interfa
 	return ok, nil
 }
 
+func (m *mockSetCache) SCard(ctx context.Context, key string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	set := m.sets[key]
+	if set == nil {
+		return 0, nil
+	}
+	return int64(len(set)), nil
+}
+
 type mockBasicCache struct {
 	mu      sync.Mutex
 	values  map[string]int64

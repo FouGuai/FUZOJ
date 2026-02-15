@@ -66,14 +66,15 @@ type Config struct {
 	MQ             mq.MessageQueue
 	Cache          cache.Cache
 
-	Topics          TopicConfig
-	SourceBucket    string
-	SourceKeyPrefix string
-	MaxCodeBytes    int
-	IdempotencyTTL  time.Duration
-	BatchLimit      int
-	RateLimit       RateLimitConfig
-	Timeouts        TimeoutConfig
+	Topics              TopicConfig
+	FinalStatusHandlers []FinalStatusHandler
+	SourceBucket        string
+	SourceKeyPrefix     string
+	MaxCodeBytes        int
+	IdempotencyTTL      time.Duration
+	BatchLimit          int
+	RateLimit           RateLimitConfig
+	Timeouts            TimeoutConfig
 }
 
 // SubmitService handles submission intake and dispatch.
@@ -84,14 +85,15 @@ type SubmitService struct {
 	mq             mq.MessageQueue
 	cache          cache.Cache
 
-	topics          TopicConfig
-	sourceBucket    string
-	sourceKeyPrefix string
-	maxCodeBytes    int
-	idempotencyTTL  time.Duration
-	batchLimit      int
-	rateLimit       RateLimitConfig
-	timeouts        TimeoutConfig
+	topics              TopicConfig
+	finalStatusHandlers []FinalStatusHandler
+	sourceBucket        string
+	sourceKeyPrefix     string
+	maxCodeBytes        int
+	idempotencyTTL      time.Duration
+	batchLimit          int
+	rateLimit           RateLimitConfig
+	timeouts            TimeoutConfig
 }
 
 // SubmitInput describes a submission request.
@@ -134,19 +136,20 @@ func NewSubmitService(cfg Config) (*SubmitService, error) {
 		cfg.BatchLimit = defaultBatchLimit
 	}
 	return &SubmitService{
-		submissionRepo:  cfg.SubmissionRepo,
-		statusRepo:      cfg.StatusRepo,
-		storage:         cfg.Storage,
-		mq:              cfg.MQ,
-		cache:           cfg.Cache,
-		topics:          cfg.Topics,
-		sourceBucket:    cfg.SourceBucket,
-		sourceKeyPrefix: cfg.SourceKeyPrefix,
-		maxCodeBytes:    cfg.MaxCodeBytes,
-		idempotencyTTL:  cfg.IdempotencyTTL,
-		batchLimit:      cfg.BatchLimit,
-		rateLimit:       cfg.RateLimit,
-		timeouts:        cfg.Timeouts,
+		submissionRepo:      cfg.SubmissionRepo,
+		statusRepo:          cfg.StatusRepo,
+		storage:             cfg.Storage,
+		mq:                  cfg.MQ,
+		cache:               cfg.Cache,
+		topics:              cfg.Topics,
+		finalStatusHandlers: cfg.FinalStatusHandlers,
+		sourceBucket:        cfg.SourceBucket,
+		sourceKeyPrefix:     cfg.SourceKeyPrefix,
+		maxCodeBytes:        cfg.MaxCodeBytes,
+		idempotencyTTL:      cfg.IdempotencyTTL,
+		batchLimit:          cfg.BatchLimit,
+		rateLimit:           cfg.RateLimit,
+		timeouts:            cfg.Timeouts,
 	}, nil
 }
 

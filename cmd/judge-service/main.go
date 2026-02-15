@@ -75,6 +75,16 @@ func main() {
 		return
 	}
 
+	mqClient, err := mq.NewKafkaQueue(appCfg.Kafka.toMQConfig())
+	if err != nil {
+		logger.Error(context.Background(), "init kafka failed", zap.Error(err))
+		return
+	}
+	defer func() {
+		_ = mqClient.Close()
+	}()
+
+	statusPublisher := repository.NewMQStatusEventPublisher(mqClient, appCfg.Status.FinalTopic)
 	localRepo := config.NewLocalRepository(appCfg.Language.Languages, appCfg.Language.Profiles)
 	eng, err := engine.NewEngine(appCfg.Sandbox.toEngineConfig(), localRepo)
 	if err != nil {
@@ -84,7 +94,7 @@ func main() {
 	jobRunner := runner.NewRunner(eng)
 	worker := sandbox.NewWorker(jobRunner, localRepo, localRepo)
 
-	statusRepo := repository.NewStatusRepository(redisCache, dbProvider, appCfg.Status.TTL)
+	statusRepo := repository.NewStatusRepository(redisCache, dbProvider, appCfg.Status.TTL, statusPublisher)
 	dataCache := judgecache.NewDataPackCache(appCfg.Cache.RootDir, appCfg.Cache.TTL, appCfg.Cache.LockWait, appCfg.Cache.MaxEntries, appCfg.Cache.MaxBytes, appCfg.MinIO.Bucket, objStorage, redisCache)
 
 	grpcConn, err := grpc.Dial(appCfg.Problem.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -116,15 +126,6 @@ func main() {
 		logger.Error(context.Background(), "init judge service failed", zap.Error(err))
 		return
 	}
-
-	mqClient, err := mq.NewKafkaQueue(appCfg.Kafka.toMQConfig())
-	if err != nil {
-		logger.Error(context.Background(), "init kafka failed", zap.Error(err))
-		return
-	}
-	defer func() {
-		_ = mqClient.Close()
-	}()
 
 	for _, topic := range appCfg.Kafka.Topics {
 		err := mqClient.SubscribeWithOptions(context.Background(), topic, judgeSvc.HandleMessage, &mq.SubscribeOptions{

@@ -75,6 +75,7 @@ source:
 status:
   ttl: 24h
   timeout: 2s
+  finalTopic: "judge.status.final"
 
 judge:
   workRoot: "/tmp/fuzoj-work"

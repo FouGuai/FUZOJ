@@ -89,8 +89,9 @@ type ProblemRPCConfig struct {
 
 // StatusConfig holds status persistence settings.
 type StatusConfig struct {
-	TTL     time.Duration `yaml:"ttl"`
-	Timeout time.Duration `yaml:"timeout"`
+	TTL        time.Duration `yaml:"ttl"`
+	Timeout    time.Duration `yaml:"timeout"`
+	FinalTopic string        `yaml:"finalTopic"`
 }
 
 // JudgeConfig holds judge work settings.
@@ -176,6 +177,9 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	}
 	if cfg.Worker.PoolSize <= 0 {
 		cfg.Worker.PoolSize = 1
+	}
+	if cfg.Status.FinalTopic == "" {
+		cfg.Status.FinalTopic = "judge.status.final"
 	}
 	return &cfg, nil
 }

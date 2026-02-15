@@ -20,12 +20,13 @@ const statusKeyPrefix = "judge:status:"
 type StatusRepository struct {
 	cache      cache.Cache
 	dbProvider db.Provider
+	publisher  StatusEventPublisher
 	TTL        time.Duration
 }
 
 // NewStatusRepository creates a new repository.
-func NewStatusRepository(cacheClient cache.Cache, provider db.Provider, ttl time.Duration) *StatusRepository {
-	return &StatusRepository{cache: cacheClient, dbProvider: provider, TTL: ttl}
+func NewStatusRepository(cacheClient cache.Cache, provider db.Provider, ttl time.Duration, publisher StatusEventPublisher) *StatusRepository {
+	return &StatusRepository{cache: cacheClient, dbProvider: provider, TTL: ttl, publisher: publisher}
 }
 
 // Get returns status by submission id.
@@ -122,11 +123,11 @@ func (r *StatusRepository) Save(ctx context.Context, status model.JudgeStatusRes
 		return appErr.ValidationError("submission_id", "required")
 	}
 	if isFinalStatus(status.Status) {
-		database, err := db.CurrentDatabase(r.dbProvider)
-		if err == nil {
-			if err := r.storeFinalStatus(ctx, database, status); err != nil {
-				return err
-			}
+		if r.publisher == nil {
+			return appErr.New(appErr.ServiceUnavailable).WithMessage("status publisher is not configured")
+		}
+		if err := r.publisher.PublishFinalStatus(ctx, status); err != nil {
+			return err
 		}
 	}
 	if r.cache != nil {
@@ -139,6 +140,21 @@ func (r *StatusRepository) Save(ctx context.Context, status model.JudgeStatusRes
 		}
 	}
 	return nil
+}
+
+// PersistFinalStatus stores final status into the database.
+func (r *StatusRepository) PersistFinalStatus(ctx context.Context, status model.JudgeStatusResponse) error {
+	if status.SubmissionID == "" {
+		return appErr.ValidationError("submission_id", "required")
+	}
+	if !isFinalStatus(status.Status) {
+		return appErr.ValidationError("status", "final_required")
+	}
+	database, err := db.CurrentDatabase(r.dbProvider)
+	if err != nil {
+		return err
+	}
+	return r.storeFinalStatus(ctx, database, status)
 }
 
 func (r *StatusRepository) storeFinalStatus(ctx context.Context, database db.Database, status model.JudgeStatusResponse) error {
