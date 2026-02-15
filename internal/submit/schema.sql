@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS submissions (
   source_key VARCHAR(256) NOT NULL,
   source_hash CHAR(64) NOT NULL,
   scene VARCHAR(16) NOT NULL,
+  final_status JSON NULL,
+  final_status_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   INDEX idx_submissions_user_created (user_id, created_at),

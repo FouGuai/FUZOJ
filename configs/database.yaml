@@ -1,5 +1,0 @@
-dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj?parseTime=true&loc=Local"
-maxOpenConnections: 25
-maxIdleConnections: 5
-connMaxLifetime: "5m"
-connMaxIdleTime: "10m"

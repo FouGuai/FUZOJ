@@ -41,8 +41,10 @@ type AppConfig struct {
 	GRPC   GRPCConfig    `yaml:"grpc"`
 	Logger logger.Config `yaml:"logger"`
 
-	MinIO  storage.MinIOConfig `yaml:"minio"`
-	Upload UploadConfig        `yaml:"upload"`
+	MinIO    storage.MinIOConfig `yaml:"minio"`
+	Database db.MySQLConfig      `yaml:"database"`
+	Redis    cache.RedisConfig   `yaml:"redis"`
+	Upload   UploadConfig        `yaml:"upload"`
 }
 
 // UploadConfig holds problem upload settings.
@@ -71,6 +73,13 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	if err := loadYAML(path, &cfg); err != nil {
 		return nil, err
 	}
+	if cfg.Database.DSN == "" {
+		return nil, fmt.Errorf("database dsn is required")
+	}
+	if cfg.Redis.Addr == "" {
+		return nil, fmt.Errorf("redis addr is required")
+	}
+	applyRedisDefaults(&cfg.Redis)
 
 	if cfg.Server.Addr == "" {
 		cfg.Server.Addr = defaultHTTPAddr
@@ -106,25 +115,42 @@ func loadAppConfig(path string) (*AppConfig, error) {
 
 	return &cfg, nil
 }
-
-func loadDatabaseConfig(path string) (*db.MySQLConfig, error) {
-	var cfg db.MySQLConfig
-	if err := loadYAML(path, &cfg); err != nil {
-		return nil, err
+func applyRedisDefaults(cfg *cache.RedisConfig) {
+	if cfg == nil {
+		return
 	}
-	if cfg.DSN == "" {
-		return nil, fmt.Errorf("database dsn is required")
+	defaults := cache.DefaultRedisConfig()
+	if cfg.MaxRetries == 0 {
+		cfg.MaxRetries = defaults.MaxRetries
 	}
-	return &cfg, nil
-}
-
-func loadRedisConfig(path string) (*cache.RedisConfig, error) {
-	var cfg cache.RedisConfig
-	if err := loadYAML(path, &cfg); err != nil {
-		return nil, err
+	if cfg.MinRetryBackoff == 0 {
+		cfg.MinRetryBackoff = defaults.MinRetryBackoff
 	}
-	if cfg.Addr == "" {
-		return nil, fmt.Errorf("redis addr is required")
+	if cfg.MaxRetryBackoff == 0 {
+		cfg.MaxRetryBackoff = defaults.MaxRetryBackoff
 	}
-	return &cfg, nil
+	if cfg.DialTimeout == 0 {
+		cfg.DialTimeout = defaults.DialTimeout
+	}
+	if cfg.ReadTimeout == 0 {
+		cfg.ReadTimeout = defaults.ReadTimeout
+	}
+	if cfg.WriteTimeout == 0 {
+		cfg.WriteTimeout = defaults.WriteTimeout
+	}
+	if cfg.PoolSize == 0 {
+		cfg.PoolSize = defaults.PoolSize
+	}
+	if cfg.MinIdleConns == 0 {
+		cfg.MinIdleConns = defaults.MinIdleConns
+	}
+	if cfg.PoolTimeout == 0 {
+		cfg.PoolTimeout = defaults.PoolTimeout
+	}
+	if cfg.ConnMaxIdleTime == 0 {
+		cfg.ConnMaxIdleTime = defaults.ConnMaxIdleTime
+	}
+	if cfg.ConnMaxLifetime == 0 {
+		cfg.ConnMaxLifetime = defaults.ConnMaxLifetime
+	}
 }

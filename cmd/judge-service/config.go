@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"fuzoj/internal/common/cache"
+	"fuzoj/internal/common/db"
 	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
 	"fuzoj/internal/judge/sandbox/engine"
@@ -119,6 +120,7 @@ type AppConfig struct {
 	Server   ServerConfig        `yaml:"server"`
 	Logger   logger.Config       `yaml:"logger"`
 	Kafka    KafkaConfig         `yaml:"kafka"`
+	Database db.MySQLConfig      `yaml:"database"`
 	Redis    cache.RedisConfig   `yaml:"redis"`
 	MinIO    storage.MinIOConfig `yaml:"minio"`
 	Problem  ProblemRPCConfig    `yaml:"problemRPC"`
@@ -146,6 +148,9 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	var cfg AppConfig
 	if err := loadYAML(path, &cfg); err != nil {
 		return nil, err
+	}
+	if cfg.Database.DSN == "" {
+		return nil, fmt.Errorf("database dsn is required")
 	}
 	if cfg.Redis.Addr == "" {
 		return nil, fmt.Errorf("redis addr is required")

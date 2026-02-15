@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fuzoj/internal/common/cache"
+	"fuzoj/internal/common/db"
 	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
 	judgecache "fuzoj/internal/judge/cache"
@@ -32,9 +33,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const (
-	appConfigPath = "configs/judge_service.yaml"
-)
+const appConfigPath = "configs/judge_service.yaml"
 
 func main() {
 	appCfg, err := loadAppConfig(appConfigPath)
@@ -49,6 +48,15 @@ func main() {
 	}
 	defer func() {
 		_ = logger.Sync()
+	}()
+
+	mysqlDB, err := db.NewMySQLWithConfig(&appCfg.Database)
+	if err != nil {
+		logger.Error(context.Background(), "init database failed", zap.Error(err))
+		return
+	}
+	defer func() {
+		_ = mysqlDB.Close()
 	}()
 
 	redisCache, err := cache.NewRedisCacheWithConfig(&appCfg.Redis)
@@ -75,7 +83,7 @@ func main() {
 	jobRunner := runner.NewRunner(eng)
 	worker := sandbox.NewWorker(jobRunner, localRepo, localRepo)
 
-	statusRepo := repository.NewStatusRepository(redisCache, appCfg.Status.TTL)
+	statusRepo := repository.NewStatusRepository(redisCache, mysqlDB, appCfg.Status.TTL)
 	dataCache := judgecache.NewDataPackCache(appCfg.Cache.RootDir, appCfg.Cache.TTL, appCfg.Cache.LockWait, appCfg.Cache.MaxEntries, appCfg.Cache.MaxBytes, appCfg.MinIO.Bucket, objStorage, redisCache)
 
 	grpcConn, err := grpc.Dial(appCfg.Problem.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))

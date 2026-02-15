@@ -21,11 +21,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	databaseConfigPath = "configs/database.yaml"
-	redisConfigPath    = "configs/redis.yaml"
-	appConfigPath      = "configs/user_service.yaml"
-)
+const appConfigPath = "configs/user_service.yaml"
 
 func main() {
 	appCfg, err := loadAppConfig(appConfigPath)
@@ -42,19 +38,7 @@ func main() {
 		_ = logger.Sync()
 	}()
 
-	dbCfg, err := loadDatabaseConfig(databaseConfigPath)
-	if err != nil {
-		logger.Error(context.Background(), "load database config failed", zap.Error(err))
-		return
-	}
-
-	redisCfg, err := loadRedisConfig(redisConfigPath)
-	if err != nil {
-		logger.Error(context.Background(), "load redis config failed", zap.Error(err))
-		return
-	}
-
-	mysqlDB, err := db.NewMySQLWithConfig(dbCfg)
+	mysqlDB, err := db.NewMySQLWithConfig(&appCfg.Database)
 	if err != nil {
 		logger.Error(context.Background(), "init database failed", zap.Error(err))
 		return
@@ -63,7 +47,7 @@ func main() {
 		_ = mysqlDB.Close()
 	}()
 
-	redisCache, err := cache.NewRedisCacheWithConfig(redisCfg)
+	redisCache, err := cache.NewRedisCacheWithConfig(&appCfg.Redis)
 	if err != nil {
 		logger.Error(context.Background(), "init redis failed", zap.Error(err))
 		return
