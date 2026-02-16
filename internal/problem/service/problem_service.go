@@ -6,16 +6,20 @@ import (
 
 	"fuzoj/internal/problem/repository"
 	pkgerrors "fuzoj/pkg/errors"
+	"fuzoj/pkg/utils/logger"
+
+	"go.uber.org/zap"
 )
 
 // ProblemService handles problem meta queries.
 type ProblemService struct {
-	repo repository.ProblemRepository
+	repo             repository.ProblemRepository
+	cleanupPublisher *ProblemCleanupPublisher
 }
 
 // NewProblemService creates a new ProblemService.
-func NewProblemService(repo repository.ProblemRepository) *ProblemService {
-	return &ProblemService{repo: repo}
+func NewProblemService(repo repository.ProblemRepository, cleanupPublisher *ProblemCleanupPublisher) *ProblemService {
+	return &ProblemService{repo: repo, cleanupPublisher: cleanupPublisher}
 }
 
 // CreateInput represents input for problem creation.
@@ -49,7 +53,7 @@ func (s *ProblemService) CreateProblem(ctx context.Context, input CreateInput) (
 	problem := &repository.Problem{
 		Title:   input.Title,
 		OwnerID: input.OwnerID,
-		Status: repository.ProblemStatusDraft,
+		Status:  repository.ProblemStatusDraft,
 	}
 
 	id, err := s.repo.Create(ctx, nil, problem)
@@ -69,6 +73,12 @@ func (s *ProblemService) DeleteProblem(ctx context.Context, problemID int64) err
 			return pkgerrors.New(pkgerrors.ProblemNotFound)
 		}
 		return pkgerrors.Wrap(fmt.Errorf("delete problem failed: %w", err), pkgerrors.ProblemDeleteFailed)
+	}
+	_ = s.repo.InvalidateLatestMetaCache(ctx, problemID)
+	if s.cleanupPublisher != nil {
+		if err := s.cleanupPublisher.PublishProblemDeleted(ctx, problemID); err != nil {
+			logger.Warn(ctx, "publish cleanup event failed", zap.Int64("problem_id", problemID), zap.Error(err))
+		}
 	}
 	return nil
 }

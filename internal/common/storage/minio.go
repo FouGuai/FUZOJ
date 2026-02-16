@@ -157,3 +157,80 @@ func (s *MinIOStorage) StatObject(ctx context.Context, bucket, objectKey string)
 		ContentType: info.ContentType,
 	}, nil
 }
+
+func (s *MinIOStorage) ListObjects(ctx context.Context, bucket, prefix string) <-chan ObjectInfo {
+	out := make(chan ObjectInfo, 1)
+	if s.core == nil {
+		out <- ObjectInfo{Err: fmt.Errorf("minio core is nil")}
+		close(out)
+		return out
+	}
+
+	objCh := s.core.Client.ListObjects(ctx, bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+
+	go func() {
+		defer close(out)
+		for obj := range objCh {
+			if obj.Err != nil {
+				out <- ObjectInfo{Err: fmt.Errorf("minio list objects failed: %w", obj.Err)}
+				continue
+			}
+			out <- ObjectInfo{Key: obj.Key, SizeBytes: obj.Size}
+		}
+	}()
+	return out
+}
+
+func (s *MinIOStorage) RemoveObjects(ctx context.Context, bucket string, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	if s.core == nil {
+		return fmt.Errorf("minio core is nil")
+	}
+	objCh := make(chan minio.ObjectInfo, len(keys))
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		objCh <- minio.ObjectInfo{Key: key}
+	}
+	close(objCh)
+
+	errCh := s.core.RemoveObjects(ctx, bucket, objCh, minio.RemoveObjectsOptions{})
+	for err := range errCh {
+		if err.Err != nil {
+			return fmt.Errorf("minio remove object failed: %w", err.Err)
+		}
+	}
+	return nil
+}
+
+func (s *MinIOStorage) ListMultipartUploads(ctx context.Context, bucket, prefix, keyMarker, uploadIDMarker string, maxUploads int) (ListMultipartUploadsResult, error) {
+	if s.core == nil {
+		return ListMultipartUploadsResult{}, fmt.Errorf("minio core is nil")
+	}
+	if maxUploads <= 0 {
+		maxUploads = 1000
+	}
+	res, err := s.core.ListMultipartUploads(ctx, bucket, prefix, keyMarker, uploadIDMarker, "", maxUploads)
+	if err != nil {
+		return ListMultipartUploadsResult{}, fmt.Errorf("minio list multipart uploads failed: %w", err)
+	}
+	uploads := make([]MultipartUploadInfo, 0, len(res.Uploads))
+	for _, upload := range res.Uploads {
+		uploads = append(uploads, MultipartUploadInfo{
+			Key:      upload.Key,
+			UploadID: upload.UploadID,
+		})
+	}
+	return ListMultipartUploadsResult{
+		Uploads:            uploads,
+		IsTruncated:        res.IsTruncated,
+		NextKeyMarker:      res.NextKeyMarker,
+		NextUploadIDMarker: res.NextUploadIDMarker,
+	}, nil
+}

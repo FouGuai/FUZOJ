@@ -7,6 +7,7 @@ import (
 
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/db"
+	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
 	"fuzoj/pkg/utils/logger"
 
@@ -41,20 +42,62 @@ type AppConfig struct {
 	GRPC   GRPCConfig    `yaml:"grpc"`
 	Logger logger.Config `yaml:"logger"`
 
+	Kafka mq.KafkaConfig `yaml:"kafka"`
+
 	MinIO    storage.MinIOConfig `yaml:"minio"`
 	Database db.MySQLConfig      `yaml:"database"`
 	Redis    cache.RedisConfig   `yaml:"redis"`
 	Upload   UploadConfig        `yaml:"upload"`
+	Cleanup  CleanupConfig       `yaml:"cleanup"`
 }
 
 // UploadConfig holds problem upload settings.
 type UploadConfig struct {
+	// KeyPrefix is the prefix for problem objects in object storage.
+	KeyPrefix string `yaml:"keyPrefix"`
 	// PartSizeBytes is the multipart upload part size in bytes.
 	PartSizeBytes int64 `yaml:"partSizeBytes"`
 	// SessionTTL defines how long an upload session is valid.
 	SessionTTL time.Duration `yaml:"sessionTTL"`
 	// PresignTTL defines how long presigned URLs are valid.
 	PresignTTL time.Duration `yaml:"presignTTL"`
+}
+
+// CleanupConfig holds cleanup consumer settings.
+type CleanupConfig struct {
+	Enabled         *bool         `yaml:"enabled"`
+	Topic           string        `yaml:"topic"`
+	ConsumerGroup   string        `yaml:"consumerGroup"`
+	PrefetchCount   int           `yaml:"prefetchCount"`
+	Concurrency     int           `yaml:"concurrency"`
+	MaxRetries      int           `yaml:"maxRetries"`
+	RetryDelay      time.Duration `yaml:"retryDelay"`
+	DeadLetterTopic string        `yaml:"deadLetterTopic"`
+	MessageTTL      time.Duration `yaml:"messageTTL"`
+
+	BatchSize     int           `yaml:"batchSize"`
+	ListTimeout   time.Duration `yaml:"listTimeout"`
+	DeleteTimeout time.Duration `yaml:"deleteTimeout"`
+	MaxUploads    int           `yaml:"maxUploads"`
+}
+
+func (cfg CleanupConfig) IsEnabled() bool {
+	if cfg.Enabled == nil {
+		return true
+	}
+	return *cfg.Enabled
+}
+
+func (cfg CleanupConfig) toSubscribeOptions() *mq.SubscribeOptions {
+	return &mq.SubscribeOptions{
+		ConsumerGroup:   cfg.ConsumerGroup,
+		PrefetchCount:   cfg.PrefetchCount,
+		Concurrency:     cfg.Concurrency,
+		MaxRetries:      cfg.MaxRetries,
+		RetryDelay:      cfg.RetryDelay,
+		DeadLetterTopic: cfg.DeadLetterTopic,
+		MessageTTL:      cfg.MessageTTL,
+	}
 }
 
 func loadYAML(path string, out interface{}) error {
@@ -80,6 +123,9 @@ func loadAppConfig(path string) (*AppConfig, error) {
 		return nil, fmt.Errorf("redis addr is required")
 	}
 	applyRedisDefaults(&cfg.Redis)
+	if cfg.Cleanup.IsEnabled() && len(cfg.Kafka.Brokers) == 0 {
+		return nil, fmt.Errorf("kafka brokers are required")
+	}
 
 	if cfg.Server.Addr == "" {
 		cfg.Server.Addr = defaultHTTPAddr
@@ -98,6 +144,9 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	}
 
 	// Upload defaults.
+	if cfg.Upload.KeyPrefix == "" {
+		cfg.Upload.KeyPrefix = "problems"
+	}
 	if cfg.Upload.PartSizeBytes <= 0 {
 		cfg.Upload.PartSizeBytes = 16 * 1024 * 1024
 	}
@@ -106,6 +155,25 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	}
 	if cfg.Upload.PresignTTL == 0 {
 		cfg.Upload.PresignTTL = 15 * time.Minute
+	}
+
+	if cfg.Cleanup.Topic == "" {
+		cfg.Cleanup.Topic = "problem.cleanup"
+	}
+	if cfg.Cleanup.ConsumerGroup == "" {
+		cfg.Cleanup.ConsumerGroup = "problem-cleanup"
+	}
+	if cfg.Cleanup.BatchSize == 0 {
+		cfg.Cleanup.BatchSize = 1000
+	}
+	if cfg.Cleanup.ListTimeout == 0 {
+		cfg.Cleanup.ListTimeout = 30 * time.Second
+	}
+	if cfg.Cleanup.DeleteTimeout == 0 {
+		cfg.Cleanup.DeleteTimeout = 2 * time.Minute
+	}
+	if cfg.Cleanup.MaxUploads == 0 {
+		cfg.Cleanup.MaxUploads = 1000
 	}
 
 	// Keep MinIOConfig.PresignTTL in sync if not set explicitly.

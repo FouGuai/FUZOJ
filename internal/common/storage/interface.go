@@ -30,6 +30,16 @@ type ObjectStorage interface {
 
 	// StatObject returns size and ETag for an object.
 	StatObject(ctx context.Context, bucket, objectKey string) (ObjectStat, error)
+
+	// ListObjects streams objects under the prefix.
+	// Caller must drain the channel until it is closed.
+	ListObjects(ctx context.Context, bucket, prefix string) <-chan ObjectInfo
+
+	// RemoveObjects deletes multiple objects by key.
+	RemoveObjects(ctx context.Context, bucket string, keys []string) error
+
+	// ListMultipartUploads lists in-flight multipart uploads under the prefix.
+	ListMultipartUploads(ctx context.Context, bucket, prefix, keyMarker, uploadIDMarker string, maxUploads int) (ListMultipartUploadsResult, error)
 }
 
 // ObjectReader is a streaming reader for object data.
@@ -49,4 +59,25 @@ type ObjectStat struct {
 	SizeBytes   int64
 	ETag        string
 	ContentType string
+}
+
+// ObjectInfo describes an object entry.
+type ObjectInfo struct {
+	Key       string
+	SizeBytes int64
+	Err       error
+}
+
+// MultipartUploadInfo describes an in-flight multipart upload.
+type MultipartUploadInfo struct {
+	Key      string
+	UploadID string
+}
+
+// ListMultipartUploadsResult wraps multipart upload list results.
+type ListMultipartUploadsResult struct {
+	Uploads            []MultipartUploadInfo
+	IsTruncated        bool
+	NextKeyMarker      string
+	NextUploadIDMarker string
 }

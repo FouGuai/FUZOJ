@@ -13,6 +13,7 @@ import (
 
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/db"
+	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
 	"fuzoj/internal/problem/controller"
 	"fuzoj/internal/problem/repository"
@@ -62,7 +63,6 @@ func main() {
 	}()
 
 	problemRepo := repository.NewProblemRepository(dbProvider, redisCache)
-	problemService := service.NewProblemService(problemRepo)
 
 	objStorage, err := storage.NewMinIOStorage(appCfg.MinIO)
 	if err != nil {
@@ -70,14 +70,47 @@ func main() {
 		return
 	}
 
+	var mqClient mq.MessageQueue
+	if appCfg.Cleanup.IsEnabled() {
+		mqClient, err = mq.NewKafkaQueue(appCfg.Kafka)
+		if err != nil {
+			logger.Error(context.Background(), "init kafka failed", zap.Error(err))
+			return
+		}
+		defer func() {
+			_ = mqClient.Close()
+		}()
+	}
+
+	var cleanupPublisher *service.ProblemCleanupPublisher
+	if mqClient != nil {
+		cleanupPublisher = service.NewProblemCleanupPublisher(mqClient, appCfg.Cleanup.Topic, appCfg.MinIO.Bucket, appCfg.Upload.KeyPrefix)
+	}
+	problemService := service.NewProblemService(problemRepo, cleanupPublisher)
+
 	uploadRepo := repository.NewProblemUploadRepository(dbProvider)
 	uploadService := service.NewProblemUploadServiceWithDB(dbProvider, problemRepo, uploadRepo, objStorage, service.UploadOptions{
 		Bucket:        appCfg.MinIO.Bucket,
-		KeyPrefix:     "problems",
+		KeyPrefix:     appCfg.Upload.KeyPrefix,
 		PartSizeBytes: appCfg.Upload.PartSizeBytes,
 		SessionTTL:    appCfg.Upload.SessionTTL,
 		PresignTTL:    appCfg.Upload.PresignTTL,
 	})
+
+	if mqClient != nil {
+		cleanupConsumer := service.NewProblemCleanupConsumer(mqClient, problemRepo, objStorage, service.CleanupOptions{
+			Bucket:        appCfg.MinIO.Bucket,
+			KeyPrefix:     appCfg.Upload.KeyPrefix,
+			BatchSize:     appCfg.Cleanup.BatchSize,
+			ListTimeout:   appCfg.Cleanup.ListTimeout,
+			DeleteTimeout: appCfg.Cleanup.DeleteTimeout,
+			MaxUploads:    appCfg.Cleanup.MaxUploads,
+		})
+		if err := cleanupConsumer.Subscribe(context.Background(), appCfg.Cleanup.Topic, appCfg.Cleanup.ConsumerGroup, appCfg.Cleanup.toSubscribeOptions()); err != nil {
+			logger.Error(context.Background(), "subscribe cleanup events failed", zap.Error(err))
+			return
+		}
+	}
 
 	httpServer := buildHTTPServer(appCfg.Server, problemService, uploadService)
 	grpcServer := grpc.NewServer()
@@ -115,6 +148,9 @@ func main() {
 	defer cancel()
 	if err := httpServer.Shutdown(ctx); err != nil {
 		logger.Error(context.Background(), "http server shutdown failed", zap.Error(err))
+	}
+	if mqClient != nil {
+		_ = mqClient.Stop()
 	}
 	grpcServer.GracefulStop()
 }

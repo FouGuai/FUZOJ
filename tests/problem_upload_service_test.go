@@ -434,6 +434,20 @@ func (s *fakeObjectStorage) StatObject(ctx context.Context, bucket, objectKey st
 	return stat, nil
 }
 
+func (s *fakeObjectStorage) ListObjects(ctx context.Context, bucket, prefix string) <-chan storage.ObjectInfo {
+	out := make(chan storage.ObjectInfo, 1)
+	close(out)
+	return out
+}
+
+func (s *fakeObjectStorage) RemoveObjects(ctx context.Context, bucket string, keys []string) error {
+	return nil
+}
+
+func (s *fakeObjectStorage) ListMultipartUploads(ctx context.Context, bucket, prefix, keyMarker, uploadIDMarker string, maxUploads int) (storage.ListMultipartUploadsResult, error) {
+	return storage.ListMultipartUploadsResult{}, nil
+}
+
 type fakeObjectReader struct {
 	*bytes.Reader
 }

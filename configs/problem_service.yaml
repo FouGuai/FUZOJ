@@ -20,6 +20,10 @@ database:
   connMaxLifetime: "5m"
   connMaxIdleTime: "10m"
 
+kafka:
+  brokers: ["127.0.0.1:9092"]
+  clientID: "problem-service"
+
 redis:
   addr: "127.0.0.1:6379"
   password: ""
@@ -45,6 +49,21 @@ minio:
   presignTTL: "15m"
 
 upload:
+  keyPrefix: "problems"
   partSizeBytes: 16777216
   sessionTTL: "2h"
   presignTTL: "15m"
+
+cleanup:
+  topic: "problem.cleanup"
+  consumerGroup: "problem-cleanup"
+  prefetchCount: 10
+  concurrency: 2
+  maxRetries: 3
+  retryDelay: "1s"
+  deadLetterTopic: ""
+  messageTTL: "0s"
+  batchSize: 1000
+  listTimeout: "30s"
+  deleteTimeout: "2m"
+  maxUploads: 1000
