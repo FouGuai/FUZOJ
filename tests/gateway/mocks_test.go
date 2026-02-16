@@ -3,6 +3,7 @@ package gateway_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -41,6 +42,21 @@ func (m *mockSetCache) SRem(ctx context.Context, key string, members ...interfac
 		delete(set, fmt.Sprint(member))
 	}
 	return nil
+}
+
+func (m *mockSetCache) SMembers(ctx context.Context, key string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	set := m.sets[key]
+	if set == nil {
+		return []string{}, nil
+	}
+	members := make([]string, 0, len(set))
+	for member := range set {
+		members = append(members, member)
+	}
+	sort.Strings(members)
+	return members, nil
 }
 
 func (m *mockSetCache) SIsMember(ctx context.Context, key string, member interface{}) (bool, error) {

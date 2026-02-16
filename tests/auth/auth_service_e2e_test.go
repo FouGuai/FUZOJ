@@ -1,4 +1,4 @@
-package tests
+package auth_test
 
 import (
 	"bytes"
@@ -29,8 +29,8 @@ const (
 	loginFailIPPrefix     = "login:fail:ip:"
 	tokenBlacklistKey     = "token:blacklist"
 	tokenCacheKeyPrefix   = "token:hash:"
-	testConfigPath        = "./test.yaml"
-	schemaFilePath        = "../internal/user/schema.sql"
+	testConfigPath        = "../test.yaml"
+	schemaFilePath        = "../../internal/user/schema.sql"
 	defaultTestConfigYAML = `mysql:
   dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj_test?parseTime=true&loc=Local"
   maxOpenConnections: 25

@@ -136,6 +136,7 @@
 ### 接口文档
 - **Controller API Index**：`docs/controller_api.md` — Controller 层接口汇总（按 Service 划分）
 - 接口请放在 `docs/controller_api.md`
+- **新增/变更 Controller 接口时必须同步更新 CLI 调试客户端与 `docs/cli_client.md`**
 
 ### 在 AGENTS.md 中的注册方式
 
@@ -159,3 +160,4 @@
 - **Judge Service**：`docs/judge_service.md` — Kafka 判题消费、数据包缓存与状态机查询服务
 - **Submit Service**：`docs/submit_service.md` — 面向前端的判题入口与提交分发服务
 - **Gateway**：`docs/gateway.md` — 统一流量入口的鉴权、限流与反向代理网关
+- **CLI Client**：`docs/cli_client.md` — 面向联调用的命令行客户端，覆盖主要 HTTP 接口

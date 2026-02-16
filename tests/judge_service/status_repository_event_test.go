@@ -1,4 +1,4 @@
-package tests
+package judge_service_test
 
 import (
 	"context"

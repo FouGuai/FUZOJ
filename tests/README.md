@@ -2,10 +2,15 @@
 
 ## 结构
 
-- `testing_suite.go`: 测试套件基础功能，提供统一的 setup 和 teardown
-- `helpers.go`: 测试辅助函数，包括断言和工具函数
-- `example_test.go`: 示例测试，展示如何使用测试框架
-- `error_test.go`: 错误处理相关测试
+- `testutil/`: 通用测试工具包（断言、测试套件、示例）
+- `auth/`: 用户认证服务相关测试（含端到端）
+- `problem/`: 题目上传与清理相关测试
+- `sandbox/`: 沙箱执行与 Runner/Worker 相关测试
+- `judge_service/`: 判题服务相关测试
+- `gateway/`: 网关相关测试
+- `errors/`: 统一错误码相关测试
+- `cli/`: CLI 调试客户端测试
+- `test.yaml`: 端到端测试配置模板
 
 ## 运行测试
 
@@ -14,9 +19,25 @@
 go test ./tests/... -v
 ```
 
+## 服务启动与关闭
+
+使用测试环境时可通过脚本启动/关闭 HTTP 服务，启动后会输出各服务的 HTTP 端口号。
+
+```bash
+make -C tests start
+make -C tests down
+```
+
+如需只启动/关闭某个服务：
+
+```bash
+../scripts/start_services.sh --only gateway
+../scripts/stop_services.sh --only gateway
+```
+
 ### 运行指定测试
 ```bash
-go test ./tests -run TestExample -v
+go test ./tests/testutil -run TestExample -v
 ```
 
 ### 运行基准测试
@@ -37,22 +58,24 @@ go test ./tests/... -race
 
 ## 编写测试
 
+使用通用断言与测试套件时，请先引入 `fuzoj/tests/testutil`。
+
 ### 基本测试
 ```go
 func TestMyFunction(t *testing.T) {
     got := MyFunction()
     want := "expected"
-    AssertEqual(t, got, want)
+    testutil.AssertEqual(t, got, want)
 }
 ```
 
 ### 使用测试套件
 ```go
 func TestWithSuite(t *testing.T) {
-    suite := NewTestSuite(t)
+    suite := testutil.NewTestSuite(t)
     suite.RunTest("test case", func() {
         // 测试逻辑
-        AssertTrue(t, condition, "message")
+        testutil.AssertTrue(t, condition, "message")
     })
 }
 ```
@@ -72,7 +95,7 @@ func TestTableDriven(t *testing.T) {
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             got := MyFunction(tt.input)
-            AssertEqual(t, got, tt.want)
+            testutil.AssertEqual(t, got, tt.want)
         })
     }
 }
@@ -92,7 +115,7 @@ func TestTableDriven(t *testing.T) {
 该测试会通过 HTTP 接口调用认证流程，并校验 MySQL 与 Redis 的落库/缓存结果。
 测试会自动执行建表（`users`、`user_tokens`）。
 
-运行前需要配置仓库根目录的 `test.yaml`：
+运行前需要配置 `tests/test.yaml`：
 
 ```yaml
 mysql:
@@ -104,5 +127,5 @@ redis:
 运行示例：
 
 ```bash
-go test ./tests -run TestAuthService_EndToEnd -v
+go test ./tests/auth -run TestAuthService_EndToEnd -v
 ```

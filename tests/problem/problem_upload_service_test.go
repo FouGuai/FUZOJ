@@ -1,4 +1,4 @@
-package tests
+package problem_test
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"fuzoj/internal/common/storage"
 	"fuzoj/internal/problem/repository"
 	"fuzoj/internal/problem/service"
+	"fuzoj/tests/testutil"
 )
 
 func TestProblemUploadServiceFullFlow(t *testing.T) {
@@ -57,21 +58,21 @@ func TestProblemUploadServiceFullFlow(t *testing.T) {
 				ContentType:    "application/octet-stream",
 				CreatedBy:      10,
 			})
-			AssertNil(t, err)
-			AssertTrue(t, prepareOut.UploadSessionID > 0, "upload session should be created")
-			AssertTrue(t, prepareOut.MultipartUploadID != "", "multipart upload id should be set")
+			testutil.AssertNil(t, err)
+			testutil.AssertTrue(t, prepareOut.UploadSessionID > 0, "upload session should be created")
+			testutil.AssertTrue(t, prepareOut.MultipartUploadID != "", "multipart upload id should be set")
 
 			signOut, err := svc.SignUploadParts(ctx, service.SignPartsInput{
 				ProblemID:       1,
 				UploadSessionID: prepareOut.UploadSessionID,
 				PartNumbers:     tc.expectedParts,
 			})
-			AssertNil(t, err)
-			AssertEqual(t, len(signOut.URLs), len(tc.expectedParts))
-			AssertEqual(t, signOut.ExpiresInSeconds, int64(time.Minute.Seconds()))
+			testutil.AssertNil(t, err)
+			testutil.AssertEqual(t, len(signOut.URLs), len(tc.expectedParts))
+			testutil.AssertEqual(t, signOut.ExpiresInSeconds, int64(time.Minute.Seconds()))
 
-			manifest := MustMarshalJSON(t, map[string]interface{}{"name": "demo"})
-			config := MustMarshalJSON(t, map[string]interface{}{"time_limit_ms": 1000})
+			manifest := testutil.MustMarshalJSON(t, map[string]interface{}{"name": "demo"})
+			config := testutil.MustMarshalJSON(t, map[string]interface{}{"time_limit_ms": 1000})
 
 			parts := make([]service.CompletedPartInput, 0, len(tc.expectedParts))
 			for _, partNumber := range tc.expectedParts {
@@ -90,15 +91,15 @@ func TestProblemUploadServiceFullFlow(t *testing.T) {
 				ManifestHash:    tc.manifestHash,
 				DataPackHash:    tc.dataPackHash,
 			})
-			AssertNil(t, err)
-			AssertEqual(t, completeOut.Version, prepareOut.Version)
-			AssertEqual(t, completeOut.DataPackKey, prepareOut.ObjectKey)
+			testutil.AssertNil(t, err)
+			testutil.AssertEqual(t, completeOut.Version, prepareOut.Version)
+			testutil.AssertEqual(t, completeOut.DataPackKey, prepareOut.ObjectKey)
 
 			err = svc.PublishVersion(ctx, service.PublishInput{
 				ProblemID: 1,
 				Version:   prepareOut.Version,
 			})
-			AssertNil(t, err)
+			testutil.AssertNil(t, err)
 		})
 	}
 }

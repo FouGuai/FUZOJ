@@ -41,6 +41,7 @@ docker-data/
 minio-data/
 mysql-data/
 redis-data/
+configs/dev.generated/
 
 # Buffer & Keys
 *.pem

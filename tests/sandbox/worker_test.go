@@ -1,4 +1,4 @@
-package tests
+package sandbox_test
 
 import (
 	"context"

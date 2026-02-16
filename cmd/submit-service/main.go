@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"net"
 	"net/http"
@@ -25,10 +26,13 @@ import (
 	"go.uber.org/zap"
 )
 
-const appConfigPath = "configs/submit_service.yaml"
+const defaultConfigPath = "configs/submit_service.yaml"
 
 func main() {
-	appCfg, err := loadAppConfig(appConfigPath)
+	configPath := flag.String("config", defaultConfigPath, "Path to config file")
+	flag.Parse()
+
+	appCfg, err := loadAppConfig(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load app config failed: %v\n", err)
 		return

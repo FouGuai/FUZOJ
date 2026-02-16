@@ -21,8 +21,7 @@ func TestAuthMiddleware(t *testing.T) {
 	authService := service.NewAuthService(secret, issuer, nil, nil)
 
 	router := gin.New()
-	router.Use(middleware.AuthMiddleware(authService, middleware.AuthPolicy{Mode: "protected", Roles: []string{"admin"}}))
-	router.GET("/protected", func(c *gin.Context) {
+	router.GET("/protected", middleware.AuthMiddleware(authService, middleware.AuthPolicy{Mode: "protected", Roles: []string{"admin"}}), func(c *gin.Context) {
 		if userID, ok := c.Get("user_id"); ok {
 			c.Header("X-User-Id", fmt.Sprint(userID))
 		}
@@ -94,8 +93,7 @@ func TestAuthMiddlewareRoleDenied(t *testing.T) {
 	authService := service.NewAuthService(secret, issuer, nil, nil)
 
 	router := gin.New()
-	router.Use(middleware.AuthMiddleware(authService, middleware.AuthPolicy{Mode: "protected", Roles: []string{"admin"}}))
-	router.GET("/protected", func(c *gin.Context) {
+	router.GET("/protected", middleware.AuthMiddleware(authService, middleware.AuthPolicy{Mode: "protected", Roles: []string{"admin"}}), func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
 

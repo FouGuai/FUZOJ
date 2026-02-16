@@ -1,0 +1,17 @@
+outputDir: "configs/dev.generated"
+services:
+  gateway:
+    base: "configs/gateway.yaml"
+    output: "gateway.yaml"
+  user-service:
+    base: "configs/user_service.yaml"
+    output: "user_service.yaml"
+  problem-service:
+    base: "configs/problem_service.yaml"
+    output: "problem_service.yaml"
+  submit-service:
+    base: "configs/submit_service.yaml"
+    output: "submit_service.yaml"
+  judge-service:
+    base: "configs/judge_service.yaml"
+    output: "judge_service.yaml"

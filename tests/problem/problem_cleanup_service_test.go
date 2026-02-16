@@ -1,4 +1,4 @@
-package tests
+package problem_test
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"fuzoj/internal/problem/model"
 	"fuzoj/internal/problem/repository"
 	"fuzoj/internal/problem/service"
+	"fuzoj/tests/testutil"
 )
 
 func TestProblemCleanupConsumerSkipExisting(t *testing.T) {
@@ -33,9 +34,9 @@ func TestProblemCleanupConsumerSkipExisting(t *testing.T) {
 
 	msg := buildCleanupMessage(t, 1, "problem-bucket", "problems/1/")
 	err := consumer.HandleMessage(context.Background(), msg)
-	AssertNil(t, err)
-	AssertEqual(t, store.abortedCount(), 0)
-	AssertEqual(t, store.removedCount(), 0)
+	testutil.AssertNil(t, err)
+	testutil.AssertEqual(t, store.abortedCount(), 0)
+	testutil.AssertEqual(t, store.removedCount(), 0)
 }
 
 func TestProblemCleanupConsumerDeletesData(t *testing.T) {
@@ -58,9 +59,9 @@ func TestProblemCleanupConsumerDeletesData(t *testing.T) {
 
 	msg := buildCleanupMessage(t, 2, "problem-bucket", "problems/2/")
 	err := consumer.HandleMessage(context.Background(), msg)
-	AssertNil(t, err)
-	AssertEqual(t, store.abortedCount(), 1)
-	AssertEqual(t, store.removedCount(), 3)
+	testutil.AssertNil(t, err)
+	testutil.AssertEqual(t, store.abortedCount(), 1)
+	testutil.AssertEqual(t, store.removedCount(), 3)
 }
 
 func buildCleanupMessage(t *testing.T, problemID int64, bucket, prefix string) *mq.Message {
@@ -72,7 +73,7 @@ func buildCleanupMessage(t *testing.T, problemID int64, bucket, prefix string) *
 		Prefix:    prefix,
 	}
 	body, err := json.Marshal(event)
-	AssertNil(t, err)
+	testutil.AssertNil(t, err)
 	return mq.NewMessage(body)
 }
 
