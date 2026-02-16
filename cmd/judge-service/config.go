@@ -253,7 +253,7 @@ func parseCompression(raw string) kafka.Compression {
 	case "zstd":
 		return kafka.Zstd
 	default:
-		return kafka.None
+		return kafka.Compression(0)
 	}
 }
 

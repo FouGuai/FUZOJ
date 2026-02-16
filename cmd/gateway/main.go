@@ -171,11 +171,13 @@ func buildHTTPServer(cfg *AppConfig, authService *service.AuthService, rateServi
 			middleware.RateLimitMiddleware(rateService, routeKey, ratePolicy, cfg.Rate.Window),
 			middleware.ProxyHandler(proxy, routeKey, route.Timeout, route.StripPrefix),
 		}
-		if len(route.Methods) == 0 {
-			route.Methods = []string{http.MethodGet}
+			if len(route.Methods) == 0 {
+				route.Methods = []string{http.MethodGet}
+			}
+			for _, method := range route.Methods {
+				router.Handle(method, route.Path, handlers...)
+			}
 		}
-		router.Handle(route.Methods, route.Path, handlers...)
-	}
 
 	return &http.Server{
 		Addr:           cfg.Server.Addr,

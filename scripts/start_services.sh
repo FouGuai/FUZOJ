@@ -3,10 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$ROOT_DIR/logs"
+BIN_DIR="$LOG_DIR/bin"
 PROFILE_PATH="configs/dev-profile.yaml"
 OUTPUT_DIR="configs/dev.generated"
 ONLY_SERVICES=""
 NO_GEN="false"
+NO_BUILD="false"
 
 mkdir -p "$LOG_DIR"
 
@@ -19,6 +21,7 @@ Options:
   --output-dir <path>  Override output directory (default: configs/dev.generated)
   --only <list>        Comma-separated service list to start
   --no-gen             Skip config generation
+  --no-build           Skip binary build
 EOF
 }
 
@@ -38,6 +41,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-gen)
       NO_GEN="true"
+      shift 1
+      ;;
+    --no-build)
+      NO_BUILD="true"
       shift 1
       ;;
     -h|--help)
@@ -73,10 +80,18 @@ generate_configs() {
   (cd "$ROOT_DIR" && go run ./scripts/devtools/configgen -profile "$PROFILE_PATH" -output-dir "$OUTPUT_DIR")
 }
 
+build_services() {
+  if [[ "$NO_BUILD" == "true" ]]; then
+    return 0
+  fi
+  "$ROOT_DIR/scripts/build_services.sh" --bin-dir "$BIN_DIR" --only "$ONLY_SERVICES"
+}
+
 run_service() {
   local name="$1"
-  local pkg="$2"
-  local config="$3"
+  local config="$2"
+  local pid_file="$LOG_DIR/$name.pid"
+  local bin_path="$BIN_DIR/$name"
   local config_path="$config"
   if [[ "$config_path" != /* ]]; then
     config_path="$ROOT_DIR/$config_path"
@@ -88,17 +103,27 @@ run_service() {
     echo "config file not found: $config_path" >&2
     exit 1
   fi
+  if [[ ! -x "$bin_path" ]]; then
+    echo "binary not found or not executable: $bin_path" >&2
+    exit 1
+  fi
   echo "starting $name..."
-  (cd "$ROOT_DIR" && nohup go run "$pkg" -config "$config_path" >"$LOG_DIR/$name.log" 2>&1 & echo $! >"$LOG_DIR/$name.pid")
+  (cd "$ROOT_DIR" && nohup "$bin_path" -config "$config_path" >"$LOG_DIR/$name.log" 2>&1 & echo $! >"$pid_file")
+  if [[ -f "$pid_file" ]]; then
+    local pid
+    pid="$(cat "$pid_file")"
+    echo "$name pid: $pid"
+  fi
 }
 
 generate_configs
+build_services
 
-run_service "user-service" "./cmd/user-service" "$OUTPUT_DIR/user_service.yaml"
-run_service "problem-service" "./cmd/problem-service" "$OUTPUT_DIR/problem_service.yaml"
-run_service "submit-service" "./cmd/submit-service" "$OUTPUT_DIR/submit_service.yaml"
-run_service "judge-service" "./cmd/judge-service" "$OUTPUT_DIR/judge_service.yaml"
-run_service "gateway" "./cmd/gateway" "$OUTPUT_DIR/gateway.yaml"
+run_service "user-service" "$OUTPUT_DIR/user_service.yaml"
+run_service "problem-service" "$OUTPUT_DIR/problem_service.yaml"
+run_service "submit-service" "$OUTPUT_DIR/submit_service.yaml"
+run_service "judge-service" "$OUTPUT_DIR/judge_service.yaml"
+run_service "gateway" "$OUTPUT_DIR/gateway.yaml"
 
 print_http_ports() {
   local name="$1"

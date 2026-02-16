@@ -10,7 +10,7 @@ CLI 客户端提供类 telnet 的 REPL 交互方式，用于本地/测试环境�
 - 配置文件：`configs/cli.yaml`
   - `baseURL`：基础地址
   - `timeout`：HTTP 超时
-  - `tokenStatePath`：token 状态文件
+  - `tokenStatePath`：token 状态文件（默认 `configs/cli_state.json`，已在 `.gitignore` 中忽略）
   - `prettyJSON`：是否格式化 JSON 输出
 - 常用系统指令：
   - `help`、`exit`

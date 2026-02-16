@@ -27,7 +27,13 @@ func main() {
 	outputDir := flag.String("output-dir", "", "Override output directory")
 	flag.Parse()
 
-	profile, err := loadProfile(*profilePath)
+	profilePathAbs, err := filepath.Abs(*profilePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve profile path failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	profile, err := loadProfile(profilePathAbs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load profile failed: %v\n", err)
 		os.Exit(1)
@@ -39,6 +45,10 @@ func main() {
 	if profile.OutputDir == "" {
 		fmt.Fprintln(os.Stderr, "output directory is required")
 		os.Exit(1)
+	}
+	profileDir := filepath.Dir(profilePathAbs)
+	if !filepath.IsAbs(profile.OutputDir) {
+		profile.OutputDir = filepath.Join(profileDir, profile.OutputDir)
 	}
 
 	if err := os.MkdirAll(profile.OutputDir, 0o755); err != nil {
@@ -57,6 +67,9 @@ func main() {
 		if service.Base == "" {
 			fmt.Fprintf(os.Stderr, "service %q missing base config\n", name)
 			os.Exit(1)
+		}
+		if !filepath.IsAbs(service.Base) {
+			service.Base = filepath.Join(profileDir, service.Base)
 		}
 
 		baseConfig, err := loadYAML(service.Base)

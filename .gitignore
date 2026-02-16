@@ -34,6 +34,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+logs/bin/
 
 # Data
 data/
@@ -42,6 +43,7 @@ minio-data/
 mysql-data/
 redis-data/
 configs/dev.generated/
+configs/cli_state.json
 
 # Buffer & Keys
 *.pem
@@ -53,3 +55,4 @@ coverage.html
 coverage.out
 
 core.*
+configs/configs/dev.generated/*
