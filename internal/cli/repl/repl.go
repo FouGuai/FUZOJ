@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"fuzoj/internal/cli/state"
 	pkgerrors "fuzoj/pkg/errors"
 
+	"github.com/chzyer/readline"
 	"github.com/google/shlex"
 )
 
@@ -25,6 +28,49 @@ type Session struct {
 	statePath    string
 	prettyJSON   bool
 	outputWriter *bufio.Writer
+}
+
+type lineReader interface {
+	ReadLine(prompt string, recordHistory bool) (string, error)
+	Close() error
+}
+
+type readlineLineReader struct {
+	rl *readline.Instance
+}
+
+func (r *readlineLineReader) ReadLine(prompt string, recordHistory bool) (string, error) {
+	r.rl.SetPrompt(prompt)
+	if !recordHistory {
+		r.rl.HistoryDisable()
+		defer r.rl.HistoryEnable()
+	}
+	return r.rl.Readline()
+}
+
+func (r *readlineLineReader) Close() error {
+	return r.rl.Close()
+}
+
+type bufioLineReader struct {
+	reader *bufio.Reader
+	writer *bufio.Writer
+}
+
+func (r *bufioLineReader) ReadLine(prompt string, _ bool) (string, error) {
+	if prompt != "" {
+		_, _ = r.writer.WriteString(prompt)
+		_ = r.writer.Flush()
+	}
+	line, err := r.reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+func (r *bufioLineReader) Close() error {
+	return nil
 }
 
 func New(client *httpclient.Client, commands map[string]command.Command, tokenState *state.TokenState, statePath string, prettyJSON bool) *Session {
@@ -39,12 +85,16 @@ func New(client *httpclient.Client, commands map[string]command.Command, tokenSt
 }
 
 func (s *Session) Run(ctx context.Context) {
-	reader := bufio.NewReader(os.Stdin)
+	reader, writer := s.newLineReader()
+	defer func() { _ = reader.Close() }()
+	s.outputWriter = writer
 	for {
-		_, _ = s.outputWriter.WriteString("fuzoj> ")
-		_ = s.outputWriter.Flush()
-		line, err := reader.ReadString('\n')
+		line, err := reader.ReadLine("fuzoj> ", true)
 		if err != nil {
+			if errors.Is(err, readline.ErrInterrupt) || errors.Is(err, io.EOF) {
+				s.printLine("bye")
+				return
+			}
 			s.printLine("read input failed: %v", err)
 			return
 		}
@@ -60,6 +110,22 @@ func (s *Session) Run(ctx context.Context) {
 			s.printLine("error: %v", err)
 		}
 	}
+}
+
+func (s *Session) newLineReader() (lineReader, *bufio.Writer) {
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:            "fuzoj> ",
+		HistorySearchFold: true,
+	})
+	if err == nil {
+		writer := bufio.NewWriter(rl.Stdout())
+		return &readlineLineReader{rl: rl}, writer
+	}
+	writer := bufio.NewWriter(os.Stdout)
+	return &bufioLineReader{
+		reader: bufio.NewReader(os.Stdin),
+		writer: writer,
+	}, writer
 }
 
 func (s *Session) handleSystemCommand(line string) bool {
@@ -143,7 +209,7 @@ func (s *Session) handleShow(args string) {
 	}
 }
 
-func (s *Session) handleCommand(ctx context.Context, reader *bufio.Reader, line string) error {
+func (s *Session) handleCommand(ctx context.Context, reader lineReader, line string) error {
 	tokens, err := shlex.Split(line)
 	if err != nil {
 		return fmt.Errorf("parse command failed: %w", err)
@@ -203,7 +269,7 @@ func (s *Session) applyParamShortcuts(cmd *command.Command, params command.Param
 	}
 }
 
-func (s *Session) promptMissing(reader *bufio.Reader, cmd *command.Command, params command.Params) error {
+func (s *Session) promptMissing(reader lineReader, cmd *command.Command, params command.Params) error {
 	for _, field := range cmd.Fields {
 		if !field.Required {
 			continue
@@ -223,9 +289,9 @@ func (s *Session) promptMissing(reader *bufio.Reader, cmd *command.Command, para
 	return nil
 }
 
-func (s *Session) promptValue(reader *bufio.Reader, prompt string) (string, error) {
+func (s *Session) promptValue(reader lineReader, prompt string) (string, error) {
 	s.printLine("%s:", prompt)
-	line, err := reader.ReadString('\n')
+	line, err := reader.ReadLine("", false)
 	if err != nil {
 		return "", fmt.Errorf("read input failed: %w", err)
 	}

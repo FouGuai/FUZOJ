@@ -28,7 +28,7 @@ CLI 客户端提供类 telnet 的 REPL 交互方式，用于本地/测试环境�
 - 题目发布接口路径：
   - `POST /api/v1/problems/:id/versions/:version/publish`
 
-提示：`submit create` 可使用 `source_file=./main.cpp` 读取源码；`upload-complete` 支持 `parts_file`、`manifest_file`、`config_file` 读取 JSON 文件，避免在终端中直接粘贴长内容。
+提示：REPL 支持方向键历史与行内编辑（仅当前会话生效）；`submit create` 可使用 `source_file=./main.cpp` 读取源码；`upload-complete` 支持 `parts_file`、`manifest_file`、`config_file` 读取 JSON 文件，避免在终端中直接粘贴长内容。
 
 ## 使用示例
 
