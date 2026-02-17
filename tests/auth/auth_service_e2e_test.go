@@ -29,30 +29,8 @@ const (
 	loginFailIPPrefix     = "login:fail:ip:"
 	tokenBlacklistKey     = "token:blacklist"
 	tokenCacheKeyPrefix   = "token:hash:"
-	testConfigPath        = "../test.yaml"
+	testConfigPath        = "../../configs/dev.generated/test.yaml"
 	schemaFilePath        = "../../internal/user/schema.sql"
-	defaultTestConfigYAML = `mysql:
-  dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj_test?parseTime=true&loc=Local"
-  maxOpenConnections: 25
-  maxIdleConnections: 5
-  connMaxLifetime: "5m"
-  connMaxIdleTime: "10m"
-redis:
-  addr: "127.0.0.1:6379"
-  password: ""
-  db: 0
-  maxRetries: 3
-  minRetryBackoff: "8ms"
-  maxRetryBackoff: "512ms"
-  dialTimeout: "5s"
-  readTimeout: "3s"
-  writeTimeout: "3s"
-  poolSize: 20
-  minIdleConns: 2
-  poolTimeout: "4s"
-  connMaxIdleTime: "10m"
-  connMaxLifetime: "30m"
-`
 )
 
 type testConfig struct {
@@ -388,13 +366,7 @@ func loadTestConfig(t *testing.T) *testConfig {
 
 	data, err := os.ReadFile(testConfigPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			ensureDefaultTestConfig(t, testConfigPath)
-			data, err = os.ReadFile(testConfigPath)
-		}
-		if err != nil {
-			t.Fatalf("read test config failed: %v", err)
-		}
+		t.Fatalf("read test config failed: %v (run `make start` to generate %s)", err, testConfigPath)
 	}
 
 	var cfg testConfig
@@ -410,14 +382,6 @@ func loadTestConfig(t *testing.T) *testConfig {
 	}
 
 	return &cfg
-}
-
-func ensureDefaultTestConfig(t *testing.T, path string) {
-	t.Helper()
-
-	if err := os.WriteFile(path, []byte(defaultTestConfigYAML), 0o644); err != nil {
-		t.Fatalf("write default test config failed: %v", err)
-	}
 }
 
 func newE2EDeps(t *testing.T, cfg *testConfig) (*db.MySQL, cache.Cache) {

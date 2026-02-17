@@ -59,6 +59,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$OUTPUT_DIR" != /* ]]; then
+  OUTPUT_DIR="$ROOT_DIR/$OUTPUT_DIR"
+fi
+
 should_run() {
   local name="$1"
   if [[ -z "$ONLY_SERVICES" ]]; then
@@ -78,6 +82,35 @@ generate_configs() {
     return 0
   fi
   (cd "$ROOT_DIR" && go run ./scripts/devtools/configgen -profile "$PROFILE_PATH" -output-dir "$OUTPUT_DIR")
+}
+
+update_cli_config() {
+  local gateway_config="$OUTPUT_DIR/gateway.yaml"
+  if [[ ! -f "$gateway_config" ]]; then
+    return 0
+  fi
+  local addr
+  addr="$(awk '
+    /^server:/ {in_server=1; next}
+    in_server && $1 == "addr:" {print $2; exit}
+    in_server && /^[^[:space:]]/ {in_server=0}
+  ' "$gateway_config")"
+  if [[ -z "$addr" ]]; then
+    return 0
+  fi
+  addr="${addr%\"}"
+  addr="${addr#\"}"
+  local port="${addr##*:}"
+  local base_url="http://127.0.0.1:${port}"
+  local tmp
+  tmp="$(mktemp)"
+  awk -v url="$base_url" '
+    BEGIN {updated=0}
+    /^baseURL:/ {print "baseURL: \"" url "\""; updated=1; next}
+    {print}
+    END {if (!updated) print "baseURL: \"" url "\""}
+  ' "$ROOT_DIR/configs/cli.yaml" >"$tmp"
+  mv "$tmp" "$ROOT_DIR/configs/cli.yaml"
 }
 
 build_services() {
@@ -108,15 +141,42 @@ run_service() {
     exit 1
   fi
   echo "starting $name..."
-  (cd "$ROOT_DIR" && nohup "$bin_path" -config "$config_path" >"$LOG_DIR/$name.log" 2>&1 & echo $! >"$pid_file")
+  local prev_dir
+  prev_dir="$(pwd)"
+  cd "$ROOT_DIR"
+  "$bin_path" -config "$config_path" >"$LOG_DIR/$name.log" 2>&1 < /dev/null &
+  local pid=$!
+  echo "$pid" >"$pid_file"
+  cd "$prev_dir"
   if [[ -f "$pid_file" ]]; then
-    local pid
-    pid="$(cat "$pid_file")"
+    local pid_from_file
+    pid_from_file="$(cat "$pid_file" | tr -d '[:space:]')"
+    if [[ -z "$pid_from_file" ]]; then
+      echo "$name failed to start (pid file empty)" >&2
+      exit 1
+    fi
+    pid="$pid_from_file"
+    sleep 0.2
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "$name failed to start (pid $pid exited early)" >&2
+      if [[ -f "$LOG_DIR/$name.log" ]]; then
+        tail -n 50 "$LOG_DIR/$name.log" >&2 || true
+      fi
+      exit 1
+    fi
+    if command -v readlink >/dev/null 2>&1 && [[ -e "/proc/$pid/exe" ]]; then
+      local exe_path
+      exe_path="$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)"
+      if [[ -n "$exe_path" && "$exe_path" != "$bin_path" ]]; then
+        echo "$name pid $pid does not match expected binary ($exe_path)" >&2
+      fi
+    fi
     echo "$name pid: $pid"
   fi
 }
 
 generate_configs
+update_cli_config
 build_services
 
 run_service "user-service" "$OUTPUT_DIR/user_service.yaml"

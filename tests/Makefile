@@ -1,11 +1,13 @@
-.PHONY: start down connect build status
+.PHONY: start down connect build status test
 
 start:
 	@$(MAKE) down
-	@../scripts/start_services.sh
+	@../scripts/start_deps.sh
+	@../scripts/start_services.sh --profile "$(ROOT_DIR)/configs/dev.generated/dev-profile.runtime.yaml"
 
 down:
 	@../scripts/stop_services.sh
+	@../scripts/stop_deps.sh
 
 build:
 	@../scripts/build_services.sh
@@ -43,3 +45,10 @@ connect:
 	else \
 		cd "$(ROOT_DIR)" && go run ./cmd/cli -config "$(CONFIG)"; \
 	fi
+
+test:
+	@$(MAKE) start
+	@$(MAKE) test-without-init
+
+test-without-init:
+	go test ./... -v -count=1

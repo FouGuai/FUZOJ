@@ -172,10 +172,10 @@ func buildHTTPServer(cfg ServerConfig, problemService *service.ProblemService, u
 
 	uploadController := controller.NewProblemUploadController(uploadService)
 	api.POST("/:id/data-pack/uploads:prepare", uploadController.Prepare)
-	api.POST("/:id/data-pack/uploads/:upload_id:sign", uploadController.Sign)
-	api.POST("/:id/data-pack/uploads/:upload_id:complete", uploadController.Complete)
-	api.POST("/:id/data-pack/uploads/:upload_id:abort", uploadController.Abort)
-	api.POST("/:id/versions/:version:publish", uploadController.Publish)
+	api.POST("/:id/data-pack/uploads/:upload_id/sign", uploadController.Sign)
+	api.POST("/:id/data-pack/uploads/:upload_id/complete", uploadController.Complete)
+	api.POST("/:id/data-pack/uploads/:upload_id/abort", uploadController.Abort)
+	api.POST("/:id/versions/:version/publish", uploadController.Publish)
 
 	return &http.Server{
 		Addr:         cfg.Addr,

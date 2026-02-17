@@ -50,6 +50,7 @@
     - `expires_at`（RFC3339 string）
 
 - **Sign**：为分片上传生成预签名 URL
+  - 路由：`POST /api/v1/problems/:id/data-pack/uploads/:upload_id/sign`
   - 路径参数：`id`（problem_id）、`upload_id`
   - 请求体：`SignPartsRequest`
     - `part_numbers`（[]int，必填）
@@ -58,6 +59,7 @@
     - `expires_in_seconds`（int64）
 
 - **Complete**：完成分片上传并落库元数据
+  - 路由：`POST /api/v1/problems/:id/data-pack/uploads/:upload_id/complete`
   - 路径参数：`id`（problem_id）、`upload_id`
   - 请求体：`CompleteUploadRequest`
     - `parts`（[]CompletedPartInput）
@@ -73,10 +75,12 @@
     - `data_pack_hash`（string）
 
 - **Abort**：中止上传会话
+  - 路由：`POST /api/v1/problems/:id/data-pack/uploads/:upload_id/abort`
   - 路径参数：`id`（problem_id）、`upload_id`
   - 响应：`SuccessWithMessage`
 
 - **Publish**：发布题目版本
+  - 路由：`POST /api/v1/problems/:id/versions/:version/publish`
   - 路径参数：`id`（problem_id）、`version`
   - 响应：`SuccessWithMessage`
 

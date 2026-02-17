@@ -103,7 +103,7 @@ func Registry() map[string]Command {
 			Service:      "problem",
 			Action:       "upload-sign",
 			Method:       "POST",
-			PathTemplate: "/api/v1/problems/:id/data-pack/uploads/:upload_id:sign",
+			PathTemplate: "/api/v1/problems/:id/data-pack/uploads/:upload_id/sign",
 			RequiresAuth: true,
 			Fields: []Field{
 				{Name: "id", Prompt: "problem_id", Type: FieldInt64, Required: true},
@@ -115,7 +115,7 @@ func Registry() map[string]Command {
 			Service:      "problem",
 			Action:       "upload-complete",
 			Method:       "POST",
-			PathTemplate: "/api/v1/problems/:id/data-pack/uploads/:upload_id:complete",
+			PathTemplate: "/api/v1/problems/:id/data-pack/uploads/:upload_id/complete",
 			RequiresAuth: true,
 			Fields: []Field{
 				{Name: "id", Prompt: "problem_id", Type: FieldInt64, Required: true},
@@ -134,7 +134,7 @@ func Registry() map[string]Command {
 			Service:      "problem",
 			Action:       "upload-abort",
 			Method:       "POST",
-			PathTemplate: "/api/v1/problems/:id/data-pack/uploads/:upload_id:abort",
+			PathTemplate: "/api/v1/problems/:id/data-pack/uploads/:upload_id/abort",
 			RequiresAuth: true,
 			Fields: []Field{
 				{Name: "id", Prompt: "problem_id", Type: FieldInt64, Required: true},
@@ -145,7 +145,7 @@ func Registry() map[string]Command {
 			Service:      "problem",
 			Action:       "publish",
 			Method:       "POST",
-			PathTemplate: "/api/v1/problems/:id/versions/:version:publish",
+			PathTemplate: "/api/v1/problems/:id/versions/:version/publish",
 			RequiresAuth: true,
 			Fields: []Field{
 				{Name: "id", Prompt: "problem_id", Type: FieldInt64, Required: true},
