@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"go.uber.org/zap"
@@ -14,7 +15,8 @@ var globalLogger *Logger
 
 // Logger wraps zap logger with context support
 type Logger struct {
-	zap *zap.Logger
+	zap   *zap.Logger
+	level zapcore.Level
 }
 
 // Config holds logger configuration
@@ -96,7 +98,7 @@ func NewLogger(cfg Config) (*Logger, error) {
 	// Create logger with caller info
 	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1), zap.AddStacktrace(zapcore.ErrorLevel))
 
-	return &Logger{zap: zapLogger}, nil
+	return &Logger{zap: zapLogger, level: level}, nil
 }
 
 // customTimeEncoder formats time in RFC3339 format
@@ -230,4 +232,22 @@ func Sync() error {
 // GetLogger returns the global logger instance
 func GetLogger() *Logger {
 	return globalLogger
+}
+
+// IsDebug reports whether the global logger is in debug level.
+func IsDebug() bool {
+	return globalLogger != nil && globalLogger.level == zapcore.DebugLevel
+}
+
+// CallerField returns a log field with file location and function name.
+func CallerField(skip int) zap.Field {
+	pc, file, line, ok := runtime.Caller(skip)
+	if !ok {
+		return zap.String("location", "unknown:0")
+	}
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return zap.String("location", fmt.Sprintf("%s:%d", file, line))
+	}
+	return zap.String("location", fmt.Sprintf("%s:%d %s", file, line, fn.Name()))
 }

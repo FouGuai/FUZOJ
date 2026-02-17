@@ -62,7 +62,7 @@ build_service() {
     return 0
   fi
   echo "building $name..."
-  (cd "$ROOT_DIR" && go build -o "$BIN_DIR/$name" "$pkg")
+  (cd "$ROOT_DIR" && go build -gcflags="all=-N -l" -o "$BIN_DIR/$name" "$pkg")
 }
 
 check_tool() {

@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"fuzoj/internal/cli/command"
-	"fuzoj/internal/cli/http"
+	httpclient "fuzoj/internal/cli/http"
 	"fuzoj/internal/cli/state"
+	pkgerrors "fuzoj/pkg/errors"
 
 	"github.com/google/shlex"
 )
@@ -165,6 +166,7 @@ func (s *Session) handleCommand(ctx context.Context, reader *bufio.Reader, line 
 		}
 		params.Set(parts[0], parts[1])
 	}
+
 	s.applyParamShortcuts(&cmd, params)
 	if err := s.promptMissing(reader, &cmd, params); err != nil {
 		return err
@@ -264,7 +266,7 @@ func (s *Session) updateTokenFromResponse(cmd command.Command, body []byte) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return
 	}
-	if resp.Code != 0 {
+	if resp.Code != int(pkgerrors.Success) {
 		return
 	}
 	switch cmd.Action {

@@ -1,4 +1,7 @@
 outputDir: "dev.generated"
+auth:
+  jwtSecret: "tyylovezsrtyylovezsr"
+  jwtIssuer: "fuzoj"
 services:
   gateway:
     base: "gateway.yaml"

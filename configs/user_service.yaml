@@ -34,7 +34,7 @@ redis:
   connMaxLifetime: "30m"
 
 auth:
-  jwtSecret: "change-me"
+  jwtSecret: "tyylovezsrtyylovezsr"
   jwtIssuer: "fuzoj"
   accessTokenTTL: "15m"
   refreshTokenTTL: "168h"

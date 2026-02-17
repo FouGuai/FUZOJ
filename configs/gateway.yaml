@@ -12,7 +12,7 @@ logger:
   errorPath: "stderr"
 
 auth:
-  jwtSecret: "replace-with-strong-secret"
+  jwtSecret: "tyylovezsrtyylovezsr"
   jwtIssuer: "fuzoj"
 
 redis:

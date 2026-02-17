@@ -2,6 +2,7 @@
 
 start:
 	@$(MAKE) down
+	@$(MAKE) build
 	@../scripts/start_deps.sh
 	@../scripts/start_services.sh --profile "$(ROOT_DIR)/configs/dev.generated/dev-profile.runtime.yaml"
 

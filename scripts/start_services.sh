@@ -21,7 +21,6 @@ Options:
   --output-dir <path>  Override output directory (default: configs/dev.generated)
   --only <list>        Comma-separated service list to start
   --no-gen             Skip config generation
-  --no-build           Skip binary build
 EOF
 }
 
@@ -41,10 +40,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-gen)
       NO_GEN="true"
-      shift 1
-      ;;
-    --no-build)
-      NO_BUILD="true"
       shift 1
       ;;
     -h|--help)
@@ -113,13 +108,6 @@ update_cli_config() {
   mv "$tmp" "$ROOT_DIR/configs/cli.yaml"
 }
 
-build_services() {
-  if [[ "$NO_BUILD" == "true" ]]; then
-    return 0
-  fi
-  "$ROOT_DIR/scripts/build_services.sh" --bin-dir "$BIN_DIR" --only "$ONLY_SERVICES"
-}
-
 run_service() {
   local name="$1"
   local config="$2"
@@ -177,7 +165,6 @@ run_service() {
 
 generate_configs
 update_cli_config
-build_services
 
 run_service "user-service" "$OUTPUT_DIR/user_service.yaml"
 run_service "problem-service" "$OUTPUT_DIR/problem_service.yaml"

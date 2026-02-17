@@ -51,6 +51,7 @@ func Error(c *gin.Context, err error) {
 		zap.String("message", customErr.Error()),
 		zap.Any("details", customErr.Details),
 		zap.String("stack", customErr.Stack),
+		debugLocationField(),
 	)
 
 	resp := Response{
@@ -72,6 +73,7 @@ func ErrorWithCode(c *gin.Context, code errors.ErrorCode, message string) {
 	logger.Error(c.Request.Context(), "request error",
 		zap.Int("code", int(code)),
 		zap.String("message", message),
+		debugLocationField(),
 	)
 
 	resp := Response{
@@ -92,6 +94,7 @@ func ErrorWithDetails(c *gin.Context, err error, details interface{}) {
 		zap.String("message", customErr.Error()),
 		zap.Any("details", details),
 		zap.String("stack", customErr.Stack),
+		debugLocationField(),
 	)
 
 	resp := Response{
@@ -123,6 +126,13 @@ func Forbidden(c *gin.Context, message string) {
 		message = errors.Forbidden.Message()
 	}
 	ErrorWithCode(c, errors.Forbidden, message)
+}
+
+func debugLocationField() zap.Field {
+	if logger.IsDebug() {
+		return logger.CallerField(3)
+	}
+	return zap.Skip()
 }
 
 // NotFound sends a 404 not found error

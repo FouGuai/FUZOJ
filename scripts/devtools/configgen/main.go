@@ -13,7 +13,13 @@ import (
 
 type Profile struct {
 	OutputDir string                    `yaml:"outputDir"`
+	Auth      AuthProfile               `yaml:"auth"`
 	Services  map[string]ServiceProfile `yaml:"services"`
+}
+
+type AuthProfile struct {
+	JWTSecret string `yaml:"jwtSecret"`
+	JWTIssuer string `yaml:"jwtIssuer"`
 }
 
 type ServiceProfile struct {
@@ -87,6 +93,11 @@ func main() {
 				os.Exit(1)
 			}
 			baseConfig = merged
+		}
+		baseConfig, err = applySharedAuth(profile, name, baseConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "apply shared auth for %q failed: %v\n", name, err)
+			os.Exit(1)
 		}
 
 		outputPath, err := resolveOutputPath(profile.OutputDir, service)
@@ -223,4 +234,32 @@ func mergeMap(base interface{}, override interface{}) (interface{}, error) {
 		merged[key] = overrideValue
 	}
 	return merged, nil
+}
+
+func applySharedAuth(profile *Profile, serviceName string, config interface{}) (interface{}, error) {
+	if profile == nil {
+		return config, nil
+	}
+	if profile.Auth.JWTSecret == "" && profile.Auth.JWTIssuer == "" {
+		return config, nil
+	}
+	if serviceName != "gateway" && serviceName != "user-service" {
+		return config, nil
+	}
+	root, ok := config.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("service config is not a map")
+	}
+	auth, ok := root["auth"].(map[string]interface{})
+	if !ok {
+		auth = map[string]interface{}{}
+		root["auth"] = auth
+	}
+	if profile.Auth.JWTSecret != "" {
+		auth["jwtSecret"] = profile.Auth.JWTSecret
+	}
+	if profile.Auth.JWTIssuer != "" {
+		auth["jwtIssuer"] = profile.Auth.JWTIssuer
+	}
+	return root, nil
 }
