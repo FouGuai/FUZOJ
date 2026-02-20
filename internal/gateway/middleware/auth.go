@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"context"
 	"strings"
 
 	"fuzoj/internal/gateway/service"
 	pkgerrors "fuzoj/pkg/errors"
+	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +43,8 @@ func AuthMiddleware(authService *service.AuthService, policy AuthPolicy) gin.Han
 
 		c.Set("user_id", info.ID)
 		c.Set("user_role", info.Role)
+		ctx := context.WithValue(c.Request.Context(), contextkey.UserID, info.ID)
+		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
 }

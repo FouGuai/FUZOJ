@@ -56,10 +56,10 @@ func ProxyHandler(proxy *httputil.ReverseProxy, routeName string, timeout time.D
 
 func injectHeaders(c *gin.Context, req *http.Request, routeName string) {
 	if traceID, ok := c.Get("trace_id"); ok {
-		req.Header.Set("X-Trace-Id", traceID.(string))
+		req.Header.Set("X-Trace-Id", toString(traceID))
 	}
 	if requestID, ok := c.Get("request_id"); ok {
-		req.Header.Set("X-Request-Id", requestID.(string))
+		req.Header.Set("X-Request-Id", toString(requestID))
 	}
 	if userID, ok := c.Get("user_id"); ok {
 		req.Header.Set("X-User-Id", toString(userID))

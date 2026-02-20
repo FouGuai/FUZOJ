@@ -14,6 +14,7 @@ import (
 
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/db"
+	commonmw "fuzoj/internal/common/http/middleware"
 	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
 	judgecache "fuzoj/internal/judge/cache"
@@ -187,6 +188,7 @@ func main() {
 func buildHTTPServer(cfg ServerConfig, statusRepo *repository.StatusRepository) *http.Server {
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(commonmw.TraceContextMiddleware())
 	router.Use(requestLogger())
 
 	api := router.Group("/api/v1/judge")

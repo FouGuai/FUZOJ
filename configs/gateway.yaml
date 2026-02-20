@@ -10,6 +10,9 @@ logger:
   format: "json"
   outputPath: "stdout"
   errorPath: "stderr"
+  service: "gateway"
+  env: "dev"
+  cluster: "default"
 
 auth:
   jwtSecret: "tyylovezsrtyylovezsr"

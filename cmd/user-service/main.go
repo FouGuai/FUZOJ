@@ -13,6 +13,7 @@ import (
 
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/db"
+	commonmw "fuzoj/internal/common/http/middleware"
 	"fuzoj/internal/user/controller"
 	"fuzoj/internal/user/repository"
 	"fuzoj/internal/user/service"
@@ -81,6 +82,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(commonmw.TraceContextMiddleware())
 	router.Use(requestLogger())
 
 	api := router.Group("/api/v1/user")

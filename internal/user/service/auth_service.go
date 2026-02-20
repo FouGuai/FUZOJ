@@ -163,7 +163,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 	if err := validateUsername(input.Username); err != nil {
 		return AuthResult{}, err
 	}
-	if err := validatePassword(input.Password); err != nil {
+	if err := validateLoginPassword(input.Password); err != nil {
 		return AuthResult{}, err
 	}
 

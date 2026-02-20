@@ -117,7 +117,7 @@
 - **通用工具**：查看 `pkg/` 下是否已有工具库可用
 
 ###  日志要求
-- 在关键代码处，请打印详细的日志，以便调试使用
+- **在关键代码处，请打印详细的日志，以便调试使用**
 
 ## 功能实现与文档规范
 
@@ -165,3 +165,4 @@
 - **Submit Service**：`docs/submit_service.md` — 面向前端的判题入口与提交分发服务
 - **Gateway**：`docs/gateway.md` — 统一流量入口的鉴权、限流与反向代理网关
 - **CLI Client**：`docs/cli_client.md` — 面向联调用的命令行客户端，覆盖主要 HTTP 接口
+- **ELK Logging**：`docs/logging_elk.md` — 结构化日志、采集与检索规范

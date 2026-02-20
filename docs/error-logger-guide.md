@@ -322,7 +322,7 @@ r.Use(func(c *gin.Context) {
     traceID := uuid.New().String()
     c.Set("trace_id", traceID)
     
-    ctx := context.WithValue(c.Request.Context(), "trace_id", traceID)
+    ctx := context.WithValue(c.Request.Context(), contextkey.TraceID, traceID)
     c.Request = c.Request.WithContext(ctx)
     
     c.Next()

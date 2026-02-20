@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"time"
 
+	"fuzoj/pkg/utils/contextkey"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -25,6 +27,9 @@ type Config struct {
 	Format     string // json, console
 	OutputPath string // file path or "stdout"
 	ErrorPath  string // error log file path or "stderr"
+	Service    string // service name
+	Env        string // environment name
+	Cluster    string // cluster name
 }
 
 // Init initializes the global logger
@@ -96,9 +101,28 @@ func NewLogger(cfg Config) (*Logger, error) {
 	core := zapcore.NewCore(encoder, writeSyncer, level)
 
 	// Create logger with caller info
-	zapLogger := zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1), zap.AddStacktrace(zapcore.ErrorLevel))
+	options := []zap.Option{zap.AddCaller(), zap.AddCallerSkip(1), zap.AddStacktrace(zapcore.ErrorLevel)}
+	staticFields := buildStaticFields(cfg)
+	if len(staticFields) > 0 {
+		options = append(options, zap.Fields(staticFields...))
+	}
+	zapLogger := zap.New(core, options...)
 
 	return &Logger{zap: zapLogger, level: level}, nil
+}
+
+func buildStaticFields(cfg Config) []zap.Field {
+	fields := make([]zap.Field, 0, 3)
+	if cfg.Service != "" {
+		fields = append(fields, zap.String("service", cfg.Service))
+	}
+	if cfg.Env != "" {
+		fields = append(fields, zap.String("env", cfg.Env))
+	}
+	if cfg.Cluster != "" {
+		fields = append(fields, zap.String("cluster", cfg.Cluster))
+	}
+	return fields
 }
 
 // customTimeEncoder formats time in RFC3339 format
@@ -122,17 +146,17 @@ func extractFieldsFromContext(ctx context.Context) []zap.Field {
 	var fields []zap.Field
 
 	// Extract trace ID if exists
-	if traceID := ctx.Value("trace_id"); traceID != nil {
+	if traceID := ctx.Value(contextkey.TraceID); traceID != nil {
 		fields = append(fields, zap.String("trace_id", fmt.Sprint(traceID)))
 	}
 
 	// Extract user ID if exists
-	if userID := ctx.Value("user_id"); userID != nil {
+	if userID := ctx.Value(contextkey.UserID); userID != nil {
 		fields = append(fields, zap.Any("user_id", userID))
 	}
 
 	// Extract request ID if exists
-	if requestID := ctx.Value("request_id"); requestID != nil {
+	if requestID := ctx.Value(contextkey.RequestID); requestID != nil {
 		fields = append(fields, zap.String("request_id", fmt.Sprint(requestID)))
 	}
 

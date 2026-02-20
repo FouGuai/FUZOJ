@@ -42,7 +42,7 @@ func New(code ErrorCode) *Error {
 func Newf(code ErrorCode, format string, args ...interface{}) *Error {
 	return &Error{
 		Code:    code,
-		Message: fmt.Sprintf(code.Message()+":"+format, args...),
+		Message: fmt.Sprintf(format, args...),
 		Details: make(map[string]interface{}),
 		Stack:   getStack(2),
 	}
@@ -77,7 +77,7 @@ func Wrapf(err error, code ErrorCode, format string, args ...interface{}) *Error
 
 	return &Error{
 		Code:    code,
-		Message: fmt.Sprintf(code.Message()+":"+format, args...),
+		Message: fmt.Sprintf(format, args...),
 		Err:     err,
 		Details: make(map[string]interface{}),
 		Stack:   getStack(2),

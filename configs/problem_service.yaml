@@ -12,6 +12,9 @@ logger:
   format: "json"
   outputPath: "stdout"
   errorPath: "stderr"
+  service: "problem-service"
+  env: "dev"
+  cluster: "default"
 
 database:
   dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj?parseTime=true&loc=Local"

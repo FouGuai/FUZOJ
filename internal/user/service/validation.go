@@ -33,6 +33,16 @@ func validatePassword(password string) error {
 	return nil
 }
 
+func validateLoginPassword(password string) error {
+	if len(password) < 8 {
+		return pkgerrors.New(pkgerrors.PasswordTooWeak)
+	}
+	if len(password) > 128 {
+		return pkgerrors.New(pkgerrors.InvalidPassword)
+	}
+	return nil
+}
+
 func hasLetterAndNumber(password string) bool {
 	hasLetter := false
 	hasNumber := false

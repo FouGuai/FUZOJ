@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fuzoj/pkg/errors"
+	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/pkg/utils/logger"
 	"fuzoj/pkg/utils/response"
 	"net/http"
@@ -300,7 +301,7 @@ func main() {
 		c.Set("trace_id", traceID)
 
 		// Add to context
-		ctx := context.WithValue(c.Request.Context(), "trace_id", traceID)
+		ctx := context.WithValue(c.Request.Context(), contextkey.TraceID, traceID)
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()
