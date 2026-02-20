@@ -102,6 +102,7 @@ routes:
     upstream: "user"
     auth:
       mode: "protected"
+      roles: ["user", "problem_setter", "admin", "super_admin"]
 
   - name: "problem.public"
     methods: ["GET"]
@@ -116,7 +117,7 @@ routes:
     upstream: "problem"
     auth:
       mode: "protected"
-      roles: ["problem_setter", "admin", "super_admin"]
+      roles: ["user", "problem_setter", "admin", "super_admin"]
 
   - name: "submit.create"
     methods: ["POST"]
@@ -124,6 +125,7 @@ routes:
     upstream: "submit"
     auth:
       mode: "protected"
+      roles: ["user", "problem_setter", "admin", "super_admin"]
 
   - name: "submit.query"
     methods: ["GET", "POST"]
@@ -131,6 +133,7 @@ routes:
     upstream: "submit"
     auth:
       mode: "protected"
+      roles: ["user", "problem_setter", "admin", "super_admin"]
 
   - name: "judge.status"
     methods: ["GET"]
@@ -138,7 +141,7 @@ routes:
     upstream: "judge"
     auth:
       mode: "protected"
-      roles: ["admin", "super_admin"]
+      roles: ["user", "problem_setter", "admin", "super_admin"]
 
   - name: "objects.download"
     methods: ["GET"]

@@ -11,6 +11,13 @@ log() {
   echo "[deps] $*"
 }
 
+step() {
+  local title="$1"
+  shift
+  log "$title"
+  "$@"
+}
+
 cleanup_terminal() {
   if [[ -t 1 ]]; then
     if command -v tput >/dev/null 2>&1; then
@@ -111,6 +118,38 @@ wait_for_minio() {
   exit 1
 }
 
+wait_for_elasticsearch() {
+  local network="${COMPOSE_PROJECT_NAME}_default"
+  local max_attempts=90
+  local attempt=1
+  while [[ $attempt -le $max_attempts ]]; do
+    if docker run --rm --network "$network" curlimages/curl:8.6.0 \
+      -fsS http://elasticsearch:9200/_cluster/health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  echo "elasticsearch did not become ready in time" >&2
+  exit 1
+}
+
+wait_for_kibana() {
+  local network="${COMPOSE_PROJECT_NAME}_default"
+  local max_attempts=120
+  local attempt=1
+  while [[ $attempt -le $max_attempts ]]; do
+    if docker run --rm --network "$network" curlimages/curl:8.6.0 \
+      -fsS http://kibana:5601/api/status >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  echo "kibana did not become ready in time" >&2
+  exit 1
+}
+
 init_mysql() {
   compose exec -T mysql mysql -h 127.0.0.1 -uroot -proot <<'SQL'
 CREATE DATABASE IF NOT EXISTS fuzoj CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -166,6 +205,43 @@ ensure_kafka_topics() {
     echo "no kafka topics found in configs" >&2
     return 1
   fi
+  python3 - <<'PY' "$ROOT_DIR" "$topics"
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError as exc:
+    raise SystemExit("PyYAML is required to parse configs; please install pyyaml") from exc
+
+root = Path(sys.argv[1])
+topics = set(sys.argv[2].split())
+cfg_path = root / "configs" / "submit_service.yaml"
+cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+
+expected = set()
+direct_topics = cfg.get("topics", {})
+if isinstance(direct_topics, dict):
+    for value in direct_topics.values():
+        if isinstance(value, str) and value:
+            expected.add(value)
+
+submit_cfg = cfg.get("submit", {})
+if isinstance(submit_cfg, dict):
+    value = submit_cfg.get("statusFinalTopic")
+    if isinstance(value, str) and value:
+        expected.add(value)
+    consumer = submit_cfg.get("statusFinalConsumer", {})
+    if isinstance(consumer, dict):
+        value = consumer.get("deadLetterTopic")
+        if isinstance(value, str) and value:
+            expected.add(value)
+
+missing = sorted(expected - topics)
+if missing:
+    print("kafka topics missing from init list: " + ", ".join(missing), file=sys.stderr)
+    raise SystemExit(1)
+PY
   while IFS= read -r topic; do
     [[ -z "$topic" ]] && continue
     compose exec -T kafka /opt/kafka/bin/kafka-topics.sh \
@@ -314,30 +390,23 @@ EOF
 require_command docker
 require_command python3
 
-log "starting dependencies..."
-compose up -d
+step "starting dependencies..." compose up -d
 
-log "waiting for mysql..."
-wait_for_mysql
-log "waiting for redis..."
-wait_for_redis
-log "waiting for kafka..."
-wait_for_kafka
+step "waiting for mysql..." wait_for_mysql
+step "waiting for redis..." wait_for_redis
+step "waiting for kafka..." wait_for_kafka
+step "waiting for elasticsearch..." wait_for_elasticsearch
+step "waiting for kibana..." wait_for_kibana
 
-log "initializing mysql..."
-init_mysql
-log "importing schemas..."
-import_schema "$ROOT_DIR/internal/user/schema.sql"
-import_schema "$ROOT_DIR/internal/problem/schema.sql"
-import_schema "$ROOT_DIR/internal/submit/schema.sql"
+step "initializing mysql..." init_mysql
+step "importing schemas..." import_schema "$ROOT_DIR/internal/user/schema.sql"
+step "importing schemas..." import_schema "$ROOT_DIR/internal/problem/schema.sql"
+step "importing schemas..." import_schema "$ROOT_DIR/internal/submit/schema.sql"
 
-log "ensuring minio buckets..."
-wait_for_minio
-ensure_minio_buckets
-log "ensuring kafka topics..."
-ensure_kafka_topics
+step "ensuring minio buckets..." wait_for_minio
+step "ensuring minio buckets..." ensure_minio_buckets
+step "ensuring kafka topics..." ensure_kafka_topics
 
-log "writing runtime profile..."
-write_runtime_profile
+step "writing runtime profile..." write_runtime_profile
 
 log "dependencies ready"

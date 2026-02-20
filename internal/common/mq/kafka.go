@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -64,9 +65,18 @@ type kafkaSubscription struct {
 	baseCtx context.Context
 
 	reader *kafka.Reader
+	readers []*kafka.Reader
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	limiter FetchLimiter
+}
+
+// WeightedTopic defines a topic with fetch weight.
+type WeightedTopic struct {
+	Topic  string
+	Weight int
 }
 
 // NewKafkaQueue creates a Kafka-backed message queue.
@@ -201,6 +211,53 @@ func (k *KafkaQueue) SubscribeWithOptions(ctx context.Context, topic string, han
 	return nil
 }
 
+// SubscribeWeighted subscribes to multiple topics with weights and a fetch limiter.
+func (k *KafkaQueue) SubscribeWeighted(ctx context.Context, topics []WeightedTopic, handler HandlerFunc, opts *SubscribeOptions, limiter FetchLimiter) error {
+	if len(topics) == 0 {
+		return errors.New("topics are required")
+	}
+	if handler == nil {
+		return errors.New("handler is required")
+	}
+	var options SubscribeOptions
+	if opts != nil {
+		options = *opts
+	}
+	options.SetDefaults()
+	if options.ConsumerGroup == "" {
+		options.ConsumerGroup = "fuzoj-judge"
+	}
+
+	for _, t := range topics {
+		if t.Topic == "" {
+			return errors.New("topic is required")
+		}
+		if t.Weight <= 0 {
+			return errors.New("topic weight must be positive")
+		}
+	}
+
+	sub := &kafkaSubscription{
+		handler: handler,
+		opts:    options,
+		baseCtx: ctx,
+		limiter: limiter,
+	}
+
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.closed {
+		return errors.New("message queue is closed")
+	}
+	k.subscriptions = append(k.subscriptions, sub)
+	if k.started {
+		return k.startWeightedSubscription(sub, topics)
+	}
+	sub.topic = "" // weighted mode
+	sub.opts.QueueName = encodeWeightedTopics(topics)
+	return nil
+}
+
 // Start starts consuming messages for all subscriptions.
 func (k *KafkaQueue) Start() error {
 	k.mu.Lock()
@@ -212,11 +269,87 @@ func (k *KafkaQueue) Start() error {
 		return nil
 	}
 	for _, sub := range k.subscriptions {
+		if sub.opts.QueueName != "" && sub.topic == "" {
+			topics := decodeWeightedTopics(sub.opts.QueueName)
+			if err := k.startWeightedSubscription(sub, topics); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := k.startSubscription(sub); err != nil {
 			return err
 		}
 	}
 	k.started = true
+	return nil
+}
+
+func (k *KafkaQueue) startWeightedSubscription(sub *kafkaSubscription, topics []WeightedTopic) error {
+	readers := make([]*kafka.Reader, 0, len(topics))
+	schedule := buildWeightedSchedule(topics)
+	if len(schedule) == 0 {
+		return errors.New("no weighted topics provided")
+	}
+
+	for _, t := range topics {
+		reader := kafka.NewReader(kafka.ReaderConfig{
+			Brokers:     k.config.Brokers,
+			Topic:       t.Topic,
+			GroupID:     sub.opts.ConsumerGroup,
+			MinBytes:    k.config.MinBytes,
+			MaxBytes:    k.config.MaxBytes,
+			MaxWait:     k.config.MaxWait,
+			StartOffset: kafka.LastOffset,
+		})
+		readers = append(readers, reader)
+	}
+	sub.reader = nil
+	sub.readers = readers
+	if sub.baseCtx == nil {
+		sub.baseCtx = context.Background()
+	}
+	sub.ctx, sub.cancel = context.WithCancel(sub.baseCtx)
+
+	sub.wg.Add(1)
+	go func() {
+		defer sub.wg.Done()
+		idx := 0
+		for {
+			select {
+			case <-sub.ctx.Done():
+				return
+			default:
+			}
+			if k.paused.Load() {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			if sub.limiter != nil {
+				if err := sub.limiter.Acquire(sub.ctx); err != nil {
+					return
+				}
+			}
+			choice := schedule[idx%len(schedule)]
+			idx++
+			reader := readers[choice]
+			msg, err := reader.FetchMessage(sub.ctx)
+			if err != nil {
+				if sub.limiter != nil {
+					sub.limiter.Release()
+				}
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			sub.wg.Add(1)
+			go func(m kafka.Message, r *kafka.Reader) {
+				defer sub.wg.Done()
+				k.handleMessageWithLimiter(sub, r, m)
+			}(msg, reader)
+		}
+	}()
 	return nil
 }
 
@@ -233,6 +366,9 @@ func (k *KafkaQueue) Stop() error {
 		sub.wg.Wait()
 		if sub.reader != nil {
 			_ = sub.reader.Close()
+		}
+		for _, reader := range sub.readers {
+			_ = reader.Close()
 		}
 	}
 	k.started = false
@@ -334,6 +470,15 @@ func (k *KafkaQueue) startSubscription(sub *kafkaSubscription) error {
 }
 
 func (k *KafkaQueue) handleMessage(sub *kafkaSubscription, msg kafka.Message) {
+	k.handleMessageWithLimiter(sub, sub.reader, msg)
+}
+
+func (k *KafkaQueue) handleMessageWithLimiter(sub *kafkaSubscription, reader *kafka.Reader, msg kafka.Message) {
+	defer func() {
+		if sub.limiter != nil {
+			sub.limiter.Release()
+		}
+	}()
 	m := fromKafkaMessage(msg)
 	if m.MaxRetries == 0 {
 		m.MaxRetries = sub.opts.MaxRetries
@@ -343,14 +488,14 @@ func (k *KafkaQueue) handleMessage(sub *kafkaSubscription, msg kafka.Message) {
 	}
 	if m.Expiration > 0 && !m.Timestamp.IsZero() {
 		if time.Since(m.Timestamp) > m.Expiration {
-			_ = sub.reader.CommitMessages(sub.ctx, msg)
+			_ = reader.CommitMessages(sub.ctx, msg)
 			return
 		}
 	}
 
 	for {
 		if err := sub.handler(sub.ctx, m); err == nil {
-			_ = sub.reader.CommitMessages(sub.ctx, msg)
+			_ = reader.CommitMessages(sub.ctx, msg)
 			return
 		}
 		m.RetryCount++
@@ -358,11 +503,57 @@ func (k *KafkaQueue) handleMessage(sub *kafkaSubscription, msg kafka.Message) {
 			if sub.opts.DeadLetterTopic != "" {
 				_ = k.Publish(sub.ctx, sub.opts.DeadLetterTopic, m)
 			}
-			_ = sub.reader.CommitMessages(sub.ctx, msg)
+			_ = reader.CommitMessages(sub.ctx, msg)
 			return
 		}
 		time.Sleep(sub.opts.RetryDelay)
 	}
+}
+
+func buildWeightedSchedule(topics []WeightedTopic) []int {
+	schedule := make([]int, 0, len(topics))
+	for idx, t := range topics {
+		if t.Weight <= 0 {
+			continue
+		}
+		for i := 0; i < t.Weight; i++ {
+			schedule = append(schedule, idx)
+		}
+	}
+	return schedule
+}
+
+func encodeWeightedTopics(topics []WeightedTopic) string {
+	var b strings.Builder
+	for i, t := range topics {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(t.Topic)
+		b.WriteString(":")
+		b.WriteString(strconv.Itoa(t.Weight))
+	}
+	return b.String()
+}
+
+func decodeWeightedTopics(raw string) []WeightedTopic {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	topics := make([]WeightedTopic, 0, len(parts))
+	for _, part := range parts {
+		item := strings.SplitN(part, ":", 2)
+		if len(item) != 2 {
+			continue
+		}
+		weight, err := strconv.Atoi(item[1])
+		if err != nil || weight <= 0 {
+			continue
+		}
+		topics = append(topics, WeightedTopic{Topic: item[0], Weight: weight})
+	}
+	return topics
 }
 
 func toKafkaMessage(topic string, message *Message) kafka.Message {

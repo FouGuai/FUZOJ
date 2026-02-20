@@ -43,9 +43,8 @@ user login username=demo password=secret
 problem create title="Two Sum" owner_id=1
 
 # 提交代码（从文件读取）
-submit create problem_id=1 user_id=2 language_id=cpp source_file=./main.cpp
+submit create problem_id=1 user_id=2 language_id=cpp source_file=/home/foushen.zhan/fuzoj/tests/main.cpp
 
 # 上传数据包（prepare / sign / complete）
-problem upload-prepare id=1 idempotency_key=idem-1 expected_size_bytes=1024 \
-  expected_sha256=<sha> content_type=application/octet-stream created_by=1
+submit create problem_id=1 user_id=2 language_id=cpp source_file=./main.cpp
 ```

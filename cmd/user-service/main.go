@@ -77,6 +77,12 @@ func main() {
 			RefreshTokenTTL: appCfg.Auth.RefreshTokenTTL,
 			LoginFailTTL:    appCfg.Auth.LoginFailTTL,
 			LoginFailLimit:  appCfg.Auth.LoginFailLimit,
+			Root: service.RootAccountConfig{
+				Enabled:  appCfg.Auth.Root.Enabled,
+				Username: appCfg.Auth.Root.Username,
+				Password: appCfg.Auth.Root.Password,
+				Email:    appCfg.Auth.Root.Email,
+			},
 		},
 	)
 

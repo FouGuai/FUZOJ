@@ -138,20 +138,37 @@ func main() {
 		return
 	}
 
+	if len(appCfg.Kafka.Topics) == 0 {
+		logger.Error(context.Background(), "kafka topics are required")
+		return
+	}
+	weights := appCfg.Kafka.TopicWeights
+	if len(weights) == 0 {
+		weights = defaultTopicWeights(appCfg.Kafka.Topics)
+	}
+	weightedTopics := make([]mq.WeightedTopic, 0, len(appCfg.Kafka.Topics))
 	for _, topic := range appCfg.Kafka.Topics {
-		err := mqClient.SubscribeWithOptions(context.Background(), topic, judgeSvc.HandleMessage, &mq.SubscribeOptions{
-			ConsumerGroup:   appCfg.Kafka.ConsumerGroup,
-			PrefetchCount:   appCfg.Kafka.PrefetchCount,
-			Concurrency:     appCfg.Kafka.Concurrency,
-			MaxRetries:      appCfg.Kafka.MaxRetries,
-			RetryDelay:      appCfg.Kafka.RetryDelay,
-			DeadLetterTopic: appCfg.Kafka.DeadLetter,
-			MessageTTL:      appCfg.Kafka.MessageTTL,
-		})
-		if err != nil {
-			logger.Error(context.Background(), "subscribe kafka failed", zap.String("topic", topic), zap.Error(err))
+		weight, ok := weights[topic]
+		if !ok || weight <= 0 {
+			logger.Error(context.Background(), "invalid topic weight", zap.String("topic", topic), zap.Int("weight", weight))
 			return
 		}
+		weightedTopics = append(weightedTopics, mq.WeightedTopic{Topic: topic, Weight: weight})
+	}
+
+	limiter := mq.NewTokenLimiter(appCfg.Worker.PoolSize)
+	err = mqClient.SubscribeWeighted(context.Background(), weightedTopics, judgeSvc.HandleMessage, &mq.SubscribeOptions{
+		ConsumerGroup:   appCfg.Kafka.ConsumerGroup,
+		PrefetchCount:   appCfg.Kafka.PrefetchCount,
+		Concurrency:     appCfg.Kafka.Concurrency,
+		MaxRetries:      appCfg.Kafka.MaxRetries,
+		RetryDelay:      appCfg.Kafka.RetryDelay,
+		DeadLetterTopic: appCfg.Kafka.DeadLetter,
+		MessageTTL:      appCfg.Kafka.MessageTTL,
+	}, limiter)
+	if err != nil {
+		logger.Error(context.Background(), "subscribe kafka failed", zap.Error(err))
+		return
 	}
 	if err := mqClient.Start(); err != nil {
 		logger.Error(context.Background(), "start kafka consumer failed", zap.Error(err))

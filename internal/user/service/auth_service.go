@@ -12,7 +12,9 @@ import (
 	"fuzoj/internal/common/db"
 	"fuzoj/internal/user/repository"
 	pkgerrors "fuzoj/pkg/errors"
+	"fuzoj/pkg/utils/logger"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -21,7 +23,16 @@ const (
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
 	defaultLoginFailTTL    = 15 * time.Minute
 	defaultLoginFailLimit  = 5
+	rootInitTimeout        = 5 * time.Second
 )
+
+// RootAccountConfig holds bootstrap root account settings.
+type RootAccountConfig struct {
+	Enabled  bool
+	Username string
+	Password string
+	Email    string
+}
 
 // AuthServiceConfig holds configuration for AuthService.
 type AuthServiceConfig struct {
@@ -31,6 +42,7 @@ type AuthServiceConfig struct {
 	RefreshTokenTTL time.Duration
 	LoginFailTTL    time.Duration
 	LoginFailLimit  int
+	Root            RootAccountConfig
 }
 
 // AuthService handles user authentication flows.
@@ -66,13 +78,82 @@ func NewAuthService(
 		cfg.JWTIssuer = "fuzoj"
 	}
 
-	return &AuthService{
+	svc := &AuthService{
 		dbProvider:     provider,
 		users:          users,
 		tokens:         tokens,
 		loginFailCache: loginFailCache,
 		config:         cfg,
 	}
+	svc.ensureRootAccount()
+	return svc
+}
+
+func (s *AuthService) ensureRootAccount() {
+	cfg := s.config.Root
+	if !cfg.Enabled {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), rootInitTimeout)
+	defer cancel()
+
+	logger.Info(ctx, "root account init start", zap.String("username", cfg.Username))
+
+	if err := validateUsername(cfg.Username); err != nil {
+		logger.Error(ctx, "root account invalid username", zap.String("username", cfg.Username), zap.Error(err))
+		return
+	}
+	if err := validatePassword(cfg.Password); err != nil {
+		logger.Error(ctx, "root account invalid password", zap.String("username", cfg.Username), zap.Error(err))
+		return
+	}
+
+	existing, err := s.users.GetByUsername(ctx, nil, cfg.Username)
+	if err == nil {
+		logger.Info(ctx, "root account already exists", zap.Int64("user_id", existing.ID), zap.String("username", existing.Username))
+		return
+	}
+	if !stderrors.Is(err, repository.ErrUserNotFound) {
+		logger.Error(ctx, "root account lookup failed", zap.String("username", cfg.Username), zap.Error(err))
+		return
+	}
+
+	result, err := s.Register(ctx, RegisterInput{
+		Username: cfg.Username,
+		Password: cfg.Password,
+	})
+	if err != nil {
+		if pkgerrors.Is(err, pkgerrors.UsernameAlreadyExists) {
+			logger.Info(ctx, "root account already exists", zap.String("username", cfg.Username))
+			return
+		}
+		logger.Error(ctx, "root account register failed", zap.String("username", cfg.Username), zap.Error(err))
+		return
+	}
+
+	userID := result.User.ID
+	err = s.withTransaction(ctx, func(tx db.Transaction) error {
+		if err := s.users.UpdateRole(ctx, tx, userID, repository.UserRoleSuperAdmin); err != nil {
+			return err
+		}
+		if cfg.Email != "" {
+			if err := s.users.UpdateEmail(ctx, tx, userID, cfg.Email); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		if stderrors.Is(err, repository.ErrEmailExists) {
+			logger.Warn(ctx, "root account email already exists", zap.Int64("user_id", userID), zap.String("email", cfg.Email))
+			logger.Info(ctx, "root account created with default email", zap.Int64("user_id", userID), zap.String("username", cfg.Username))
+			return
+		}
+		logger.Error(ctx, "root account update failed", zap.Int64("user_id", userID), zap.String("username", cfg.Username), zap.Error(err))
+		return
+	}
+	logger.Info(ctx, "root account created", zap.Int64("user_id", userID), zap.String("username", cfg.Username))
 }
 
 // RegisterInput represents input for user registration.
@@ -117,15 +198,19 @@ type AuthResult struct {
 
 // Register creates a new user and issues tokens.
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthResult, error) {
+	logger.Info(ctx, "auth register start", zap.String("username", input.Username))
 	if err := validateUsername(input.Username); err != nil {
+		logger.Warn(ctx, "auth register invalid username", zap.String("username", input.Username), zap.Error(err))
 		return AuthResult{}, err
 	}
 	if err := validatePassword(input.Password); err != nil {
+		logger.Warn(ctx, "auth register invalid password", zap.String("username", input.Username), zap.Error(err))
 		return AuthResult{}, err
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
 	if err != nil {
+		logger.Error(ctx, "auth register hash password failed", zap.String("username", input.Username), zap.Error(err))
 		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("hash password failed: %w", err), pkgerrors.InternalServerError)
 	}
 
@@ -141,33 +226,33 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 	err = s.withTransaction(ctx, func(tx db.Transaction) error {
 		userID, createErr := s.users.Create(ctx, tx, user)
 		if createErr != nil {
+			logger.Warn(ctx, "auth register create user failed", zap.String("username", input.Username), zap.Error(createErr))
 			return mapUserCreateError(createErr)
 		}
 		user.ID = userID
 
 		resultData, tokenErr := s.issueTokens(ctx, tx, user, "", "")
 		if tokenErr != nil {
+			logger.Warn(ctx, "auth register issue tokens failed", zap.Int64("user_id", userID), zap.Error(tokenErr))
 			return tokenErr
 		}
 		result = resultData
 		return nil
 	})
 	if err != nil {
+		logger.Warn(ctx, "auth register failed", zap.String("username", input.Username), zap.Error(err))
 		return AuthResult{}, err
 	}
+	logger.Info(ctx, "auth register success", zap.Int64("user_id", user.ID), zap.String("username", input.Username))
 	return result, nil
 }
 
 // Login verifies credentials and issues tokens.
 func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, error) {
-	if err := validateUsername(input.Username); err != nil {
-		return AuthResult{}, err
-	}
-	if err := validateLoginPassword(input.Password); err != nil {
-		return AuthResult{}, err
-	}
+	logger.Info(ctx, "auth login start", zap.String("username", input.Username), zap.String("ip", input.IP))
 
 	if err := s.checkLoginLimit(ctx, input.Username, input.IP); err != nil {
+		logger.Warn(ctx, "auth login blocked by rate limit", zap.String("username", input.Username), zap.String("ip", input.IP), zap.Error(err))
 		return AuthResult{}, err
 	}
 
@@ -175,20 +260,25 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 	if err != nil {
 		if stderrors.Is(err, repository.ErrUserNotFound) {
 			s.recordLoginFailure(ctx, input.Username, input.IP)
+			logger.Warn(ctx, "auth login user not found", zap.String("username", input.Username), zap.String("ip", input.IP))
 			return AuthResult{}, pkgerrors.New(pkgerrors.InvalidCredentials)
 		}
+		logger.Error(ctx, "auth login get user failed", zap.String("username", input.Username), zap.String("ip", input.IP), zap.Error(err))
 		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("get user failed: %w", err), pkgerrors.DatabaseError)
 	}
 
 	switch user.Status {
 	case repository.UserStatusBanned:
+		logger.Warn(ctx, "auth login blocked by banned status", zap.Int64("user_id", user.ID), zap.String("username", input.Username))
 		return AuthResult{}, pkgerrors.New(pkgerrors.AccountSuspended)
 	case repository.UserStatusPendingVerify:
+		logger.Warn(ctx, "auth login blocked by pending verification", zap.Int64("user_id", user.ID), zap.String("username", input.Username))
 		return AuthResult{}, pkgerrors.New(pkgerrors.AccountNotActivated)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
 		s.recordLoginFailure(ctx, input.Username, input.IP)
+		logger.Warn(ctx, "auth login invalid credentials", zap.Int64("user_id", user.ID), zap.String("username", input.Username), zap.String("ip", input.IP))
 		return AuthResult{}, pkgerrors.New(pkgerrors.InvalidCredentials)
 	}
 
@@ -198,26 +288,32 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 	err = s.withTransaction(ctx, func(tx db.Transaction) error {
 		tokenResult, tokenErr := s.issueTokens(ctx, tx, user, input.DeviceInfo, input.IP)
 		if tokenErr != nil {
+			logger.Warn(ctx, "auth login issue tokens failed", zap.Int64("user_id", user.ID), zap.String("username", input.Username), zap.Error(tokenErr))
 			return tokenErr
 		}
 		result = tokenResult
 		return nil
 	})
 	if err != nil {
+		logger.Warn(ctx, "auth login failed", zap.Int64("user_id", user.ID), zap.String("username", input.Username), zap.Error(err))
 		return AuthResult{}, err
 	}
 
+	logger.Info(ctx, "auth login success", zap.Int64("user_id", user.ID), zap.String("username", input.Username))
 	return result, nil
 }
 
 // Refresh validates refresh token and issues new tokens.
 func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResult, error) {
+	logger.Info(ctx, "auth refresh start")
 	claims, err := s.parseToken(input.RefreshToken, repository.TokenTypeRefresh)
 	if err != nil {
+		logger.Warn(ctx, "auth refresh parse token failed", zap.Error(err))
 		return AuthResult{}, err
 	}
 	userID, err := userIDFromClaims(claims)
 	if err != nil {
+		logger.Warn(ctx, "auth refresh invalid claims", zap.Error(err))
 		return AuthResult{}, err
 	}
 	hash := hashToken(input.RefreshToken)
@@ -225,29 +321,37 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 	tokenRecord, err := s.tokens.GetByHash(ctx, nil, hash)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrTokenNotFound) {
+			logger.Warn(ctx, "auth refresh token not found", zap.Int64("user_id", userID))
 			return AuthResult{}, pkgerrors.New(pkgerrors.TokenInvalid)
 		}
+		logger.Error(ctx, "auth refresh get token failed", zap.Int64("user_id", userID), zap.Error(err))
 		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("get token failed: %w", err), pkgerrors.DatabaseError)
 	}
 
 	if tokenRecord.Revoked {
+		logger.Warn(ctx, "auth refresh token revoked", zap.Int64("user_id", userID))
 		return AuthResult{}, pkgerrors.New(pkgerrors.TokenInvalid)
 	}
 	if time.Now().After(tokenRecord.ExpiresAt) {
+		logger.Warn(ctx, "auth refresh token expired", zap.Int64("user_id", userID))
 		return AuthResult{}, pkgerrors.New(pkgerrors.TokenExpired)
 	}
 	if tokenRecord.TokenType != repository.TokenTypeRefresh {
+		logger.Warn(ctx, "auth refresh token type mismatch", zap.Int64("user_id", userID))
 		return AuthResult{}, pkgerrors.New(pkgerrors.TokenInvalid)
 	}
 	if tokenRecord.UserID != userID {
+		logger.Warn(ctx, "auth refresh token user mismatch", zap.Int64("user_id", userID), zap.Int64("token_user_id", tokenRecord.UserID))
 		return AuthResult{}, pkgerrors.New(pkgerrors.TokenInvalid)
 	}
 
 	blacklisted, err := s.tokens.IsBlacklisted(ctx, hash)
 	if err != nil {
+		logger.Error(ctx, "auth refresh blacklist check failed", zap.Int64("user_id", userID), zap.Error(err))
 		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("check token blacklist failed: %w", err), pkgerrors.CacheError)
 	}
 	if blacklisted {
+		logger.Warn(ctx, "auth refresh token blacklisted", zap.Int64("user_id", userID))
 		return AuthResult{}, pkgerrors.New(pkgerrors.TokenInvalid)
 	}
 
@@ -255,20 +359,25 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 	err = s.withTransaction(ctx, func(tx db.Transaction) error {
 		if err := s.tokens.RevokeByHash(ctx, tx, hash, tokenRecord.ExpiresAt); err != nil {
 			if stderrors.Is(err, repository.ErrTokenNotFound) {
+				logger.Warn(ctx, "auth refresh token revoked by another flow", zap.Int64("user_id", userID))
 				return pkgerrors.New(pkgerrors.TokenInvalid)
 			}
+			logger.Error(ctx, "auth refresh revoke token failed", zap.Int64("user_id", userID), zap.Error(err))
 			return pkgerrors.Wrap(fmt.Errorf("revoke refresh token failed: %w", err), pkgerrors.DatabaseError)
 		}
 
 		user, err := s.getUserByID(ctx, tokenRecord.UserID)
 		if err != nil {
+			logger.Warn(ctx, "auth refresh get user failed", zap.Int64("user_id", userID), zap.Error(err))
 			return err
 		}
 
 		switch user.Status {
 		case repository.UserStatusBanned:
+			logger.Warn(ctx, "auth refresh blocked by banned status", zap.Int64("user_id", user.ID))
 			return pkgerrors.New(pkgerrors.AccountSuspended)
 		case repository.UserStatusPendingVerify:
+			logger.Warn(ctx, "auth refresh blocked by pending verification", zap.Int64("user_id", user.ID))
 			return pkgerrors.New(pkgerrors.AccountNotActivated)
 		}
 
@@ -277,22 +386,31 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 
 		tokenResult, tokenErr := s.issueTokens(ctx, tx, user, deviceInfo, IPAddress)
 		if tokenErr != nil {
+			logger.Warn(ctx, "auth refresh issue tokens failed", zap.Int64("user_id", user.ID), zap.Error(tokenErr))
 			return tokenErr
 		}
 		result = tokenResult
 		return nil
 	})
+	if err != nil {
+		logger.Warn(ctx, "auth refresh failed", zap.Int64("user_id", userID), zap.Error(err))
+		return AuthResult{}, err
+	}
+	logger.Info(ctx, "auth refresh success", zap.Int64("user_id", userID))
 	return result, err
 }
 
 // Logout revokes a refresh token.
 func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
+	logger.Info(ctx, "auth logout start")
 	claims, err := s.parseToken(input.RefreshToken, repository.TokenTypeRefresh)
 	if err != nil {
+		logger.Warn(ctx, "auth logout parse token failed", zap.Error(err))
 		return err
 	}
 	userID, err := userIDFromClaims(claims)
 	if err != nil {
+		logger.Warn(ctx, "auth logout invalid claims", zap.Error(err))
 		return err
 	}
 
@@ -300,25 +418,32 @@ func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
 	tokenRecord, err := s.tokens.GetByHash(ctx, nil, hash)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrTokenNotFound) {
+			logger.Warn(ctx, "auth logout token not found", zap.Int64("user_id", userID))
 			return pkgerrors.New(pkgerrors.TokenInvalid)
 		}
+		logger.Error(ctx, "auth logout get token failed", zap.Int64("user_id", userID), zap.Error(err))
 		return pkgerrors.Wrap(fmt.Errorf("get token failed: %w", err), pkgerrors.DatabaseError)
 	}
 
 	if tokenRecord.TokenType != repository.TokenTypeRefresh {
+		logger.Warn(ctx, "auth logout token type mismatch", zap.Int64("user_id", userID))
 		return pkgerrors.New(pkgerrors.TokenInvalid)
 	}
 	if tokenRecord.UserID != userID {
+		logger.Warn(ctx, "auth logout token user mismatch", zap.Int64("user_id", userID), zap.Int64("token_user_id", tokenRecord.UserID))
 		return pkgerrors.New(pkgerrors.TokenInvalid)
 	}
 	if tokenRecord.Revoked {
+		logger.Info(ctx, "auth logout token already revoked", zap.Int64("user_id", userID))
 		return nil
 	}
 
 	if err := s.tokens.RevokeByHash(ctx, nil, hash, tokenRecord.ExpiresAt); err != nil {
+		logger.Error(ctx, "auth logout revoke token failed", zap.Int64("user_id", userID), zap.Error(err))
 		return pkgerrors.Wrap(fmt.Errorf("revoke refresh token failed: %w", err), pkgerrors.DatabaseError)
 	}
 
+	logger.Info(ctx, "auth logout success", zap.Int64("user_id", userID))
 	return nil
 }
 

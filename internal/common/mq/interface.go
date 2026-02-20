@@ -50,6 +50,13 @@ type Consumer interface {
 	Resume() error
 }
 
+// FetchLimiter controls how many messages can be fetched concurrently.
+// Implementations should block Acquire when capacity is exhausted.
+type FetchLimiter interface {
+	Acquire(ctx context.Context) error
+	Release()
+}
+
 // Message represents a message in the queue
 type Message struct {
 	// ID is the unique identifier for the message

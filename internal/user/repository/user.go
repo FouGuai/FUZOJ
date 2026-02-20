@@ -53,6 +53,8 @@ type UserRepository interface {
 	ExistsByEmail(ctx context.Context, tx db.Transaction, email string) (bool, error)
 	UpdatePassword(ctx context.Context, tx db.Transaction, userID int64, newHash string) error
 	UpdateStatus(ctx context.Context, tx db.Transaction, userID int64, status UserStatus) error
+	UpdateRole(ctx context.Context, tx db.Transaction, userID int64, role UserRole) error
+	UpdateEmail(ctx context.Context, tx db.Transaction, userID int64, email string) error
 }
 
 type MySQLUserRepository struct {
@@ -326,6 +328,77 @@ func (r *MySQLUserRepository) UpdateStatus(ctx context.Context, tx db.Transactio
 	}
 	if r.cache != nil {
 		r.deleteCache(ctx, userID, username, email)
+	}
+	return nil
+}
+
+func (r *MySQLUserRepository) UpdateRole(ctx context.Context, tx db.Transaction, userID int64, role UserRole) error {
+	var username, email string
+	if r.cache != nil {
+		var err error
+		username, email, err = r.getUserIdentifiers(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+	}
+	query := "UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?"
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	result, err := querier.Exec(ctx, query, role, userID)
+	if err != nil {
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+	if r.cache != nil {
+		r.deleteCache(ctx, userID, username, email)
+	}
+	return nil
+}
+
+func (r *MySQLUserRepository) UpdateEmail(ctx context.Context, tx db.Transaction, userID int64, email string) error {
+	var username, existingEmail string
+	if r.cache != nil {
+		var err error
+		username, existingEmail, err = r.getUserIdentifiers(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+	}
+	query := "UPDATE users SET email = ?, updated_at = NOW() WHERE id = ?"
+	querier, err := db.GetProviderQuerier(r.dbProvider, tx)
+	if err != nil {
+		return err
+	}
+	result, err := querier.Exec(ctx, query, email, userID)
+	if err != nil {
+		if key, ok := db.UniqueViolation(err); ok {
+			normalizedKey := strings.ToLower(strings.TrimSpace(key))
+			if strings.Contains(normalizedKey, "users_email_uq") || strings.Contains(normalizedKey, "users.email") || strings.Contains(normalizedKey, ".email") || strings.Contains(normalizedKey, "email") {
+				return ErrEmailExists
+			}
+			return ErrDuplicate
+		}
+		return err
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrUserNotFound
+	}
+	if r.cache != nil {
+		r.deleteCache(ctx, userID, username, existingEmail)
 	}
 	return nil
 }

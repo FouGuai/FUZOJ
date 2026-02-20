@@ -2,6 +2,13 @@ outputDir: "dev.generated"
 auth:
   jwtSecret: "tyylovezsrtyylovezsr"
   jwtIssuer: "fuzoj"
+logger:
+  level: "info"
+  format: "json"
+  outputPath: "stdout"
+  errorPath: "stderr"
+  env: "dev"
+  cluster: "default"
 services:
   gateway:
     base: "gateway.yaml"

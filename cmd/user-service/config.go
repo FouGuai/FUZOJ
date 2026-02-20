@@ -36,6 +36,15 @@ type AuthConfig struct {
 	RefreshTokenTTL time.Duration `yaml:"refreshTokenTTL"`
 	LoginFailTTL    time.Duration `yaml:"loginFailTTL"`
 	LoginFailLimit  int           `yaml:"loginFailLimit"`
+	Root            RootAccount   `yaml:"root"`
+}
+
+// RootAccount holds bootstrap root account settings.
+type RootAccount struct {
+	Enabled  bool   `yaml:"enabled"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Email    string `yaml:"email"`
 }
 
 // AppConfig holds the user-service configuration.
@@ -86,6 +95,14 @@ func loadAppConfig(path string) (*AppConfig, error) {
 
 	if cfg.Auth.JWTSecret == "" {
 		return nil, fmt.Errorf("auth.jwtSecret is required")
+	}
+	if cfg.Auth.Root.Enabled {
+		if cfg.Auth.Root.Username == "" {
+			return nil, fmt.Errorf("auth.root.username is required")
+		}
+		if cfg.Auth.Root.Password == "" {
+			return nil, fmt.Errorf("auth.root.password is required")
+		}
 	}
 
 	return &cfg, nil

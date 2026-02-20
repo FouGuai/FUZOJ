@@ -43,3 +43,8 @@ auth:
   refreshTokenTTL: "168h"
   loginFailTTL: "15m"
   loginFailLimit: 5
+  root:
+    enabled: true
+    username: "root"
+    password: "tyy1314520"
+    email: "root@local"

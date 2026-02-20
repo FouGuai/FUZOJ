@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -149,6 +150,17 @@ func buildHTTPServer(cfg *AppConfig, authService *service.AuthService, rateServi
 	router.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
 	router.GET("/readyz", func(c *gin.Context) { c.Status(http.StatusOK) })
 
+	routeIndex := make(map[string]struct{}, len(cfg.Routes)*2)
+	for _, route := range cfg.Routes {
+		methods := route.Methods
+		if len(methods) == 0 {
+			methods = []string{http.MethodGet}
+		}
+		for _, method := range methods {
+			routeIndex[method+" "+route.Path] = struct{}{}
+		}
+	}
+
 	for _, route := range cfg.Routes {
 		proxy, err := proxyFactory.Get(route.Upstream)
 		if err != nil {
@@ -171,13 +183,24 @@ func buildHTTPServer(cfg *AppConfig, authService *service.AuthService, rateServi
 			middleware.RateLimitMiddleware(rateService, routeKey, ratePolicy, cfg.Rate.Window),
 			middleware.ProxyHandler(proxy, routeKey, route.Timeout, route.StripPrefix),
 		}
-			if len(route.Methods) == 0 {
-				route.Methods = []string{http.MethodGet}
-			}
-			for _, method := range route.Methods {
-				router.Handle(method, route.Path, handlers...)
+		if len(route.Methods) == 0 {
+			route.Methods = []string{http.MethodGet}
+		}
+		for _, method := range route.Methods {
+			router.Handle(method, route.Path, handlers...)
+			if strings.HasSuffix(route.Path, "/*any") {
+				basePath := strings.TrimSuffix(route.Path, "/*any")
+				if basePath != "" {
+					key := method + " " + basePath
+					if _, exists := routeIndex[key]; exists {
+						continue
+					}
+					routeIndex[key] = struct{}{}
+					router.Handle(method, basePath, handlers...)
+				}
 			}
 		}
+	}
 
 	return &http.Server{
 		Addr:           cfg.Server.Addr,

@@ -61,6 +61,7 @@ type KafkaConfig struct {
 	PoolRetryMaxD time.Duration `yaml:"poolRetryMaxDelay"`
 	DeadLetter    string        `yaml:"deadLetterTopic"`
 	MessageTTL    time.Duration `yaml:"messageTTL"`
+	TopicWeights  map[string]int `yaml:"topicWeights"`
 }
 
 // CacheConfig holds local cache settings.
@@ -197,7 +198,26 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	if cfg.Kafka.PoolRetryMaxD == 0 {
 		cfg.Kafka.PoolRetryMaxD = 30 * time.Second
 	}
+	if len(cfg.Kafka.TopicWeights) == 0 && len(cfg.Kafka.Topics) > 0 {
+		cfg.Kafka.TopicWeights = defaultTopicWeights(cfg.Kafka.Topics)
+	}
 	return &cfg, nil
+}
+
+func defaultTopicWeights(topics []string) map[string]int {
+	weights := []int{8, 4, 2, 1}
+	out := make(map[string]int, len(topics))
+	for i, topic := range topics {
+		if topic == "" {
+			continue
+		}
+		if i < len(weights) {
+			out[topic] = weights[i]
+			continue
+		}
+		out[topic] = 1
+	}
+	return out
 }
 
 func applyRedisDefaults(cfg *cache.RedisConfig) {

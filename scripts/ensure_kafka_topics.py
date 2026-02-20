@@ -38,6 +38,13 @@ def collect_topics(cfg):
     topics = []
     seen = set()
 
+    direct_topics = cfg.get("topics", {}) if isinstance(cfg, dict) else {}
+    if isinstance(direct_topics, dict):
+        for value in direct_topics.values():
+            append_topic(topics, seen, value)
+    else:
+        append_topic(topics, seen, direct_topics)
+
     kafka_cfg = cfg.get("kafka", {}) if isinstance(cfg, dict) else {}
     if isinstance(kafka_cfg, dict):
         append_topic(topics, seen, kafka_cfg.get("topics"))
@@ -69,12 +76,13 @@ def collect_topics(cfg):
 
 def main() -> int:
     root = Path(__file__).resolve().parent.parent
-    config_paths = [
-        root / "configs" / "judge_service.yaml",
-        root / "configs" / "submit_service.yaml",
-        root / "configs" / "problem_service.yaml",
-        root / "configs" / "gateway.yaml",
-    ]
+    configs_root = root / "configs"
+    config_paths = []
+    if configs_root.exists():
+        for path in sorted(configs_root.rglob("*.yaml")):
+            if "dev.generated" in path.parts:
+                continue
+            config_paths.append(path)
 
     topics = []
     seen = set()

@@ -438,6 +438,16 @@ func (s *SubmitService) publishMessage(ctx context.Context, submission *reposito
 	ctxMQ := withTimeout(ctx, s.timeouts.MQ)
 	defer ctxMQ.cancel()
 	if err := s.mq.Publish(ctxMQ.ctx, topic, message); err != nil {
+		logger.Error(
+			ctxMQ.ctx,
+			"publish judge message failed",
+			zap.Error(err),
+			zap.String("topic", topic),
+			zap.String("submission_id", submission.SubmissionID),
+			zap.Int64("problem_id", submission.ProblemID),
+			zap.Int64("user_id", submission.UserID),
+			zap.String("scene", submission.Scene),
+		)
 		return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "publish judge message failed")
 	}
 	return nil

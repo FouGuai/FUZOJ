@@ -24,6 +24,11 @@ kafka:
   brokers: ["127.0.0.1:9092"]
   clientID: "judge-service"
   topics: ["judge.level0", "judge.level1", "judge.level2", "judge.level3"]
+  topicWeights:
+    judge.level0: 8
+    judge.level1: 4
+    judge.level2: 2
+    judge.level3: 1
   consumerGroup: "judge-service"
   prefetchCount: 1
   concurrency: 4

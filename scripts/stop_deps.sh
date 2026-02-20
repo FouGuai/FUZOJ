@@ -26,4 +26,5 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
+compose stop elasticsearch kibana filebeat >/dev/null 2>&1 || true
 compose down -v

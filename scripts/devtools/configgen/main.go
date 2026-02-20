@@ -14,12 +14,23 @@ import (
 type Profile struct {
 	OutputDir string                    `yaml:"outputDir"`
 	Auth      AuthProfile               `yaml:"auth"`
+	Logger    LoggerProfile             `yaml:"logger"`
 	Services  map[string]ServiceProfile `yaml:"services"`
 }
 
 type AuthProfile struct {
 	JWTSecret string `yaml:"jwtSecret"`
 	JWTIssuer string `yaml:"jwtIssuer"`
+}
+
+type LoggerProfile struct {
+	Level      string `yaml:"level"`
+	Format     string `yaml:"format"`
+	OutputPath string `yaml:"outputPath"`
+	ErrorPath  string `yaml:"errorPath"`
+	Env        string `yaml:"env"`
+	Cluster    string `yaml:"cluster"`
+	Service    string `yaml:"service"`
 }
 
 type ServiceProfile struct {
@@ -97,6 +108,11 @@ func main() {
 		baseConfig, err = applySharedAuth(profile, name, baseConfig)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "apply shared auth for %q failed: %v\n", name, err)
+			os.Exit(1)
+		}
+		baseConfig, err = applySharedLogger(profile, name, baseConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "apply shared logger for %q failed: %v\n", name, err)
 			os.Exit(1)
 		}
 
@@ -262,4 +278,54 @@ func applySharedAuth(profile *Profile, serviceName string, config interface{}) (
 		auth["jwtIssuer"] = profile.Auth.JWTIssuer
 	}
 	return root, nil
+}
+
+func applySharedLogger(profile *Profile, serviceName string, config interface{}) (interface{}, error) {
+	if profile == nil || isLoggerProfileEmpty(profile.Logger) {
+		return config, nil
+	}
+	root, ok := config.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("service config is not a map")
+	}
+	loggerCfg, ok := root["logger"].(map[string]interface{})
+	if !ok {
+		loggerCfg = map[string]interface{}{}
+		root["logger"] = loggerCfg
+	}
+
+	if profile.Logger.Level != "" {
+		loggerCfg["level"] = profile.Logger.Level
+	}
+	if profile.Logger.Format != "" {
+		loggerCfg["format"] = profile.Logger.Format
+	}
+	if profile.Logger.OutputPath != "" {
+		loggerCfg["outputPath"] = profile.Logger.OutputPath
+	}
+	if profile.Logger.ErrorPath != "" {
+		loggerCfg["errorPath"] = profile.Logger.ErrorPath
+	}
+	if profile.Logger.Env != "" {
+		loggerCfg["env"] = profile.Logger.Env
+	}
+	if profile.Logger.Cluster != "" {
+		loggerCfg["cluster"] = profile.Logger.Cluster
+	}
+	if profile.Logger.Service != "" {
+		loggerCfg["service"] = profile.Logger.Service
+	}
+
+	_ = serviceName
+	return root, nil
+}
+
+func isLoggerProfileEmpty(profile LoggerProfile) bool {
+	return profile.Level == "" &&
+		profile.Format == "" &&
+		profile.OutputPath == "" &&
+		profile.ErrorPath == "" &&
+		profile.Env == "" &&
+		profile.Cluster == "" &&
+		profile.Service == ""
 }
