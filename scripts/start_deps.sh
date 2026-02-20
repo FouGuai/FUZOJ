@@ -160,23 +160,19 @@ ensure_minio_buckets() {
 }
 
 ensure_kafka_topics() {
-  local topics=(
-    "judge.level0"
-    "judge.level1"
-    "judge.level2"
-    "judge.level3"
-    "judge.status.final"
-    "judge.status.final.dead"
-    "judge.dead"
-    "problem.cleanup"
-    "user.events"
-  )
-  for topic in "${topics[@]}"; do
+  local topics
+  topics="$($ROOT_DIR/scripts/ensure_kafka_topics.py)"
+  if [[ -z "$topics" ]]; then
+    echo "no kafka topics found in configs" >&2
+    return 1
+  fi
+  while IFS= read -r topic; do
+    [[ -z "$topic" ]] && continue
     compose exec -T kafka /opt/kafka/bin/kafka-topics.sh \
       --bootstrap-server 127.0.0.1:9092 \
       --create --if-not-exists --topic "$topic" \
       --partitions 3 --replication-factor 1 >/dev/null
-  done
+  done <<<"$topics"
 }
 
 write_runtime_profile() {

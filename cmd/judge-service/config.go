@@ -55,6 +55,10 @@ type KafkaConfig struct {
 	Concurrency   int           `yaml:"concurrency"`
 	MaxRetries    int           `yaml:"maxRetries"`
 	RetryDelay    time.Duration `yaml:"retryDelay"`
+	RetryTopic    string        `yaml:"retryTopic"`
+	PoolRetryMax  int           `yaml:"poolRetryMax"`
+	PoolRetryBase time.Duration `yaml:"poolRetryBaseDelay"`
+	PoolRetryMaxD time.Duration `yaml:"poolRetryMaxDelay"`
 	DeadLetter    string        `yaml:"deadLetterTopic"`
 	MessageTTL    time.Duration `yaml:"messageTTL"`
 }
@@ -180,6 +184,18 @@ func loadAppConfig(path string) (*AppConfig, error) {
 	}
 	if cfg.Status.FinalTopic == "" {
 		cfg.Status.FinalTopic = "judge.status.final"
+	}
+	if cfg.Kafka.RetryTopic == "" {
+		cfg.Kafka.RetryTopic = "judge.retry"
+	}
+	if cfg.Kafka.PoolRetryMax <= 0 {
+		cfg.Kafka.PoolRetryMax = 5
+	}
+	if cfg.Kafka.PoolRetryBase == 0 {
+		cfg.Kafka.PoolRetryBase = time.Second
+	}
+	if cfg.Kafka.PoolRetryMaxD == 0 {
+		cfg.Kafka.PoolRetryMaxD = 30 * time.Second
 	}
 	return &cfg, nil
 }

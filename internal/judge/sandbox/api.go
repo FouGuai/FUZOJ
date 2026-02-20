@@ -44,6 +44,9 @@ type JudgeRequest struct {
 	UserID    string
 	Priority  int
 	Tags      []string
+
+	// ReceivedAt is the unix timestamp when the judge task was accepted.
+	ReceivedAt int64
 }
 
 // TestcaseSpec describes one test case input and expected answer.

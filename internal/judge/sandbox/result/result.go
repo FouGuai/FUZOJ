@@ -5,10 +5,12 @@ package result
 type JudgeStatus string
 
 const (
-	StatusPending  JudgeStatus = "Pending"
-	StatusRunning  JudgeStatus = "Running"
-	StatusFinished JudgeStatus = "Finished"
-	StatusFailed   JudgeStatus = "Failed"
+	StatusPending   JudgeStatus = "Pending"
+	StatusCompiling JudgeStatus = "Compiling"
+	StatusRunning   JudgeStatus = "Running"
+	StatusJudging   JudgeStatus = "Judging"
+	StatusFinished  JudgeStatus = "Finished"
+	StatusFailed    JudgeStatus = "Failed"
 )
 
 // Verdict represents the final outcome of execution.

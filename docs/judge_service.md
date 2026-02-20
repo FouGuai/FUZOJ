@@ -1,7 +1,7 @@
 # 判题服务（Judge Service）
 
 ## 功能概览
-判题服务负责从 Kafka 拉取判题请求、拉取题目数据包并进行本地缓存、调用沙箱 Worker 执行判题，并将状态机写入 Redis 供前端轮询查询。服务关注高并发场景下的吞吐与稳定性，通过 Worker Pool 限流、Kafka 至少一次消费语义、以及本地 LRU+TTL 数据包缓存来降低存储与网络压力。判题流程中，题目元信息通过 ProblemService gRPC 获取，数据包通过 MinIO SDK 拉取并校验哈希，保证数据一致性。状态机遵循 Pending → Running → Finished/Failed，失败时保留错误码与错误信息，便于重试与排查。
+判题服务负责从 Kafka 拉取判题请求、拉取题目数据包并进行本地缓存、调用沙箱 Worker 执行判题，并将状态机写入 Redis 供前端轮询查询。服务关注高并发场景下的吞吐与稳定性，通过 Worker Pool 限流、Kafka 至少一次消费语义、以及本地 LRU+TTL 数据包缓存来降低存储与网络压力。判题流程中，题目元信息通过 ProblemService gRPC 获取，数据包通过 MinIO SDK 拉取并校验哈希，保证数据一致性。状态机遵循 Pending → Compiling(可选) → Running → Judging → Finished/Failed，失败时保留错误码与错误信息，便于重试与排查。
 
 ## 关键接口与数据结构
 - Kafka 消息（JSON）：`submission_id`、`problem_id`、`language_id`、`source_key` 等字段。

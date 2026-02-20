@@ -118,6 +118,7 @@ func main() {
 		ProblemClient:  problemClient,
 		DataCache:      dataCache,
 		Storage:        objStorage,
+		Queue:          mqClient,
 		SourceBucket:   appCfg.Source.Bucket,
 		WorkRoot:       appCfg.Judge.WorkRoot,
 		WorkerTimeout:  appCfg.Worker.Timeout,
@@ -126,6 +127,11 @@ func main() {
 		StatusTimeout:  appCfg.Status.Timeout,
 		MetaTTL:        appCfg.Problem.MetaTTL,
 		WorkerPoolSize: appCfg.Worker.PoolSize,
+		RetryTopic:     appCfg.Kafka.RetryTopic,
+		PoolRetryMax:   appCfg.Kafka.PoolRetryMax,
+		PoolRetryBase:  appCfg.Kafka.PoolRetryBase,
+		PoolRetryMaxD:  appCfg.Kafka.PoolRetryMaxD,
+		DeadLetter:     appCfg.Kafka.DeadLetter,
 	})
 	if err != nil {
 		logger.Error(context.Background(), "init judge service failed", zap.Error(err))

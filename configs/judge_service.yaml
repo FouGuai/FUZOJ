@@ -29,6 +29,10 @@ kafka:
   concurrency: 4
   maxRetries: 3
   retryDelay: 1s
+  retryTopic: "judge.retry"
+  poolRetryMax: 5
+  poolRetryBaseDelay: 1s
+  poolRetryMaxDelay: 30s
   deadLetterTopic: "judge.dead"
   messageTTL: 10m
 

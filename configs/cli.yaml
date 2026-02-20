@@ -1,4 +1,4 @@
-baseURL: "http://127.0.0.1:57547"
+baseURL: "http://127.0.0.1:41629"
 timeout: 10s
 tokenStatePath: "configs/cli_state.json"
 prettyJSON: true

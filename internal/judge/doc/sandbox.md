@@ -280,7 +280,7 @@ checker /work/input.txt /work/output.txt /work/answer.txt
 ```
 JudgeResult {
   submissionId: string
-  status: "Pending" | "Running" | "Finished" | "Failed"
+  status: "Pending" | "Compiling" | "Running" | "Judging" | "Finished" | "Failed"
   verdict: "AC" | "WA" | "TLE" | "MLE" | "OLE" | "RE" | "CE" | "SE"
   score: int
   language: string

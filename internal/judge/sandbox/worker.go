@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"fuzoj/internal/judge/sandbox/config"
 	"fuzoj/internal/judge/sandbox/profile"
@@ -22,9 +23,10 @@ const (
 // Worker is the sandbox scheduling unit.
 // It executes compile/run workflows based on prepared local data.
 type Worker struct {
-	runner      runner.Runner
-	langRepo    config.LanguageSpecRepository
-	profileRepo config.TaskProfileRepository
+	runner         runner.Runner
+	langRepo       config.LanguageSpecRepository
+	profileRepo    config.TaskProfileRepository
+	statusReporter StatusReporter
 }
 
 // NewWorker creates a new worker with required dependencies.
@@ -38,6 +40,11 @@ func NewWorker(
 		langRepo:    langRepo,
 		profileRepo: profileRepo,
 	}
+}
+
+// SetStatusReporter injects a status reporter for intermediate updates.
+func (w *Worker) SetStatusReporter(reporter StatusReporter) {
+	w.statusReporter = reporter
 }
 
 // Execute runs a full judge workflow for one submission.
@@ -74,6 +81,9 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 		Language:     lang.ID,
 	}
 
+	totalTests := len(req.Tests)
+	doneTests := 0
+
 	if err := os.MkdirAll(submissionRoot, 0755); err != nil {
 		return resultBase, appErr.Wrapf(err, appErr.JudgeSystemError, "create submission work root failed")
 	}
@@ -82,6 +92,7 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 	}()
 
 	if lang.CompileEnabled {
+		w.reportStatus(ctx, req, result.StatusCompiling, totalTests, doneTests)
 		compileDir := filepath.Join(submissionRoot, "compile")
 		if err := os.MkdirAll(compileDir, 0755); err != nil {
 			return resultBase, appErr.Wrapf(err, appErr.JudgeSystemError, "create compile workdir failed")
@@ -108,6 +119,8 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 			return resultBase, nil
 		}
 	}
+
+	w.reportStatus(ctx, req, result.StatusRunning, totalTests, doneTests)
 
 	testcases, subtaskIndex, err := prepareSubtasks(req)
 	if err != nil {
@@ -164,6 +177,8 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 		}
 
 		tests = append(tests, runRes)
+		doneTests++
+		w.reportStatus(ctx, req, result.StatusRunning, totalTests, doneTests)
 		summary.TotalTimeMs += runRes.TimeMs
 		if runRes.MemoryKB > summary.MaxMemoryKB {
 			summary.MaxMemoryKB = runRes.MemoryKB
@@ -177,6 +192,7 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 		}
 	}
 
+	w.reportStatus(ctx, req, result.StatusJudging, totalTests, doneTests)
 	summary.TotalScore = computeTotalScore(subtaskIndex, tests)
 	summary.FailedTestID = firstFailedTestID
 
@@ -191,6 +207,24 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 	resultBase.Verdict = verdict
 
 	return resultBase, nil
+}
+
+func (w *Worker) reportStatus(ctx context.Context, req JudgeRequest, status result.JudgeStatus, totalTests, doneTests int) {
+	if w.statusReporter == nil {
+		return
+	}
+	receivedAt := req.ReceivedAt
+	if receivedAt == 0 {
+		receivedAt = time.Now().Unix()
+	}
+	_ = w.statusReporter.ReportStatus(ctx, StatusUpdate{
+		SubmissionID: req.SubmissionID,
+		Status:       status,
+		Language:     req.LanguageID,
+		TotalTests:   totalTests,
+		DoneTests:    doneTests,
+		ReceivedAt:   receivedAt,
+	})
 }
 
 type subtaskState struct {

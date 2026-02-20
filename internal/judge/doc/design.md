@@ -51,6 +51,7 @@
 - 每个池都有独立并发上限与排队上限。
 - 触顶时对低优先级任务做延迟或拒绝策略。
 - 支持本地排队时间上限（避免长尾）。
+- 单机部署场景下，采用 Service 层并发限制；池满时将任务重投递到 `judge.retry`，并带指数退避与最大重投递次数，超限进入死信队列。
 
 ## 6. 判题执行与安全沙箱
 - 采用 cgroups + namespace + seccomp 白名单。
@@ -91,7 +92,7 @@
 - **热点隔离**：热门比赛/题目使用独立主题或分区。
 
 ## 10. 判题状态机
-- Pending → Running → Finished/Failed
+- Pending → Compiling(可选) → Running → Judging → Finished/Failed
 - 失败类型：编译失败、运行失败、系统错误。
 - 系统错误自动重判，超过阈值报警。
 - 结果持久化成功后再提交 Kafka offset，避免重复计分或丢失。
