@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"fuzoj/internal/judge/repository"
+	"fuzoj/judge_service/internal/repository"
 	"fuzoj/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"

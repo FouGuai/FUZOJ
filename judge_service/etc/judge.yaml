@@ -1,0 +1,74 @@
+Name: judge
+Host: 0.0.0.0
+Port: 8888
+Mysql:
+  DataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
+Cache:
+  - Host: 127.0.0.1:6379
+    Type: node
+Redis:
+  Host: 127.0.0.1:6379
+  Type: node
+StatusCacheTTL: 30m
+StatusCacheEmptyTTL: 5m
+Kafka:
+  Brokers:
+    - 127.0.0.1:9092
+  ClientID: judge-service
+  Topics:
+    - judge.task.high
+    - judge.task.normal
+  TopicWeights:
+    judge.task.high: 8
+    judge.task.normal: 4
+  ConsumerGroup: judge-service
+  PrefetchCount: 10
+  Concurrency: 4
+  MaxRetries: 3
+  RetryDelay: 1s
+  RetryTopic: judge.retry
+  PoolRetryMax: 5
+  PoolRetryBaseDelay: 1s
+  PoolRetryMaxDelay: 30s
+  DeadLetter: judge.dead
+  MessageTTL: 10m
+MinIO:
+  Endpoint: 127.0.0.1:9000
+  AccessKey: minioadmin
+  SecretKey: minioadmin
+  UseSSL: false
+  Bucket: judge-data
+  PresignTTL: 15m
+CacheConfig:
+  RootDir: /data/judge/cache
+  TTL: 30m
+  LockWait: 5s
+  MaxEntries: 256
+  MaxBytes: 10737418240
+Worker:
+  PoolSize: 4
+  Timeout: 30s
+Source:
+  Bucket: judge-sources
+  Timeout: 10s
+Problem:
+  Addr: 127.0.0.1:9001
+  Timeout: 2s
+  MetaTTL: 30s
+Status:
+  TTL: 30m
+  Timeout: 2s
+  FinalTopic: judge.status.final
+Judge:
+  WorkRoot: /data/judge/work
+Sandbox:
+  CgroupRoot: /sys/fs/cgroup
+  SeccompDir: /etc/judge/seccomp
+  HelperPath: /usr/local/bin/judge-helper
+  StdoutStderrMaxBytes: 1048576
+  EnableSeccomp: true
+  EnableCgroup: true
+  EnableNamespaces: true
+Language:
+  Languages: []
+  Profiles: []

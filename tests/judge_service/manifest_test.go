@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"fuzoj/internal/judge/model"
+	"fuzoj/judge_service/internal/model"
 )
 
 func TestMergeLimits(t *testing.T) {

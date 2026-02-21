@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"fuzoj/internal/judge/model"
-	"fuzoj/internal/judge/repository"
-	"fuzoj/internal/judge/sandbox/result"
+	"fuzoj/judge_service/internal/model"
+	"fuzoj/judge_service/internal/repository"
+	"fuzoj/judge_service/internal/sandbox/result"
 )
 
 type fakeStatusPublisher struct {

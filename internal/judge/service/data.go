@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"fuzoj/internal/judge/model"
-	"fuzoj/internal/judge/sandbox"
+	"fuzoj/judge_service/internal/model"
+	"fuzoj/judge_service/internal/sandbox"
 	appErr "fuzoj/pkg/errors"
 )
 

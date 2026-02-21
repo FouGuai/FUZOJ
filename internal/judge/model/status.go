@@ -1,6 +1,6 @@
 package model
 
-import "fuzoj/internal/judge/sandbox/result"
+import "fuzoj/judge_service/internal/sandbox/result"
 
 // JudgeStatusResponse is returned to API clients.
 type JudgeStatusResponse struct {

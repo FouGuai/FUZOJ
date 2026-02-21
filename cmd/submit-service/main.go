@@ -17,10 +17,10 @@ import (
 	commonmw "fuzoj/internal/common/http/middleware"
 	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
-	"fuzoj/internal/judge/repository"
 	"fuzoj/internal/submit/controller"
 	submitRepo "fuzoj/internal/submit/repository"
 	"fuzoj/internal/submit/service"
+	"fuzoj/judge_service/internal/repository"
 	"fuzoj/pkg/utils/logger"
 
 	"github.com/gin-gonic/gin"

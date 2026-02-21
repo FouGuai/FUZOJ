@@ -14,10 +14,10 @@ import (
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
-	"fuzoj/internal/judge/model"
-	judgeRepo "fuzoj/internal/judge/repository"
-	"fuzoj/internal/judge/sandbox/result"
 	"fuzoj/internal/submit/repository"
+	"fuzoj/judge_service/internal/model"
+	judgeRepo "fuzoj/judge_service/internal/repository"
+	"fuzoj/judge_service/internal/sandbox/result"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/logger"
 

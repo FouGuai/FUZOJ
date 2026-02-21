@@ -10,7 +10,7 @@ Submit Service 面向前端提供判题入口，负责接收提交请求、持�
 - `POST /api/v1/submissions/batch_status`：批量查询状态，返回 `items` 与 `missing`。
 - `GET /api/v1/submissions/{id}/source`：获取历史源码。
 
-Kafka 消息使用 `internal/judge/model.JudgeMessage`，根据 `scene` 路由到 `judge.level0-3` 主题。
+Kafka 消息使用 `judge_service/internal/model.JudgeMessage`，根据 `scene` 路由到 `judge.level0-3` 主题。
 
 ## 使用示例与配置说明
 服务配置位于 `configs/submit_service.yaml`，支持配置：

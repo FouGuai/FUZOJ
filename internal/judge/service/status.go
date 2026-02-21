@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"fuzoj/internal/judge/model"
-	"fuzoj/internal/judge/sandbox"
-	"fuzoj/internal/judge/sandbox/result"
+	"fuzoj/judge_service/internal/model"
+	"fuzoj/judge_service/internal/sandbox"
+	"fuzoj/judge_service/internal/sandbox/result"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/logger"
 

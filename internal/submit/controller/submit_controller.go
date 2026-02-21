@@ -3,8 +3,8 @@ package controller
 import (
 	"strings"
 
-	"fuzoj/internal/judge/model"
 	"fuzoj/internal/submit/service"
+	"fuzoj/judge_service/internal/model"
 	"fuzoj/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"

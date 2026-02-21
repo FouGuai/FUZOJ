@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"fuzoj/internal/common/mq"
-	"fuzoj/internal/judge/model"
+	"fuzoj/judge_service/internal/model"
 	appErr "fuzoj/pkg/errors"
 )
 

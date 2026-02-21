@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"fuzoj/internal/judge/sandbox/engine"
-	"fuzoj/internal/judge/sandbox/result"
-	"fuzoj/internal/judge/sandbox/security"
-	"fuzoj/internal/judge/sandbox/spec"
+	"fuzoj/judge_service/internal/sandbox/engine"
+	"fuzoj/judge_service/internal/sandbox/result"
+	"fuzoj/judge_service/internal/sandbox/security"
+	"fuzoj/judge_service/internal/sandbox/spec"
 )
 
 type staticResolver struct {

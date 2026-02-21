@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"fuzoj/internal/judge/model"
+	"fuzoj/judge_service/internal/model"
 	appErr "fuzoj/pkg/errors"
 )
 

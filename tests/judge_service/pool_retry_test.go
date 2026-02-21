@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"fuzoj/internal/common/mq"
-	"fuzoj/internal/judge/service"
+	"fuzoj/judge_service/internal/service"
 )
 
 type publishedMessage struct {

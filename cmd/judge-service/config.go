@@ -10,8 +10,8 @@ import (
 	"fuzoj/internal/common/db"
 	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
-	"fuzoj/internal/judge/sandbox/engine"
-	"fuzoj/internal/judge/sandbox/profile"
+	"fuzoj/judge_service/internal/sandbox/engine"
+	"fuzoj/judge_service/internal/sandbox/profile"
 	"fuzoj/pkg/utils/logger"
 
 	"github.com/segmentio/kafka-go"
@@ -37,30 +37,30 @@ type ServerConfig struct {
 
 // KafkaConfig holds Kafka settings.
 type KafkaConfig struct {
-	Brokers       []string      `yaml:"brokers"`
-	ClientID      string        `yaml:"clientID"`
-	MinBytes      int           `yaml:"minBytes"`
-	MaxBytes      int           `yaml:"maxBytes"`
-	MaxWait       time.Duration `yaml:"maxWait"`
-	BatchSize     int           `yaml:"batchSize"`
-	BatchTimeout  time.Duration `yaml:"batchTimeout"`
-	DialTimeout   time.Duration `yaml:"dialTimeout"`
-	ReadTimeout   time.Duration `yaml:"readTimeout"`
-	WriteTimeout  time.Duration `yaml:"writeTimeout"`
-	RequiredAcks  int           `yaml:"requiredAcks"`
-	Compression   string        `yaml:"compression"`
-	Topics        []string      `yaml:"topics"`
-	ConsumerGroup string        `yaml:"consumerGroup"`
-	PrefetchCount int           `yaml:"prefetchCount"`
-	Concurrency   int           `yaml:"concurrency"`
-	MaxRetries    int           `yaml:"maxRetries"`
-	RetryDelay    time.Duration `yaml:"retryDelay"`
-	RetryTopic    string        `yaml:"retryTopic"`
-	PoolRetryMax  int           `yaml:"poolRetryMax"`
-	PoolRetryBase time.Duration `yaml:"poolRetryBaseDelay"`
-	PoolRetryMaxD time.Duration `yaml:"poolRetryMaxDelay"`
-	DeadLetter    string        `yaml:"deadLetterTopic"`
-	MessageTTL    time.Duration `yaml:"messageTTL"`
+	Brokers       []string       `yaml:"brokers"`
+	ClientID      string         `yaml:"clientID"`
+	MinBytes      int            `yaml:"minBytes"`
+	MaxBytes      int            `yaml:"maxBytes"`
+	MaxWait       time.Duration  `yaml:"maxWait"`
+	BatchSize     int            `yaml:"batchSize"`
+	BatchTimeout  time.Duration  `yaml:"batchTimeout"`
+	DialTimeout   time.Duration  `yaml:"dialTimeout"`
+	ReadTimeout   time.Duration  `yaml:"readTimeout"`
+	WriteTimeout  time.Duration  `yaml:"writeTimeout"`
+	RequiredAcks  int            `yaml:"requiredAcks"`
+	Compression   string         `yaml:"compression"`
+	Topics        []string       `yaml:"topics"`
+	ConsumerGroup string         `yaml:"consumerGroup"`
+	PrefetchCount int            `yaml:"prefetchCount"`
+	Concurrency   int            `yaml:"concurrency"`
+	MaxRetries    int            `yaml:"maxRetries"`
+	RetryDelay    time.Duration  `yaml:"retryDelay"`
+	RetryTopic    string         `yaml:"retryTopic"`
+	PoolRetryMax  int            `yaml:"poolRetryMax"`
+	PoolRetryBase time.Duration  `yaml:"poolRetryBaseDelay"`
+	PoolRetryMaxD time.Duration  `yaml:"poolRetryMaxDelay"`
+	DeadLetter    string         `yaml:"deadLetterTopic"`
+	MessageTTL    time.Duration  `yaml:"messageTTL"`
 	TopicWeights  map[string]int `yaml:"topicWeights"`
 }
 

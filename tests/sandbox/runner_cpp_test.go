@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"fuzoj/internal/judge/sandbox/engine"
-	"fuzoj/internal/judge/sandbox/profile"
-	"fuzoj/internal/judge/sandbox/result"
-	"fuzoj/internal/judge/sandbox/runner"
-	"fuzoj/internal/judge/sandbox/security"
-	"fuzoj/internal/judge/sandbox/spec"
+	"fuzoj/judge_service/internal/sandbox/engine"
+	"fuzoj/judge_service/internal/sandbox/profile"
+	"fuzoj/judge_service/internal/sandbox/result"
+	"fuzoj/judge_service/internal/sandbox/runner"
+	"fuzoj/judge_service/internal/sandbox/security"
+	"fuzoj/judge_service/internal/sandbox/spec"
 )
 
 type fakeEngine struct {

@@ -1,6 +1,6 @@
 package model
 
-import "fuzoj/internal/judge/sandbox/spec"
+import "fuzoj/judge_service/internal/sandbox/spec"
 
 // MergeLimits merges override with defaults using non-zero fields.
 func MergeLimits(override *ResourceLimit, defaults ResourceLimit) ResourceLimit {

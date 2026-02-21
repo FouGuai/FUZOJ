@@ -47,18 +47,18 @@ type Timestamps {
 }
 
 type JudgeStatusData {
-	SubmissionId string          `json:"submission_id"`
-	Status       string          `json:"status"`
-	Verdict      string          `json:"verdict"`
-	Score        int             `json:"score"`
-	Language     string          `json:"language"`
-	Summary      SummaryStat     `json:"summary"`
-	Compile      *CompileResult  `json:"compile,omitempty"`
+	SubmissionId string           `json:"submission_id"`
+	Status       string           `json:"status"`
+	Verdict      string           `json:"verdict"`
+	Score        int              `json:"score"`
+	Language     string           `json:"language"`
+	Summary      SummaryStat      `json:"summary"`
+	Compile      *CompileResult   `json:"compile,omitempty"`
 	Tests        []TestcaseResult `json:"tests,omitempty"`
-	Timestamps   Timestamps      `json:"timestamps"`
-	Progress     Progress        `json:"progress"`
-	ErrorCode    int             `json:"error_code,omitempty"`
-	ErrorMessage string          `json:"error_message,omitempty"`
+	Timestamps   Timestamps       `json:"timestamps"`
+	Progress     Progress         `json:"progress"`
+	ErrorCode    int              `json:"error_code,omitempty"`
+	ErrorMessage string           `json:"error_message,omitempty"`
 }
 
 type JudgeStatusResponse {
@@ -80,3 +80,4 @@ service judge {
 	@handler GetStatus
 	get /submissions/:id (GetJudgeStatusRequest) returns (JudgeStatusResponse)
 }
+
