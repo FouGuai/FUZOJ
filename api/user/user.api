@@ -1,0 +1,71 @@
+syntax = "v1"
+
+info (
+	title: "User Service API"
+	desc:  "User authentication endpoints."
+)
+
+type UserInfo {
+	Id       int64  `json:"id"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
+type AuthPayload {
+	AccessToken      string   `json:"access_token"`
+	RefreshToken     string   `json:"refresh_token"`
+	AccessExpiresAt  string   `json:"access_expires_at"`
+	RefreshExpiresAt string   `json:"refresh_expires_at"`
+	User             UserInfo `json:"user"`
+}
+
+type AuthResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    AuthPayload       `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type SuccessResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type RegisterRequest {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type LoginRequest {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type RefreshRequest {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type LogoutRequest {
+	RefreshToken string `json:"refresh_token"`
+}
+
+@server (
+	prefix: /api/v1/user
+)
+service user {
+	@handler Register
+	post /register (RegisterRequest) returns (AuthResponse)
+
+	@handler Login
+	post /login (LoginRequest) returns (AuthResponse)
+
+	@handler Refresh
+	post /refresh-token (RefreshRequest) returns (AuthResponse)
+
+	@handler Logout
+	post /logout (LogoutRequest) returns (SuccessResponse)
+}
+

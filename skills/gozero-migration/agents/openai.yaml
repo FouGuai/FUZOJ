@@ -1,0 +1,4 @@
+interface:
+  display_name: "Go-zero Migration"
+  short_description: "Migrate legacy Go code to go-zero safely"
+  default_prompt: "Use -migration to migrate existing Go code to go-zero while preserving behavior."

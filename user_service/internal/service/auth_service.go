@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"time"
 
-	"fuzoj/internal/common/cache"
-	"fuzoj/internal/common/db"
-	"fuzoj/internal/user/repository"
+	commoncache "fuzoj/internal/common/cache"
 	pkgerrors "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/logger"
+	"fuzoj/user_service/internal/repository"
 
+	"github.com/zeromicro/go-zero/core/stores/sqlx"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -47,19 +47,19 @@ type AuthServiceConfig struct {
 
 // AuthService handles user authentication flows.
 type AuthService struct {
-	dbProvider     db.Provider
+	conn           sqlx.SqlConn
 	users          repository.UserRepository
 	tokens         repository.TokenRepository
-	loginFailCache cache.BasicOps
+	loginFailCache commoncache.BasicOps
 	config         AuthServiceConfig
 }
 
 // NewAuthService creates a new AuthService.
 func NewAuthService(
-	provider db.Provider,
+	conn sqlx.SqlConn,
 	users repository.UserRepository,
 	tokens repository.TokenRepository,
-	loginFailCache cache.BasicOps,
+	loginFailCache commoncache.BasicOps,
 	cfg AuthServiceConfig,
 ) *AuthService {
 	if cfg.AccessTokenTTL == 0 {
@@ -79,7 +79,7 @@ func NewAuthService(
 	}
 
 	svc := &AuthService{
-		dbProvider:     provider,
+		conn:           conn,
 		users:          users,
 		tokens:         tokens,
 		loginFailCache: loginFailCache,
@@ -109,7 +109,7 @@ func (s *AuthService) ensureRootAccount() {
 		return
 	}
 
-	existing, err := s.users.GetByUsername(ctx, nil, cfg.Username)
+	existing, err := s.users.GetByUsername(ctx, cfg.Username)
 	if err == nil {
 		logger.Info(ctx, "root account already exists", zap.Int64("user_id", existing.ID), zap.String("username", existing.Username))
 		return
@@ -133,12 +133,13 @@ func (s *AuthService) ensureRootAccount() {
 	}
 
 	userID := result.User.ID
-	err = s.withTransaction(ctx, func(tx db.Transaction) error {
-		if err := s.users.UpdateRole(ctx, tx, userID, repository.UserRoleSuperAdmin); err != nil {
+	err = s.withTransaction(ctx, func(session sqlx.Session) error {
+		usersRepo := s.users.WithSession(session)
+		if err := usersRepo.UpdateRole(ctx, userID, repository.UserRoleSuperAdmin); err != nil {
 			return err
 		}
 		if cfg.Email != "" {
-			if err := s.users.UpdateEmail(ctx, tx, userID, cfg.Email); err != nil {
+			if err := usersRepo.UpdateEmail(ctx, userID, cfg.Email); err != nil {
 				return err
 			}
 		}
@@ -223,15 +224,17 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (AuthRe
 	}
 
 	var result AuthResult
-	err = s.withTransaction(ctx, func(tx db.Transaction) error {
-		userID, createErr := s.users.Create(ctx, tx, user)
+	err = s.withTransaction(ctx, func(session sqlx.Session) error {
+		usersRepo := s.users.WithSession(session)
+		tokensRepo := s.tokens.WithSession(session)
+		userID, createErr := usersRepo.Create(ctx, user)
 		if createErr != nil {
 			logger.Warn(ctx, "auth register create user failed", zap.String("username", input.Username), zap.Error(createErr))
 			return mapUserCreateError(createErr)
 		}
 		user.ID = userID
 
-		resultData, tokenErr := s.issueTokens(ctx, tx, user, "", "")
+		resultData, tokenErr := s.issueTokens(ctx, tokensRepo, user, "", "")
 		if tokenErr != nil {
 			logger.Warn(ctx, "auth register issue tokens failed", zap.Int64("user_id", userID), zap.Error(tokenErr))
 			return tokenErr
@@ -256,7 +259,7 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 		return AuthResult{}, err
 	}
 
-	user, err := s.getUserByUsername(ctx, input.Username)
+	user, err := s.getUserByUsername(ctx, s.users, input.Username)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrUserNotFound) {
 			s.recordLoginFailure(ctx, input.Username, input.IP)
@@ -285,8 +288,9 @@ func (s *AuthService) Login(ctx context.Context, input LoginInput) (AuthResult, 
 	s.clearLoginFailure(ctx, input.Username, input.IP)
 
 	var result AuthResult
-	err = s.withTransaction(ctx, func(tx db.Transaction) error {
-		tokenResult, tokenErr := s.issueTokens(ctx, tx, user, input.DeviceInfo, input.IP)
+	err = s.withTransaction(ctx, func(session sqlx.Session) error {
+		tokensRepo := s.tokens.WithSession(session)
+		tokenResult, tokenErr := s.issueTokens(ctx, tokensRepo, user, input.DeviceInfo, input.IP)
 		if tokenErr != nil {
 			logger.Warn(ctx, "auth login issue tokens failed", zap.Int64("user_id", user.ID), zap.String("username", input.Username), zap.Error(tokenErr))
 			return tokenErr
@@ -318,7 +322,7 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 	}
 	hash := hashToken(input.RefreshToken)
 
-	tokenRecord, err := s.tokens.GetByHash(ctx, nil, hash)
+	tokenRecord, err := s.tokens.GetByHash(ctx, hash)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrTokenNotFound) {
 			logger.Warn(ctx, "auth refresh token not found", zap.Int64("user_id", userID))
@@ -356,8 +360,10 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 	}
 
 	var result AuthResult
-	err = s.withTransaction(ctx, func(tx db.Transaction) error {
-		if err := s.tokens.RevokeByHash(ctx, tx, hash, tokenRecord.ExpiresAt); err != nil {
+	err = s.withTransaction(ctx, func(session sqlx.Session) error {
+		usersRepo := s.users.WithSession(session)
+		tokensRepo := s.tokens.WithSession(session)
+		if err := tokensRepo.RevokeByHash(ctx, hash, tokenRecord.ExpiresAt); err != nil {
 			if stderrors.Is(err, repository.ErrTokenNotFound) {
 				logger.Warn(ctx, "auth refresh token revoked by another flow", zap.Int64("user_id", userID))
 				return pkgerrors.New(pkgerrors.TokenInvalid)
@@ -366,7 +372,7 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 			return pkgerrors.Wrap(fmt.Errorf("revoke refresh token failed: %w", err), pkgerrors.DatabaseError)
 		}
 
-		user, err := s.getUserByID(ctx, tokenRecord.UserID)
+		user, err := s.getUserByID(ctx, usersRepo, tokenRecord.UserID)
 		if err != nil {
 			logger.Warn(ctx, "auth refresh get user failed", zap.Int64("user_id", userID), zap.Error(err))
 			return err
@@ -382,9 +388,9 @@ func (s *AuthService) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 		}
 
 		deviceInfo := tokenRecord.DeviceInfo
-		IPAddress := tokenRecord.IPAddress
+		ipAddress := tokenRecord.IPAddress
 
-		tokenResult, tokenErr := s.issueTokens(ctx, tx, user, deviceInfo, IPAddress)
+		tokenResult, tokenErr := s.issueTokens(ctx, tokensRepo, user, deviceInfo, ipAddress)
 		if tokenErr != nil {
 			logger.Warn(ctx, "auth refresh issue tokens failed", zap.Int64("user_id", user.ID), zap.Error(tokenErr))
 			return tokenErr
@@ -415,7 +421,7 @@ func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
 	}
 
 	hash := hashToken(input.RefreshToken)
-	tokenRecord, err := s.tokens.GetByHash(ctx, nil, hash)
+	tokenRecord, err := s.tokens.GetByHash(ctx, hash)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrTokenNotFound) {
 			logger.Warn(ctx, "auth logout token not found", zap.Int64("user_id", userID))
@@ -438,7 +444,7 @@ func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
 		return nil
 	}
 
-	if err := s.tokens.RevokeByHash(ctx, nil, hash, tokenRecord.ExpiresAt); err != nil {
+	if err := s.tokens.RevokeByHash(ctx, hash, tokenRecord.ExpiresAt); err != nil {
 		logger.Error(ctx, "auth logout revoke token failed", zap.Int64("user_id", userID), zap.Error(err))
 		return pkgerrors.Wrap(fmt.Errorf("revoke refresh token failed: %w", err), pkgerrors.DatabaseError)
 	}
@@ -447,12 +453,13 @@ func (s *AuthService) Logout(ctx context.Context, input LogoutInput) error {
 	return nil
 }
 
-func (s *AuthService) withTransaction(ctx context.Context, fn func(tx db.Transaction) error) error {
-	database, err := db.CurrentDatabase(s.dbProvider)
-	if err != nil {
+func (s *AuthService) withTransaction(ctx context.Context, fn func(session sqlx.Session) error) error {
+	if s.conn == nil {
 		return fn(nil)
 	}
-	if err := database.Transaction(ctx, fn); err != nil {
+	if err := s.conn.TransactCtx(ctx, func(ctx context.Context, session sqlx.Session) error {
+		return fn(session)
+	}); err != nil {
 		if _, ok := err.(*pkgerrors.Error); ok {
 			return err
 		}
@@ -461,7 +468,7 @@ func (s *AuthService) withTransaction(ctx context.Context, fn func(tx db.Transac
 	return nil
 }
 
-func (s *AuthService) issueTokens(ctx context.Context, tx db.Transaction, user *repository.User, deviceInfo, ip string) (AuthResult, error) {
+func (s *AuthService) issueTokens(ctx context.Context, tokens repository.TokenRepository, user *repository.User, deviceInfo, ip string) (AuthResult, error) {
 	accessToken, accessExp, err := s.generateToken(user.ID, string(user.Role), repository.TokenTypeAccess, s.config.AccessTokenTTL)
 	if err != nil {
 		return AuthResult{}, err
@@ -471,7 +478,7 @@ func (s *AuthService) issueTokens(ctx context.Context, tx db.Transaction, user *
 		return AuthResult{}, err
 	}
 
-	if err := s.tokens.Create(ctx, tx, &repository.UserToken{
+	if err := tokens.Create(ctx, &repository.UserToken{
 		UserID:     user.ID,
 		TokenHash:  hashToken(accessToken),
 		TokenType:  repository.TokenTypeAccess,
@@ -483,7 +490,7 @@ func (s *AuthService) issueTokens(ctx context.Context, tx db.Transaction, user *
 		return AuthResult{}, pkgerrors.Wrap(fmt.Errorf("create access token record failed: %w", err), pkgerrors.DatabaseError)
 	}
 
-	if err := s.tokens.Create(ctx, tx, &repository.UserToken{
+	if err := tokens.Create(ctx, &repository.UserToken{
 		UserID:     user.ID,
 		TokenHash:  hashToken(refreshToken),
 		TokenType:  repository.TokenTypeRefresh,
@@ -516,8 +523,8 @@ func (s *AuthService) newTokenID() (string, error) {
 	return hex.EncodeToString(randomBytes), nil
 }
 
-func (s *AuthService) getUserByID(ctx context.Context, userID int64) (*repository.User, error) {
-	user, err := s.users.GetByID(ctx, nil, userID)
+func (s *AuthService) getUserByID(ctx context.Context, users repository.UserRepository, userID int64) (*repository.User, error) {
+	user, err := users.GetByID(ctx, userID)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrUserNotFound) {
 			return nil, pkgerrors.New(pkgerrors.UserNotFound)
@@ -527,8 +534,8 @@ func (s *AuthService) getUserByID(ctx context.Context, userID int64) (*repositor
 	return user, nil
 }
 
-func (s *AuthService) getUserByUsername(ctx context.Context, username string) (*repository.User, error) {
-	user, err := s.users.GetByUsername(ctx, nil, username)
+func (s *AuthService) getUserByUsername(ctx context.Context, users repository.UserRepository, username string) (*repository.User, error) {
+	user, err := users.GetByUsername(ctx, username)
 	if err != nil {
 		return nil, err
 	}

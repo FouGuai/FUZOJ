@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"fuzoj/internal/user/repository"
 	pkgerrors "fuzoj/pkg/errors"
+	"fuzoj/user_service/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 )

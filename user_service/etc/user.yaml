@@ -1,0 +1,23 @@
+Name: user
+Host: 0.0.0.0
+Port: 8888
+Mysql:
+  DataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
+Cache:
+  - Host: 127.0.0.1:6379
+    Type: node
+Redis:
+  Host: 127.0.0.1:6379
+  Type: node
+Auth:
+  jwtSecret: tyylovezsrtyylovezsr
+  jwtIssuer: fuzoj
+  accessTokenTTL: 15m
+  refreshTokenTTL: 168h
+  loginFailTTL: 15m
+  loginFailLimit: 5
+  root:
+    enabled: true
+    username: root
+    password: tyy1314520
+    email: root@local

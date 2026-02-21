@@ -1,0 +1,82 @@
+syntax = "v1"
+
+info (
+	title: "Judge Service API"
+	desc:  "Judge status query endpoints."
+)
+
+type Progress {
+	TotalTests int `json:"total_tests"`
+	DoneTests  int `json:"done_tests"`
+}
+
+type CompileResult {
+	OK       bool   `json:"OK"`
+	ExitCode int    `json:"ExitCode"`
+	TimeMs   int64  `json:"TimeMs"`
+	MemoryKB int64  `json:"MemoryKB"`
+	LogPath  string `json:"LogPath"`
+	Error    string `json:"Error"`
+}
+
+type TestcaseResult {
+	TestID         string `json:"TestID"`
+	Verdict        string `json:"Verdict"`
+	TimeMs         int64  `json:"TimeMs"`
+	MemoryKB       int64  `json:"MemoryKB"`
+	OutputKB       int64  `json:"OutputKB"`
+	ExitCode       int    `json:"ExitCode"`
+	RuntimeLogPath string `json:"RuntimeLogPath"`
+	CheckerLogPath string `json:"CheckerLogPath"`
+	Stdout         string `json:"Stdout"`
+	Stderr         string `json:"Stderr"`
+	Score          int    `json:"Score"`
+	SubtaskID      string `json:"SubtaskID"`
+}
+
+type SummaryStat {
+	TotalTimeMs  int64  `json:"TotalTimeMs"`
+	MaxMemoryKB  int64  `json:"MaxMemoryKB"`
+	TotalScore   int    `json:"TotalScore"`
+	FailedTestID string `json:"FailedTestID"`
+}
+
+type Timestamps {
+	ReceivedAt int64 `json:"ReceivedAt"`
+	FinishedAt int64 `json:"FinishedAt"`
+}
+
+type JudgeStatusData {
+	SubmissionId string          `json:"submission_id"`
+	Status       string          `json:"status"`
+	Verdict      string          `json:"verdict"`
+	Score        int             `json:"score"`
+	Language     string          `json:"language"`
+	Summary      SummaryStat     `json:"summary"`
+	Compile      *CompileResult  `json:"compile,omitempty"`
+	Tests        []TestcaseResult `json:"tests,omitempty"`
+	Timestamps   Timestamps      `json:"timestamps"`
+	Progress     Progress        `json:"progress"`
+	ErrorCode    int             `json:"error_code,omitempty"`
+	ErrorMessage string          `json:"error_message,omitempty"`
+}
+
+type JudgeStatusResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    JudgeStatusData   `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type GetJudgeStatusRequest {
+	Id string `path:"id"`
+}
+
+@server (
+	prefix: /api/v1/judge
+)
+service judge {
+	@handler GetStatus
+	get /submissions/:id (GetJudgeStatusRequest) returns (JudgeStatusResponse)
+}

@@ -13,6 +13,7 @@
 ## 编码风格与命名规范
 
 - 遵循 **Effective Go** 与 **Uber Go Style Guide**。
+- 新增代码尽量遵循 **go-zero** 的项目结构与编码规范。
 - 命名规范：
   - 局部变量使用 `camelCase`
   - 导出标识符使用 `PascalCase`
