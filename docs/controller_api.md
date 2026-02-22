@@ -1,6 +1,6 @@
 # Controller 接口文档（按 Service 划分）
 
-本文档汇总 `internal/**/controller` 下的接口能力，按 Service 归类，便于快速定位。接口的实际路由路径未在 controller 文件中定义，请以路由注册处为准。
+本文档汇总 Controller/Handler 层接口能力，按 Service 归类，便于快速定位。历史代码位于 `internal/**/controller`，go-zero 服务位于 `services/**/internal/handler`，实际路由以对应服务的 `handler/routes.go` 为准。
 
 ## Problem Service
 

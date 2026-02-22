@@ -2,9 +2,10 @@
 
 ## 项目结构与模块组织
 
-- `cmd/`：各个服务的入口（例如 `cmd/gateway/main.go`、`cmd/user-service/main.go`）。
-- `internal/`：核心业务逻辑；严格遵循分层调用链
-  **Controller → Service → Repository**（禁止反向调用或跨层调用）。
+- `services/`：go-zero 服务入口与代码（例如 `services/judge_service/`、`services/user_service/`）。
+  - 每个服务是独立的 go-zero 项目结构，目录结构：`internal/handler` → `internal/logic` → `internal/repository` → `internal/model`，依赖由 `internal/svc` 注入。
+- `internal/`：历史核心业务逻辑；严格遵循分层调用链
+  **Controller → Logic → Repository → Model**（禁止反向调用或跨层调用）。
 - `pkg/`：可被其他模块复用的公共库；**统一错误码**存放在 `pkg/errors/`。
 - `api/`：API 定义（OpenAPI / Proto 等规范）。
 - `tests/`：自定义测试套件、测试辅助工具和示例。
@@ -13,7 +14,7 @@
 ## 编码风格与命名规范
 
 - 遵循 **Effective Go** 与 **Uber Go Style Guide**。
-- 新增代码尽量遵循 **go-zero** 的项目结构与编码规范。
+- 新增代码必须遵循 **go-zero** 的项目结构与编码规范。
 - 命名规范：
   - 局部变量使用 `camelCase`
   - 导出标识符使用 `PascalCase`
@@ -62,12 +63,13 @@
   - 要考虑缓存雪崩、缓存穿透、缓存击穿的影响
 
 - **缓存模式遵循规范**：
-  - 读操作：使用 `cache.GetWithCached()` 实现 Cache-Aside 模式
-  - 空值缓存：防止缓存穿透，用短 TTL（如 5 分钟）缓存空结果
+  - 读操作：使用 go-zero `cache.Cache` 的 `Take` 实现 Cache-Aside 模式
+  - 空值缓存：防止缓存穿透，用占位值 + 短 TTL（如 5 分钟）缓存空结果
   - 写操作：使用 Write-Through（写入后立即删除缓存）或 Write-Behind（异步更新）
 
 - **缓存框架和工具**：
-  - 查看 **已实现的模块文档** 中的 `Common Cache Interface` 和 `User Cache Repository`
+  - 新代码优先使用 go-zero `cache.Cache` / `cache.CacheConf` 与 model 层 `sqlc.CachedConn`
+  - 历史模块可参考 **已实现的模块文档** 中的 `Common Cache Interface`
   - 复用现有的缓存实现，不要重复造轮子
 
 
@@ -111,8 +113,8 @@
 
 例如以下检查：
 
-- **缓存相关**：检查 `User Cache Repository` 或 `Common Cache Interface` 是否可用
-- **数据访问**：检查 `User Repository` 或其他已有 Repository 的实现方式
+- **缓存相关**：优先检查 go-zero model 缓存与 `cache.Cache`，历史模块再参考 `Common Cache Interface`
+- **数据访问**：检查 `User Auth Service` 或其他已有 Repository 的实现方式
 - **事件处理**：检查是否已有消息队列消费者框架可复用
 - **错误处理**：复用 `pkg/errors/` 中定义的统一错误码
 - **通用工具**：查看 `pkg/` 下是否已有工具库可用
@@ -136,7 +138,7 @@
   - **第二层**：关键接口或数据结构（列出主要 API、类型定义）
   - **第三层**：使用示例或配置说明（可选，复杂模块必须包含）
 - 长度：200-500 字为宜，简明扼要
-- 示例见：`docs/user_repository.md`
+- 示例见：`docs/user_auth_service.md`
 
 
 ### 接口文档
@@ -151,15 +153,13 @@
 - 格式：模块名称 + 文档路径 + 一句话说明
 - 示例：
   ```
-  - **User Repository**：`docs/user_repository.md` — 用户、会话与缓存仓储的数据访问层实现
+  - **User Auth Service**：`docs/user_auth_service.md` — 用户认证、仓储与 Token/黑名单管理的模块说明
   ```
 
 ## 已实现的模块文档
 
-- **Common Cache Interface**：`internal/common/cache/interface.go` — 统一的缓存操作接口定义
-- **User Repository**：`docs/user_repository.md` — 用户、会话与缓存仓储的数据访问层实现
-- **User Auth Service**：`docs/user_auth_service.md` — 用户注册、登录与令牌管理服务
-- **User Token Repository**：`docs/user_token_repository.md` — 用户 Token 持久化与黑名单管理
+- **Common Cache Interface**：`internal/common/cache/interface.go` — 统一的缓存操作接口定义（历史模块）
+- **User Auth Service**：`docs/user_auth_service.md` — 用户认证、仓储与 Token/黑名单管理的模块说明
 - **Sandbox Engine**：`docs/sandbox_engine.md` — Linux 原生沙箱引擎与初始化流程说明
 - **Sandbox Runner**：`docs/sandbox_runner.md` — 判题编排层，负责生成 RunSpec 并执行编译、运行与 SPJ
 - **Judge Worker**：`docs/judge_worker.md` — 沙箱执行调度单元，负责编译、运行与 SPJ 结果汇总

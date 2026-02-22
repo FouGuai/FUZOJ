@@ -1,6 +1,6 @@
 # RPC 接口文档（服务内部调用）
 
-本文档汇总服务内部 RPC（gRPC）接口，供服务间调用使用。接口定义来源于 `api/proto` 与对应 `internal/**/rpc` 实现。
+本文档汇总服务内部 RPC（gRPC）接口，供服务间调用使用。接口定义来源于 `api/proto` 与对应实现代码，历史实现位于 `internal/**/rpc`，go-zero 服务迁移后可能位于 `services/**/internal/rpc`。
 
 ## Problem Service (gRPC)
 

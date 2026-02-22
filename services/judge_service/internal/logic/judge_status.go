@@ -1,0 +1,71 @@
+package logic
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	appErr "fuzoj/pkg/errors"
+	"fuzoj/pkg/utils/logger"
+	"fuzoj/services/judge_service/internal/pmodel"
+	"fuzoj/services/judge_service/internal/sandbox"
+	"fuzoj/services/judge_service/internal/sandbox/result"
+
+	"go.uber.org/zap"
+)
+
+func (s *JudgeProcessor) persistStatus(ctx context.Context, status pmodel.JudgeStatusResponse) error {
+	ctxStatus := ctx
+	if s.statusTimeout > 0 {
+		var cancel context.CancelFunc
+		ctxStatus, cancel = context.WithTimeout(ctx, s.statusTimeout)
+		defer cancel()
+	}
+	return s.statusRepo.Save(ctxStatus, status)
+}
+
+// ReportStatus updates intermediate judge status in cache.
+func (s *JudgeProcessor) ReportStatus(ctx context.Context, update sandbox.StatusUpdate) error {
+	status := pmodel.JudgeStatusResponse{
+		SubmissionID: update.SubmissionID,
+		Status:       update.Status,
+		Language:     update.Language,
+		Timestamps: result.Timestamps{
+			ReceivedAt: update.ReceivedAt,
+			FinishedAt: update.FinishedAt,
+		},
+		Progress: pmodel.Progress{
+			TotalTests: update.TotalTests,
+			DoneTests:  update.DoneTests,
+		},
+	}
+	if err := s.persistStatus(ctx, status); err != nil {
+		logger.Warn(ctx, "update intermediate status failed", zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+func (s *JudgeProcessor) handleFailure(ctx context.Context, submissionID string, err error) error {
+	code := appErr.GetCode(err)
+	failed := pmodel.JudgeStatusResponse{
+		SubmissionID: submissionID,
+		Status:       result.StatusFailed,
+		Verdict:      result.VerdictSE,
+		ErrorCode:    int(code),
+		ErrorMessage: err.Error(),
+		Timestamps: result.Timestamps{
+			FinishedAt: time.Now().Unix(),
+		},
+	}
+	if saveErr := s.persistStatus(ctx, failed); saveErr != nil {
+		logger.Warn(ctx, "update failure status failed", zap.Error(saveErr))
+	}
+	if code == appErr.InvalidParams || code == appErr.ProblemNotFound || code == appErr.LanguageNotSupported {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return err
+}
