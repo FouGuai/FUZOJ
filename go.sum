@@ -180,6 +180,8 @@ github.com/xdg-go/stringprep v1.0.4/go.mod h1:mPGuuIYwz7CmR2bT9j4GbQqutWS1zV24gi
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=
 github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
+github.com/zeromicro/go-queue v1.2.2 h1:3TMhRlI/8lZy13Sj6FBBWWRXlsQhGCchRxY2itfV1Is=
+github.com/zeromicro/go-queue v1.2.2/go.mod h1:5HiNTEw1tACi9itho0JYQ1+EpIGpSFM4tOQ4bit+yKM=
 github.com/zeromicro/go-zero v1.10.0 h1:+qfAqj+BGt0qjW1PQk2VO5WLwIQBh60CA3OTLsBosS8=
 github.com/zeromicro/go-zero v1.10.0/go.mod h1:qAModWGsfkrBl0JP9oS7K7k6dgucExOuQdpzHyXVKLg=
 go.opentelemetry.io/otel v1.24.0 h1:0LAOdjNmQeSTzGBzduGe/rU4tZhMwL5rWgtp9Ku5Jfo=

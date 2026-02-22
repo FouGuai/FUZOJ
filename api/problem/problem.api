@@ -1,0 +1,181 @@
+syntax = "v1"
+
+info (
+	title: "Problem Service API"
+	desc:  "Problem meta management and data pack upload endpoints."
+)
+
+type SuccessResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type CreateProblemRequest {
+	Title   string `json:"title"`
+	OwnerId int64  `json:"owner_id"`
+}
+
+type CreateProblemPayload {
+	Id int64 `json:"id"`
+}
+
+type CreateProblemResponse {
+	Code    int                  `json:"code"`
+	Message string               `json:"message"`
+	Data    CreateProblemPayload `json:"data"`
+	Details map[string]string    `json:"details,omitempty"`
+	TraceId string               `json:"trace_id,omitempty"`
+}
+
+type GetLatestRequest {
+	Id int64 `path:"id"`
+}
+
+type LatestMetaPayload {
+	ProblemId    int64  `json:"problem_id"`
+	Version      int32  `json:"version"`
+	ManifestHash string `json:"manifest_hash"`
+	DataPackKey  string `json:"data_pack_key"`
+	DataPackHash string `json:"data_pack_hash"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+type LatestMetaResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    LatestMetaPayload `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type DeleteProblemRequest {
+	Id int64 `path:"id"`
+}
+
+type PrepareUploadRequest {
+	Id                int64  `path:"id"`
+	IdempotencyKey    string `header:"Idempotency-Key"`
+	ExpectedSizeBytes int64  `json:"expected_size_bytes"`
+	ExpectedSha256    string `json:"expected_sha256"`
+	ContentType       string `json:"content_type"`
+	CreatedBy         int64  `json:"created_by"`
+	ClientType        string `json:"client_type"`
+	UploadStrategy    string `json:"upload_strategy"`
+}
+
+type PrepareUploadPayload {
+	UploadId          int64  `json:"upload_id"`
+	ProblemId         int64  `json:"problem_id"`
+	Version           int32  `json:"version"`
+	Bucket            string `json:"bucket"`
+	ObjectKey         string `json:"object_key"`
+	MultipartUploadId string `json:"multipart_upload_id"`
+	PartSizeBytes     int64  `json:"part_size_bytes"`
+	ExpiresAt         string `json:"expires_at"`
+}
+
+type PrepareUploadResponse {
+	Code    int                  `json:"code"`
+	Message string               `json:"message"`
+	Data    PrepareUploadPayload `json:"data"`
+	Details map[string]string    `json:"details,omitempty"`
+	TraceId string               `json:"trace_id,omitempty"`
+}
+
+type SignPartsRequest {
+	Id          int64 `path:"id"`
+	UploadId    int64 `path:"upload_id"`
+	PartNumbers []int `json:"part_numbers"`
+}
+
+type SignPartsPayload {
+	Urls             map[string]string `json:"urls"`
+	ExpiresInSeconds int64             `json:"expires_in_seconds"`
+}
+
+type SignPartsResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    SignPartsPayload  `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type CompletedPartInput {
+	PartNumber int    `json:"part_number"`
+	ETag       string `json:"etag"`
+}
+
+type CompleteUploadRequest {
+	Id           int64                `path:"id"`
+	UploadId     int64                `path:"upload_id"`
+	Parts        []CompletedPartInput `json:"parts"`
+	ManifestJson string               `json:"manifest_json"`
+	ConfigJson   string               `json:"config_json"`
+	ManifestHash string               `json:"manifest_hash"`
+	DataPackHash string               `json:"data_pack_hash"`
+}
+
+type CompleteUploadPayload {
+	ProblemId    int64  `json:"problem_id"`
+	Version      int32  `json:"version"`
+	ManifestHash string `json:"manifest_hash"`
+	DataPackKey  string `json:"data_pack_key"`
+	DataPackHash string `json:"data_pack_hash"`
+}
+
+type CompleteUploadResponse {
+	Code    int                   `json:"code"`
+	Message string                `json:"message"`
+	Data    CompleteUploadPayload `json:"data"`
+	Details map[string]string     `json:"details,omitempty"`
+	TraceId string                `json:"trace_id,omitempty"`
+}
+
+type AbortUploadRequest {
+	Id       int64 `path:"id"`
+	UploadId int64 `path:"upload_id"`
+}
+
+type PublishVersionRequest {
+	Id      int64 `path:"id"`
+	Version int32 `path:"version"`
+}
+
+@server (
+	prefix: /api/v1/problems
+)
+service problem {
+	@handler Create
+	post / (CreateProblemRequest) returns (CreateProblemResponse)
+
+	@handler GetLatest
+	get /:id/latest (GetLatestRequest) returns (LatestMetaResponse)
+
+	@handler Delete
+	delete /:id (DeleteProblemRequest) returns (SuccessResponse)
+
+	@handler PrepareUpload
+	post /:id/data-pack/uploads/prepare (PrepareUploadRequest) returns (PrepareUploadResponse)
+
+	@handler SignUpload
+	post /:id/data-pack/uploads/:upload_id/sign (SignPartsRequest) returns (SignPartsResponse)
+
+	@handler CompleteUpload
+	post /:id/data-pack/uploads/:upload_id/complete (CompleteUploadRequest) returns (CompleteUploadResponse)
+
+	@handler AbortUpload
+	post /:id/data-pack/uploads/:upload_id/abort (AbortUploadRequest) returns (SuccessResponse)
+
+	@handler PublishVersion
+	post /:id/versions/:version/publish (PublishVersionRequest) returns (SuccessResponse)
+}
+
+// RPC reference (gRPC)
+// Proto: api/proto/problem/v1/problem.proto
+// Service: fuzoj.problem.v1.ProblemService
+// - GetLatest(GetLatestRequest) returns (GetLatestResponse)
+//   Request: problem_id (int64)
+//   Response.meta: problem_id, version, manifest_hash, data_pack_key, data_pack_hash, updated_at
