@@ -29,6 +29,23 @@ func main() {
 	ctx := svc.NewServiceContext(c)
 	handler.RegisterHandlers(server, ctx)
 
+	if ctx.StatusFinalQueue != nil {
+		go ctx.StatusFinalQueue.Start()
+		defer ctx.StatusFinalQueue.Stop()
+	}
+	if ctx.TopicPushers.Level0 != nil {
+		defer ctx.TopicPushers.Level0.Close()
+	}
+	if ctx.TopicPushers.Level1 != nil {
+		defer ctx.TopicPushers.Level1.Close()
+	}
+	if ctx.TopicPushers.Level2 != nil {
+		defer ctx.TopicPushers.Level2.Close()
+	}
+	if ctx.TopicPushers.Level3 != nil {
+		defer ctx.TopicPushers.Level3.Close()
+	}
+
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)
 	server.Start()
 }

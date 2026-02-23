@@ -6,7 +6,6 @@ package logic
 import (
 	"context"
 
-	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
 
@@ -28,5 +27,13 @@ func NewBatchStatusLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Batch
 }
 
 func (l *BatchStatusLogic) BatchStatus(req *types.BatchStatusRequest) (resp *types.BatchStatusResponse, err error) {
-	return nil, appErr.New(appErr.ServiceUnavailable).WithMessage("submit service is not implemented")
+	app, err := NewSubmitApp(l.svcCtx)
+	if err != nil {
+		return nil, err
+	}
+	statuses, missing, err := app.GetStatusBatch(l.ctx, req.SubmissionIds)
+	if err != nil {
+		return nil, err
+	}
+	return buildBatchStatusResponse(l.ctx, statuses, missing), nil
 }

@@ -7,4 +7,5 @@ const (
 	TraceID   key = "trace_id"
 	RequestID key = "request_id"
 	UserID    key = "user_id"
+	ClientIP  key = "client_ip"
 )

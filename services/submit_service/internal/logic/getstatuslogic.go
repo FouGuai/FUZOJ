@@ -6,7 +6,6 @@ package logic
 import (
 	"context"
 
-	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
 
@@ -28,5 +27,13 @@ func NewGetStatusLogic(ctx context.Context, svcCtx *svc.ServiceContext) *GetStat
 }
 
 func (l *GetStatusLogic) GetStatus(req *types.GetStatusRequest) (resp *types.GetStatusResponse, err error) {
-	return nil, appErr.New(appErr.ServiceUnavailable).WithMessage("submit service is not implemented")
+	app, err := NewSubmitApp(l.svcCtx)
+	if err != nil {
+		return nil, err
+	}
+	status, err := app.GetStatus(l.ctx, req.Id)
+	if err != nil {
+		return nil, err
+	}
+	return buildStatusResponse(l.ctx, status), nil
 }

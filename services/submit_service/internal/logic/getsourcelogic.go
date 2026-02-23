@@ -6,7 +6,6 @@ package logic
 import (
 	"context"
 
-	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
 
@@ -28,5 +27,13 @@ func NewGetSourceLogic(ctx context.Context, svcCtx *svc.ServiceContext) *GetSour
 }
 
 func (l *GetSourceLogic) GetSource(req *types.GetSourceRequest) (resp *types.GetSourceResponse, err error) {
-	return nil, appErr.New(appErr.ServiceUnavailable).WithMessage("submit service is not implemented")
+	app, err := NewSubmitApp(l.svcCtx)
+	if err != nil {
+		return nil, err
+	}
+	submission, err := app.GetSource(l.ctx, req.Id)
+	if err != nil {
+		return nil, err
+	}
+	return buildSourceResponse(l.ctx, submission), nil
 }

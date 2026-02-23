@@ -4,8 +4,10 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
+	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/services/submit_service/internal/logic"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
@@ -20,7 +22,8 @@ func CreateHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			return
 		}
 
-		l := logic.NewCreateLogic(r.Context(), svcCtx)
+		ctx := context.WithValue(r.Context(), contextkey.ClientIP, httpx.GetRemoteAddr(r))
+		l := logic.NewCreateLogic(ctx, svcCtx)
 		resp, err := l.Create(&req)
 		if err != nil {
 			writeError(w, r, err)

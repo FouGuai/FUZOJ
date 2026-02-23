@@ -6,7 +6,6 @@ package logic
 import (
 	"context"
 
-	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
 
@@ -28,5 +27,23 @@ func NewCreateLogic(ctx context.Context, svcCtx *svc.ServiceContext) *CreateLogi
 }
 
 func (l *CreateLogic) Create(req *types.CreateSubmissionRequest) (resp *types.CreateSubmissionResponse, err error) {
-	return nil, appErr.New(appErr.ServiceUnavailable).WithMessage("submit service is not implemented")
+	app, err := NewSubmitApp(l.svcCtx)
+	if err != nil {
+		return nil, err
+	}
+	submissionID, status, err := app.Submit(l.ctx, submitParams{
+		ProblemID:         req.ProblemId,
+		UserID:            req.UserId,
+		LanguageID:        req.LanguageId,
+		SourceCode:        req.SourceCode,
+		ContestID:         req.ContestId,
+		Scene:             req.Scene,
+		ExtraCompileFlags: req.ExtraCompileFlags,
+		IdempotencyKey:    req.IdempotencyKey,
+		ClientIP:          getClientIP(l.ctx),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return buildCreateResponse(l.ctx, submissionID, status), nil
 }
