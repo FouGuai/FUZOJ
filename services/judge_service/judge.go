@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"fuzoj/internal/common/mq"
+	"fuzoj/internal/common/mq/weighted_kq"
 	"fuzoj/internal/common/storage"
 	"fuzoj/services/judge_service/internal/cache"
 	"fuzoj/services/judge_service/internal/config"
@@ -25,6 +25,7 @@ import (
 
 	problemv1 "fuzoj/api/gen/problem/v1"
 
+	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest"
@@ -64,17 +65,39 @@ func main() {
 	worker := sandbox.NewWorker(jobRunner, localRepo, localRepo)
 	ctx.Worker = worker
 
-	mqClient, err := mq.NewKafkaQueue(c.Kafka.ToMQConfig())
-	if err != nil {
-		logx.Errorf("init kafka failed: %v", err)
+	if len(c.Kafka.Brokers) == 0 {
+		logx.Error("kafka brokers are required")
 		return
 	}
+	var statusPusher *kq.Pusher
+	if c.Status.FinalTopic != "" {
+		statusPusher = kq.NewPusher(c.Kafka.Brokers, c.Status.FinalTopic, kq.WithSyncPush())
+	}
+	var retryPusher *kq.Pusher
+	if c.Kafka.RetryTopic != "" {
+		retryPusher = kq.NewPusher(c.Kafka.Brokers, c.Kafka.RetryTopic, kq.WithSyncPush())
+	}
+	var deadLetterPusher *kq.Pusher
+	if c.Kafka.DeadLetter != "" {
+		deadLetterPusher = kq.NewPusher(c.Kafka.Brokers, c.Kafka.DeadLetter, kq.WithSyncPush())
+	}
 	defer func() {
-		_ = mqClient.Stop()
-		_ = mqClient.Close()
+		if statusPusher != nil {
+			_ = statusPusher.Close()
+		}
+		if retryPusher != nil {
+			_ = retryPusher.Close()
+		}
+		if deadLetterPusher != nil {
+			_ = deadLetterPusher.Close()
+		}
 	}()
 
-	statusPublisher := repository.NewMQStatusEventPublisher(mqClient, c.Status.FinalTopic)
+	ctx.StatusPusher = statusPusher
+	ctx.RetryPusher = retryPusher
+	ctx.DeadLetterPusher = deadLetterPusher
+
+	statusPublisher := repository.NewMQStatusEventPublisher(statusPusher, c.Status.FinalTopic)
 	ctx.StatusRepo = repository.NewStatusRepository(
 		ctx.StatusCache,
 		ctx.SubmissionsModel,
@@ -82,7 +105,6 @@ func main() {
 		c.StatusCacheEmptyTTL,
 		statusPublisher,
 	)
-	ctx.Queue = mqClient
 
 	dataCache := cache.NewDataPackCache(
 		c.CacheConfig.RootDir,
@@ -111,35 +133,31 @@ func main() {
 	problemClient := problemclient.NewClient(problemv1.NewProblemServiceClient(grpcConn))
 	ctx.ProblemClient = problemClient
 
-	weights := c.Kafka.TopicWeights
-	if len(weights) == 0 {
-		weights = defaultTopicWeights(c.Kafka.Topics)
-	}
-	weightedTopics, err := buildWeightedTopics(c.Kafka.Topics, weights)
-	if err != nil {
-		logx.Errorf("build weighted topics failed: %v", err)
-		return
-	}
-
-	limiter := mq.NewTokenLimiter(c.Worker.PoolSize)
 	consumer := logic.NewJudgeConsumerLogic(context.Background(), ctx)
-	err = mqClient.SubscribeWeighted(context.Background(), weightedTopics, consumer.HandleMessage, &mq.SubscribeOptions{
-		ConsumerGroup:   c.Kafka.ConsumerGroup,
-		PrefetchCount:   c.Kafka.PrefetchCount,
-		Concurrency:     c.Kafka.Concurrency,
-		MaxRetries:      c.Kafka.MaxRetries,
-		RetryDelay:      c.Kafka.RetryDelay,
-		DeadLetterTopic: c.Kafka.DeadLetter,
-		MessageTTL:      c.Kafka.MessageTTL,
-	}, limiter)
+	confs, err := weighted_kq.BuildWeightedKqConfs(weighted_kq.WeightedKqOptions{
+		Brokers:         c.Kafka.Brokers,
+		Group:           c.Kafka.ConsumerGroup,
+		Topics:          c.Kafka.Topics,
+		TopicWeights:    c.Kafka.TopicWeights,
+		ConsumersTotal:  c.Kafka.PrefetchCount,
+		ProcessorsTotal: c.Kafka.Concurrency,
+		MinBytes:        c.Kafka.MinBytes,
+		MaxBytes:        c.Kafka.MaxBytes,
+		ServiceName:     c.Name,
+		RetryTopic:      c.Kafka.RetryTopic,
+		AutoAddRetry:    true,
+	})
 	if err != nil {
-		logx.Errorf("subscribe kafka failed: %v", err)
+		logx.Errorf("build weighted kq configs failed: %v", err)
 		return
 	}
-	if err := mqClient.Start(); err != nil {
-		logx.Errorf("start kafka consumer failed: %v", err)
+	queueGroup, err := weighted_kq.NewWeightedKqQueues(confs, consumer)
+	if err != nil {
+		logx.Errorf("init kq consumers failed: %v", err)
 		return
 	}
+	go queueGroup.Start()
+	defer queueGroup.Stop()
 	handler.RegisterHandlers(server, ctx)
 
 	logx.Infof("starting server at %s:%d...", c.Host, c.Port)
@@ -209,18 +227,6 @@ func defaultTopicWeights(topics []string) map[string]int {
 		out[topic] = 1
 	}
 	return out
-}
-
-func buildWeightedTopics(topics []string, weights map[string]int) ([]mq.WeightedTopic, error) {
-	weighted := make([]mq.WeightedTopic, 0, len(topics))
-	for _, topic := range topics {
-		weight, ok := weights[topic]
-		if !ok || weight <= 0 {
-			return nil, fmt.Errorf("invalid topic weight for %s", topic)
-		}
-		weighted = append(weighted, mq.WeightedTopic{Topic: topic, Weight: weight})
-	}
-	return weighted, nil
 }
 
 func toMinIOConfig(cfg config.MinIOConfig) storage.MinIOConfig {

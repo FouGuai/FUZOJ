@@ -1,4 +1,4 @@
-package logic
+package judge_app
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"fuzoj/services/judge_service/internal/sandbox"
 )
 
-func (s *JudgeProcessor) downloadSource(ctx context.Context, payload pmodel.JudgeMessage) (string, error) {
+func (s *JudgeApp) downloadSource(ctx context.Context, payload pmodel.JudgeMessage) (string, error) {
 	submissionDir := filepath.Join(s.workRoot, payload.SubmissionID, "source")
 	if err := os.MkdirAll(submissionDir, 0755); err != nil {
 		return "", appErr.Wrapf(err, appErr.JudgeSystemError, "create source dir failed")

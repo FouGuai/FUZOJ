@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewPrepareUploadLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Pre
 }
 
 func (l *PrepareUploadLogic) PrepareUpload(req *types.PrepareUploadRequest) (resp *types.PrepareUploadResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
-	output, err := manager.PrepareDataPackUpload(l.ctx, PrepareUploadInput{
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	output, err := problemApp.PrepareDataPackUpload(l.ctx, problem_app.PrepareUploadInput{
 		ProblemID:         req.Id,
 		IdempotencyKey:    req.IdempotencyKey,
 		ExpectedSizeBytes: req.ExpectedSizeBytes,

@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"fuzoj/services/user_service/internal/logic/auth_app"
 	"fuzoj/services/user_service/internal/svc"
 	"fuzoj/services/user_service/internal/types"
 
@@ -28,8 +29,8 @@ func NewRegisterLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Register
 }
 
 func (l *RegisterLogic) Register(req *types.RegisterRequest) (resp *types.AuthResponse, err error) {
-	manager := newAuthManager(l.svcCtx)
-	result, err := manager.Register(l.ctx, RegisterInput{
+	manager := auth_app.NewAuthApp(l.svcCtx)
+	result, err := manager.Register(l.ctx, auth_app.RegisterInput{
 		Username: strings.TrimSpace(req.Username),
 		Password: req.Password,
 	})

@@ -2,76 +2,26 @@ package judge_service_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
-	"fuzoj/internal/common/mq"
-	"fuzoj/services/judge_service/internal/logic"
+	"fuzoj/services/judge_service/internal/logic/judge_app"
+	"fuzoj/services/judge_service/internal/pmodel"
 )
 
 type publishedMessage struct {
-	topic string
-	msg   *mq.Message
+	key   string
+	value string
 }
 
-type fakeQueue struct {
+type fakePusher struct {
 	published []publishedMessage
 }
 
-func (f *fakeQueue) Publish(ctx context.Context, topic string, message *mq.Message) error {
-	f.published = append(f.published, publishedMessage{topic: topic, msg: message})
+func (f *fakePusher) PushWithKey(ctx context.Context, key, value string) error {
+	f.published = append(f.published, publishedMessage{key: key, value: value})
 	return nil
-}
-
-func (f *fakeQueue) PublishBatch(ctx context.Context, topic string, messages []*mq.Message) error {
-	for _, msg := range messages {
-		f.published = append(f.published, publishedMessage{topic: topic, msg: msg})
-	}
-	return nil
-}
-
-func (f *fakeQueue) Subscribe(ctx context.Context, topic string, handler mq.HandlerFunc) error {
-	return nil
-}
-
-func (f *fakeQueue) SubscribeWithOptions(ctx context.Context, topic string, handler mq.HandlerFunc, opts *mq.SubscribeOptions) error {
-	return nil
-}
-
-func (f *fakeQueue) Start() error { return nil }
-
-func (f *fakeQueue) Stop() error { return nil }
-
-func (f *fakeQueue) Pause() error { return nil }
-
-func (f *fakeQueue) Resume() error { return nil }
-
-func (f *fakeQueue) Ping(ctx context.Context) error { return nil }
-
-func (f *fakeQueue) Close() error { return nil }
-
-func TestParsePoolRetryCount(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		headers map[string]string
-		want    int
-	}{
-		{name: "empty", headers: nil, want: 0},
-		{name: "missing", headers: map[string]string{}, want: 0},
-		{name: "invalid", headers: map[string]string{"x-pool-retry": "bad"}, want: 0},
-		{name: "negative", headers: map[string]string{"x-pool-retry": "-1"}, want: 0},
-		{name: "ok", headers: map[string]string{"x-pool-retry": "3"}, want: 3},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			if got := logic.ParsePoolRetryCount(tt.headers); got != tt.want {
-				t.Fatalf("expected %d, got %d", tt.want, got)
-			}
-		})
-	}
 }
 
 func TestComputePoolBackoff(t *testing.T) {
@@ -93,7 +43,7 @@ func TestComputePoolBackoff(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := logic.ComputePoolBackoff(tt.retryCount, tt.base, tt.max); got != tt.want {
+			if got := judge_app.ComputePoolBackoff(tt.retryCount, tt.base, tt.max); got != tt.want {
 				t.Fatalf("expected %s, got %s", tt.want, got)
 			}
 		})
@@ -104,44 +54,56 @@ func TestRequeueForPoolFull(t *testing.T) {
 	t.Parallel()
 	t.Run("publish-retry", func(t *testing.T) {
 		t.Parallel()
-		queue := &fakeQueue{}
-		msg := mq.NewMessage([]byte("payload"))
-		msg.Headers["x-pool-retry"] = "1"
-		if err := logic.RequeueForPoolFull(context.Background(), queue, "judge.retry", "judge.dead", 5, 0, 0, msg); err != nil {
+		retryPusher := &fakePusher{}
+		payload := pmodel.JudgeMessage{
+			SubmissionID: "sub-1",
+			PoolRetry:    1,
+		}
+		if err := judge_app.RequeueForPoolFull(context.Background(), retryPusher, nil, "judge.retry", "judge.dead", 5, 0, 0, payload); err != nil {
 			t.Fatalf("requeue failed: %v", err)
 		}
-		if len(queue.published) != 1 {
-			t.Fatalf("expected 1 published message, got %d", len(queue.published))
+		if len(retryPusher.published) != 1 {
+			t.Fatalf("expected 1 published message, got %d", len(retryPusher.published))
 		}
-		got := queue.published[0]
-		if got.topic != "judge.retry" {
-			t.Fatalf("expected retry topic, got %s", got.topic)
+		got := retryPusher.published[0]
+		if got.key != "sub-1" {
+			t.Fatalf("expected key sub-1, got %s", got.key)
 		}
-		if got.msg.Headers["x-pool-retry"] != "2" {
-			t.Fatalf("expected retry count 2, got %s", got.msg.Headers["x-pool-retry"])
+		var decoded pmodel.JudgeMessage
+		if err := json.Unmarshal([]byte(got.value), &decoded); err != nil {
+			t.Fatalf("decode requeue payload failed: %v", err)
 		}
-		if got.msg.ID != "" {
-			t.Fatalf("expected empty message ID")
+		if decoded.PoolRetry != 2 {
+			t.Fatalf("expected retry count 2, got %d", decoded.PoolRetry)
+		}
+		if decoded.CreatedAt == 0 {
+			t.Fatalf("expected created_at to be set")
 		}
 	})
 
 	t.Run("publish-deadletter", func(t *testing.T) {
 		t.Parallel()
-		queue := &fakeQueue{}
-		msg := mq.NewMessage([]byte("payload"))
-		msg.Headers["x-pool-retry"] = "5"
-		if err := logic.RequeueForPoolFull(context.Background(), queue, "judge.retry", "judge.dead", 5, 0, 0, msg); err != nil {
+		deadPusher := &fakePusher{}
+		payload := pmodel.JudgeMessage{
+			SubmissionID: "sub-2",
+			PoolRetry:    5,
+		}
+		if err := judge_app.RequeueForPoolFull(context.Background(), &fakePusher{}, deadPusher, "judge.retry", "judge.dead", 5, 0, 0, payload); err != nil {
 			t.Fatalf("deadletter failed: %v", err)
 		}
-		if len(queue.published) != 1 {
-			t.Fatalf("expected 1 published message, got %d", len(queue.published))
+		if len(deadPusher.published) != 1 {
+			t.Fatalf("expected 1 published message, got %d", len(deadPusher.published))
 		}
-		got := queue.published[0]
-		if got.topic != "judge.dead" {
-			t.Fatalf("expected deadletter topic, got %s", got.topic)
+		got := deadPusher.published[0]
+		if got.key != "sub-2" {
+			t.Fatalf("expected key sub-2, got %s", got.key)
 		}
-		if got.msg.Headers["x-pool-retry"] != "5" {
-			t.Fatalf("expected retry count 5, got %s", got.msg.Headers["x-pool-retry"])
+		var decoded pmodel.JudgeMessage
+		if err := json.Unmarshal([]byte(got.value), &decoded); err != nil {
+			t.Fatalf("decode dead letter payload failed: %v", err)
+		}
+		if decoded.PoolRetry != 5 {
+			t.Fatalf("expected retry count 5, got %d", decoded.PoolRetry)
 		}
 	})
 }

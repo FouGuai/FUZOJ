@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/user_service/internal/logic/auth_app"
 	"fuzoj/services/user_service/internal/svc"
 	"fuzoj/services/user_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewRefreshLogic(ctx context.Context, svcCtx *svc.ServiceContext) *RefreshLo
 }
 
 func (l *RefreshLogic) Refresh(req *types.RefreshRequest) (resp *types.AuthResponse, err error) {
-	manager := newAuthManager(l.svcCtx)
-	result, err := manager.Refresh(l.ctx, RefreshInput{
+	manager := auth_app.NewAuthApp(l.svcCtx)
+	result, err := manager.Refresh(l.ctx, auth_app.RefreshInput{
 		RefreshToken: req.RefreshToken,
 	})
 	if err != nil {

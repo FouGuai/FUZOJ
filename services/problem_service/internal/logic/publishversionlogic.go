@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewPublishVersionLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Pu
 }
 
 func (l *PublishVersionLogic) PublishVersion(req *types.PublishVersionRequest) (resp *types.SuccessResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
-	if err := manager.PublishVersion(l.ctx, PublishInput{
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	if err := problemApp.PublishVersion(l.ctx, problem_app.PublishInput{
 		ProblemID: req.Id,
 		Version:   req.Version,
 	}); err != nil {

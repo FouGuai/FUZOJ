@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -363,8 +364,8 @@ int main(){
 	}
 	compileRes, err := r.Compile(context.Background(), compileReq)
 	if err != nil {
-		if strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("sandbox helper not executable: %v", err)
+		if skipIfSandboxDenied(t, err) {
+			return
 		}
 		t.Fatalf("compile failed: %v", err)
 	}
@@ -387,8 +388,8 @@ int main(){
 	start := time.Now()
 	runRes, err := r.Run(context.Background(), runReq)
 	if err != nil {
-		if strings.Contains(err.Error(), "permission denied") {
-			t.Skipf("sandbox helper not executable: %v", err)
+		if skipIfSandboxDenied(t, err) {
+			return
 		}
 		t.Fatalf("run failed: %v", err)
 	}
@@ -476,8 +477,8 @@ int main(){
 	}
 	compileRes, err := r.Compile(context.Background(), compileReq)
 	if err != nil {
-		if strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("sandbox helper not executable: %v", err)
+		if skipIfSandboxDenied(t, err) {
+			return
 		}
 		t.Fatalf("compile failed: %v", err)
 	}
@@ -502,8 +503,8 @@ int main(){
 	start := time.Now()
 	runRes, err := r.Run(ctx, runReq)
 	if err != nil {
-		if strings.Contains(err.Error(), "permission denied") {
-			t.Skipf("sandbox helper not executable: %v", err)
+		if skipIfSandboxDenied(t, err) {
+			return
 		}
 		t.Fatalf("run failed: %v", err)
 	}
@@ -560,4 +561,13 @@ func checkHelperExecutable(path string) error {
 		}
 	}
 	return nil
+}
+
+func skipIfSandboxDenied(t *testing.T, err error) bool {
+	t.Helper()
+	if errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EPERM) {
+		t.Skipf("sandbox helper not permitted: %v", err)
+		return true
+	}
+	return false
 }

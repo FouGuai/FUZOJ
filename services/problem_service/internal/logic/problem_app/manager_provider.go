@@ -1,4 +1,4 @@
-package logic
+package problem_app
 
 import (
 	"context"
@@ -7,16 +7,16 @@ import (
 	"fuzoj/services/problem_service/internal/svc"
 )
 
-// ProblemManager exposes core problem behaviors for internal integrations.
-type ProblemManager interface {
+// ProblemApp exposes core problem behaviors for internal integrations.
+type ProblemApp interface {
 	GetLatestMeta(ctx context.Context, problemID int64) (repository.ProblemLatestMeta, error)
 }
 
-func newProblemManagerFromContext(svcCtx *svc.ServiceContext) *problemManager {
+func NewProblemAppFromContext(svcCtx *svc.ServiceContext) *problemApp {
 	if svcCtx == nil {
-		return newProblemManager(nil, nil, nil, nil, nil, "", "", 0, 0, 0)
+		return newProblemApp(nil, nil, nil, nil, nil, "", "", 0, 0, 0)
 	}
-	return newProblemManager(
+	return newProblemApp(
 		svcCtx.ProblemRepo,
 		svcCtx.UploadRepo,
 		svcCtx.Storage,
@@ -30,7 +30,7 @@ func newProblemManagerFromContext(svcCtx *svc.ServiceContext) *problemManager {
 	)
 }
 
-// NewProblemManager exposes the core manager as an interface for other internal packages.
-func NewProblemManager(svcCtx *svc.ServiceContext) ProblemManager {
-	return newProblemManagerFromContext(svcCtx)
+// NewProblemApp exposes the core manager as an interface for other internal packages.
+func NewProblemApp(svcCtx *svc.ServiceContext) ProblemApp {
+	return NewProblemAppFromContext(svcCtx)
 }

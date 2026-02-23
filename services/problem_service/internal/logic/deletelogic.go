@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewDeleteLogic(ctx context.Context, svcCtx *svc.ServiceContext) *DeleteLogi
 }
 
 func (l *DeleteLogic) Delete(req *types.DeleteProblemRequest) (resp *types.SuccessResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
-	if err := manager.DeleteProblem(l.ctx, req.Id); err != nil {
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	if err := problemApp.DeleteProblem(l.ctx, req.Id); err != nil {
 		return nil, err
 	}
 	return buildSuccessResponse(l.ctx, "Success"), nil

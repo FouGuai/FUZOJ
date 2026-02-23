@@ -1,4 +1,4 @@
-package logic
+package judge_app
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *JudgeProcessor) persistStatus(ctx context.Context, status pmodel.JudgeStatusResponse) error {
+func (s *JudgeApp) persistStatus(ctx context.Context, status pmodel.JudgeStatusResponse) error {
 	ctxStatus := ctx
 	if s.statusTimeout > 0 {
 		var cancel context.CancelFunc
@@ -25,7 +25,7 @@ func (s *JudgeProcessor) persistStatus(ctx context.Context, status pmodel.JudgeS
 }
 
 // ReportStatus updates intermediate judge status in cache.
-func (s *JudgeProcessor) ReportStatus(ctx context.Context, update sandbox.StatusUpdate) error {
+func (s *JudgeApp) ReportStatus(ctx context.Context, update sandbox.StatusUpdate) error {
 	status := pmodel.JudgeStatusResponse{
 		SubmissionID: update.SubmissionID,
 		Status:       update.Status,
@@ -46,7 +46,7 @@ func (s *JudgeProcessor) ReportStatus(ctx context.Context, update sandbox.Status
 	return nil
 }
 
-func (s *JudgeProcessor) handleFailure(ctx context.Context, submissionID string, err error) error {
+func (s *JudgeApp) handleFailure(ctx context.Context, submissionID string, err error) error {
 	code := appErr.GetCode(err)
 	failed := pmodel.JudgeStatusResponse{
 		SubmissionID: submissionID,

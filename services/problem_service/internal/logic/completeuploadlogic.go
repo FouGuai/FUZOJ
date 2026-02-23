@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,15 +28,15 @@ func NewCompleteUploadLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Co
 }
 
 func (l *CompleteUploadLogic) CompleteUpload(req *types.CompleteUploadRequest) (resp *types.CompleteUploadResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
-	parts := make([]CompletedPartInput, 0, len(req.Parts))
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	parts := make([]problem_app.CompletedPartInput, 0, len(req.Parts))
 	for _, part := range req.Parts {
-		parts = append(parts, CompletedPartInput{
+		parts = append(parts, problem_app.CompletedPartInput{
 			PartNumber: part.PartNumber,
 			ETag:       part.ETag,
 		})
 	}
-	output, err := manager.CompleteDataPackUpload(l.ctx, CompleteUploadInput{
+	output, err := problemApp.CompleteDataPackUpload(l.ctx, problem_app.CompleteUploadInput{
 		ProblemID:       req.Id,
 		UploadSessionID: req.UploadId,
 		Parts:           parts,

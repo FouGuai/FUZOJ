@@ -7,10 +7,11 @@ import (
 
 	pkgerrors "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
+	"fuzoj/services/user_service/internal/logic/auth_app"
 	"fuzoj/services/user_service/internal/types"
 )
 
-func buildAuthResponse(ctx context.Context, result AuthResult) *types.AuthResponse {
+func buildAuthResponse(ctx context.Context, result auth_app.AuthResult) *types.AuthResponse {
 	return &types.AuthResponse{
 		Code:    int(pkgerrors.Success),
 		Message: "Success",

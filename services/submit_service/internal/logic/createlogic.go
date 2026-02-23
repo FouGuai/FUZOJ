@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/submit_service/internal/logic/submit_app"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
 
@@ -27,11 +28,11 @@ func NewCreateLogic(ctx context.Context, svcCtx *svc.ServiceContext) *CreateLogi
 }
 
 func (l *CreateLogic) Create(req *types.CreateSubmissionRequest) (resp *types.CreateSubmissionResponse, err error) {
-	app, err := NewSubmitApp(l.svcCtx)
+	app, err := submit_app.NewSubmitApp(l.svcCtx)
 	if err != nil {
 		return nil, err
 	}
-	submissionID, status, err := app.Submit(l.ctx, submitParams{
+	submissionID, status, err := app.Submit(l.ctx, submit_app.SubmitParams{
 		ProblemID:         req.ProblemId,
 		UserID:            req.UserId,
 		LanguageID:        req.LanguageId,

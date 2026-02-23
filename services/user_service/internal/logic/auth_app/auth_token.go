@@ -1,4 +1,4 @@
-package logic
+package auth_app
 
 import (
 	"crypto/sha256"
@@ -20,7 +20,7 @@ type tokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (s *authManager) generateToken(userID int64, role string, tokenType repository.TokenType, ttl time.Duration) (string, time.Time, error) {
+func (s *authApp) generateToken(userID int64, role string, tokenType repository.TokenType, ttl time.Duration) (string, time.Time, error) {
 	if len(s.config.JWTSecret) == 0 {
 		return "", time.Time{}, pkgerrors.New(pkgerrors.TokenGenerationFailed)
 	}
@@ -51,7 +51,7 @@ func (s *authManager) generateToken(userID int64, role string, tokenType reposit
 	return raw, expiresAt, nil
 }
 
-func (s *authManager) parseToken(raw string, expectedType repository.TokenType) (*tokenClaims, error) {
+func (s *authApp) parseToken(raw string, expectedType repository.TokenType) (*tokenClaims, error) {
 	if raw == "" {
 		return nil, pkgerrors.New(pkgerrors.TokenInvalid)
 	}

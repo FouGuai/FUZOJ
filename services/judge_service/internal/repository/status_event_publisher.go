@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"fuzoj/internal/common/mq"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/judge_service/internal/pmodel"
 
+	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
 )
 
@@ -20,20 +20,20 @@ type StatusEventPublisher interface {
 
 // MQStatusEventPublisher publishes status events to a message queue.
 type MQStatusEventPublisher struct {
-	queue mq.MessageQueue
-	topic string
+	pusher *kq.Pusher
+	topic  string
 }
 
 // NewMQStatusEventPublisher creates a new MQ status event publisher.
-func NewMQStatusEventPublisher(queue mq.MessageQueue, topic string) *MQStatusEventPublisher {
-	return &MQStatusEventPublisher{queue: queue, topic: topic}
+func NewMQStatusEventPublisher(pusher *kq.Pusher, topic string) *MQStatusEventPublisher {
+	return &MQStatusEventPublisher{pusher: pusher, topic: topic}
 }
 
 // PublishFinalStatus publishes a final status event.
 func (p *MQStatusEventPublisher) PublishFinalStatus(ctx context.Context, status pmodel.JudgeStatusResponse) error {
 	logger := logx.WithContext(ctx)
 	logger.Infof("publish final status event start submission_id=%s", status.SubmissionID)
-	if p == nil || p.queue == nil {
+	if p == nil || p.pusher == nil {
 		logger.Error("status publisher is not configured")
 		return appErr.New(appErr.ServiceUnavailable).WithMessage("status publisher is not configured")
 	}
@@ -55,9 +55,7 @@ func (p *MQStatusEventPublisher) PublishFinalStatus(ctx context.Context, status 
 		logger.Errorf("marshal status event failed: %v", err)
 		return fmt.Errorf("marshal status event failed: %w", err)
 	}
-	message := mq.NewMessage(payload)
-	message.ID = status.SubmissionID
-	if err := p.queue.Publish(ctx, p.topic, message); err != nil {
+	if err := p.pusher.PushWithKey(ctx, status.SubmissionID, string(payload)); err != nil {
 		logger.Errorf("publish status event failed: %v", err)
 		return appErr.Wrapf(err, appErr.ServiceUnavailable, "publish status event failed")
 	}

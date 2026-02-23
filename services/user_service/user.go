@@ -9,7 +9,7 @@ import (
 
 	"fuzoj/services/user_service/internal/config"
 	"fuzoj/services/user_service/internal/handler"
-	"fuzoj/services/user_service/internal/logic"
+	"fuzoj/services/user_service/internal/logic/auth_app"
 	"fuzoj/services/user_service/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
@@ -29,7 +29,7 @@ func main() {
 	defer server.Stop()
 
 	ctx := svc.NewServiceContext(c)
-	logic.InitAuth(context.Background(), ctx)
+	auth_app.InitAuth(context.Background(), ctx)
 	handler.RegisterHandlers(server, ctx)
 
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)

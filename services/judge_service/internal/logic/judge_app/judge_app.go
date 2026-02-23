@@ -1,15 +1,13 @@
-package logic
+package judge_app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
-	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/judge_service/internal/cache"
@@ -20,14 +18,15 @@ import (
 	"fuzoj/services/judge_service/internal/sandbox/result"
 )
 
-// JudgeProcessor handles judge tasks.
-type JudgeProcessor struct {
+// JudgeApp handles judge tasks.
+type JudgeApp struct {
 	worker         *sandbox.Worker
 	statusRepo     *repository.StatusRepository
 	problemClient  *problemclient.Client
 	dataCache      *cache.DataPackCache
 	storage        storage.ObjectStorage
-	queue          mq.MessageQueue
+	retryPusher    MessagePusher
+	deadPusher     MessagePusher
 	sourceBucket   string
 	workRoot       string
 	workerTimeout  time.Duration
@@ -51,14 +50,15 @@ type metaEntry struct {
 	expiresAt time.Time
 }
 
-// JudgeProcessorConfig holds processor dependencies and settings.
-type JudgeProcessorConfig struct {
+// JudgeAppConfig holds processor dependencies and settings.
+type JudgeAppConfig struct {
 	Worker         *sandbox.Worker
 	StatusRepo     *repository.StatusRepository
 	ProblemClient  *problemclient.Client
 	DataCache      *cache.DataPackCache
 	Storage        storage.ObjectStorage
-	Queue          mq.MessageQueue
+	RetryPusher    MessagePusher
+	DeadPusher     MessagePusher
 	SourceBucket   string
 	WorkRoot       string
 	WorkerTimeout  time.Duration
@@ -74,8 +74,8 @@ type JudgeProcessorConfig struct {
 	DeadLetter     string
 }
 
-// NewJudgeProcessor creates a new judge processor.
-func NewJudgeProcessor(cfg JudgeProcessorConfig) (*JudgeProcessor, error) {
+// NewJudgeApp creates a new judge processor.
+func NewJudgeApp(cfg JudgeAppConfig) (*JudgeApp, error) {
 	if cfg.Worker == nil {
 		return nil, fmt.Errorf("worker is required")
 	}
@@ -98,13 +98,14 @@ func NewJudgeProcessor(cfg JudgeProcessorConfig) (*JudgeProcessor, error) {
 	if poolSize <= 0 {
 		poolSize = 1
 	}
-	svc := &JudgeProcessor{
+	svc := &JudgeApp{
 		worker:         cfg.Worker,
 		statusRepo:     cfg.StatusRepo,
 		problemClient:  cfg.ProblemClient,
 		dataCache:      cfg.DataCache,
 		storage:        cfg.Storage,
-		queue:          cfg.Queue,
+		retryPusher:    cfg.RetryPusher,
+		deadPusher:     cfg.DeadPusher,
 		sourceBucket:   cfg.SourceBucket,
 		workRoot:       cfg.WorkRoot,
 		workerTimeout:  cfg.WorkerTimeout,
@@ -127,16 +128,20 @@ func NewJudgeProcessor(cfg JudgeProcessorConfig) (*JudgeProcessor, error) {
 }
 
 // HandleMessage processes a judge task message.
-func (s *JudgeProcessor) HandleMessage(ctx context.Context, msg *mq.Message) error {
-	if msg == nil {
-		return appErr.New(appErr.InvalidParams).WithMessage("message is nil")
-	}
-	var payload pmodel.JudgeMessage
-	if err := json.Unmarshal(msg.Body, &payload); err != nil {
-		return appErr.Wrapf(err, appErr.InvalidParams, "decode message failed")
-	}
+func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessage) error {
 	if payload.SubmissionID == "" || payload.ProblemID <= 0 || payload.LanguageID == "" || payload.SourceKey == "" {
 		return appErr.New(appErr.InvalidParams).WithMessage("message missing required fields")
+	}
+
+	if s.statusRepo != nil {
+		existing, err := s.statusRepo.Get(ctx, payload.SubmissionID)
+		if err == nil {
+			if statusRank(existing.Status) > statusRank(result.StatusPending) {
+				return appErr.New(appErr.InvalidParams).WithMessage("submission status is ahead of incoming message")
+			}
+		} else if !appErr.Is(err, appErr.NotFound) {
+			return err
+		}
 	}
 
 	now := time.Now().Unix()
@@ -151,7 +156,7 @@ func (s *JudgeProcessor) HandleMessage(ctx context.Context, msg *mq.Message) err
 	}
 
 	if !s.tryAcquireSlot() {
-		if err := s.requeueForPoolFull(ctx, msg); err != nil {
+		if err := s.requeueForPoolFull(ctx, payload); err != nil {
 			return err
 		}
 		return nil
@@ -235,4 +240,23 @@ func (s *JudgeProcessor) HandleMessage(ctx context.Context, msg *mq.Message) err
 		return err
 	}
 	return nil
+}
+
+func statusRank(status result.JudgeStatus) int {
+	switch status {
+	case result.StatusPending:
+		return 1
+	case result.StatusCompiling:
+		return 2
+	case result.StatusRunning:
+		return 3
+	case result.StatusJudging:
+		return 4
+	case result.StatusFinished:
+		return 5
+	case result.StatusFailed:
+		return 6
+	default:
+		return 0
+	}
 }

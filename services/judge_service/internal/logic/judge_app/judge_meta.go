@@ -1,4 +1,4 @@
-package logic
+package judge_app
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"fuzoj/services/judge_service/internal/pmodel"
 )
 
-func (s *JudgeProcessor) getProblemMeta(ctx context.Context, problemID int64) (pmodel.ProblemMeta, error) {
+func (s *JudgeApp) getProblemMeta(ctx context.Context, problemID int64) (pmodel.ProblemMeta, error) {
 	if problemID <= 0 {
 		return pmodel.ProblemMeta{}, appErr.ValidationError("problem_id", "required")
 	}

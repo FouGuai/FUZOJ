@@ -5,7 +5,7 @@ import (
 
 	problemv1 "fuzoj/api/gen/problem/v1"
 	pkgerrors "fuzoj/pkg/errors"
-	"fuzoj/services/problem_service/internal/logic"
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 
 	"google.golang.org/grpc/codes"
@@ -29,7 +29,7 @@ func (s *ProblemRPCServer) GetLatest(ctx context.Context, req *problemv1.GetLate
 		return nil, status.Error(codes.InvalidArgument, "problem_id is required")
 	}
 
-	manager := logic.NewProblemManager(s.svcCtx)
+	manager := problem_app.NewProblemApp(s.svcCtx)
 	meta, err := manager.GetLatestMeta(ctx, req.GetProblemId())
 	if err != nil {
 		return nil, mapError(err)

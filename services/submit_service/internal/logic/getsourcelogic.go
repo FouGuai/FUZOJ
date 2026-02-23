@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/submit_service/internal/logic/submit_app"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
 
@@ -27,7 +28,7 @@ func NewGetSourceLogic(ctx context.Context, svcCtx *svc.ServiceContext) *GetSour
 }
 
 func (l *GetSourceLogic) GetSource(req *types.GetSourceRequest) (resp *types.GetSourceResponse, err error) {
-	app, err := NewSubmitApp(l.svcCtx)
+	app, err := submit_app.NewSubmitApp(l.svcCtx)
 	if err != nil {
 		return nil, err
 	}

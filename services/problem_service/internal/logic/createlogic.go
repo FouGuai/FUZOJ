@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewCreateLogic(ctx context.Context, svcCtx *svc.ServiceContext) *CreateLogi
 }
 
 func (l *CreateLogic) Create(req *types.CreateProblemRequest) (resp *types.CreateProblemResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
-	id, err := manager.CreateProblem(l.ctx, CreateInput{
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	id, err := problemApp.CreateProblem(l.ctx, problem_app.CreateInput{
 		Title:   req.Title,
 		OwnerID: req.OwnerId,
 	})

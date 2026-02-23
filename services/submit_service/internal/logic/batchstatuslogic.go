@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/submit_service/internal/logic/submit_app"
 	"fuzoj/services/submit_service/internal/svc"
 	"fuzoj/services/submit_service/internal/types"
 
@@ -27,7 +28,7 @@ func NewBatchStatusLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Batch
 }
 
 func (l *BatchStatusLogic) BatchStatus(req *types.BatchStatusRequest) (resp *types.BatchStatusResponse, err error) {
-	app, err := NewSubmitApp(l.svcCtx)
+	app, err := submit_app.NewSubmitApp(l.svcCtx)
 	if err != nil {
 		return nil, err
 	}

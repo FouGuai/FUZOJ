@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewAbortUploadLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Abort
 }
 
 func (l *AbortUploadLogic) AbortUpload(req *types.AbortUploadRequest) (resp *types.SuccessResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
-	if err := manager.AbortDataPackUpload(l.ctx, AbortUploadInput{
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	if err := problemApp.AbortDataPackUpload(l.ctx, problem_app.AbortUploadInput{
 		ProblemID:       req.Id,
 		UploadSessionID: req.UploadId,
 	}); err != nil {

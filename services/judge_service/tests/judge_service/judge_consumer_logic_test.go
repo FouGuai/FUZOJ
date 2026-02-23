@@ -12,7 +12,7 @@ import (
 func TestJudgeConsumerLogicHandleMessageRequiresService(t *testing.T) {
 	t.Parallel()
 	l := logic.NewJudgeConsumerLogic(context.Background(), &svc.ServiceContext{})
-	if err := l.HandleMessage(nil); err == nil || !appErr.Is(err, appErr.ServiceUnavailable) {
+	if err := l.Consume(context.Background(), "", ""); err == nil || !appErr.Is(err, appErr.ServiceUnavailable) {
 		t.Fatalf("expected ServiceUnavailable error, got %v", err)
 	}
 }

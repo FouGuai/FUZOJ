@@ -11,4 +11,6 @@ type JudgeMessage struct {
 	UserID            string   `json:"user_id"`
 	Priority          int      `json:"priority"`
 	ExtraCompileFlags []string `json:"extra_compile_flags"`
+	CreatedAt         int64    `json:"created_at"`
+	PoolRetry         int      `json:"pool_retry"`
 }

@@ -4,14 +4,11 @@
 package config
 
 import (
-	"strings"
 	"time"
 
-	"fuzoj/internal/common/mq"
 	"fuzoj/services/judge_service/internal/sandbox/engine"
 	"fuzoj/services/judge_service/internal/sandbox/profile"
 
-	"github.com/segmentio/kafka-go"
 	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/rest"
@@ -134,25 +131,6 @@ type LanguageConfig struct {
 	Profiles  []profile.TaskProfile  `json:"profiles"`
 }
 
-// ToMQConfig converts kafka settings to mq.KafkaConfig.
-func (k KafkaConfig) ToMQConfig() mq.KafkaConfig {
-	cfg := mq.KafkaConfig{
-		Brokers:      k.Brokers,
-		ClientID:     k.ClientID,
-		MinBytes:     k.MinBytes,
-		MaxBytes:     k.MaxBytes,
-		MaxWait:      k.MaxWait,
-		BatchSize:    k.BatchSize,
-		BatchTimeout: k.BatchTimeout,
-		DialTimeout:  k.DialTimeout,
-		ReadTimeout:  k.ReadTimeout,
-		WriteTimeout: k.WriteTimeout,
-		RequiredAcks: kafka.RequiredAcks(k.RequiredAcks),
-	}
-	cfg.Compression = parseCompression(k.Compression)
-	return cfg
-}
-
 // ToEngineConfig converts sandbox settings to engine.Config.
 func (s SandboxConfig) ToEngineConfig() engine.Config {
 	return engine.Config{
@@ -163,20 +141,5 @@ func (s SandboxConfig) ToEngineConfig() engine.Config {
 		EnableSeccomp:        s.EnableSeccomp,
 		EnableCgroup:         s.EnableCgroup,
 		EnableNamespaces:     s.EnableNamespaces,
-	}
-}
-
-func parseCompression(raw string) kafka.Compression {
-	switch strings.ToLower(raw) {
-	case "gzip":
-		return kafka.Gzip
-	case "snappy":
-		return kafka.Snappy
-	case "lz4":
-		return kafka.Lz4
-	case "zstd":
-		return kafka.Zstd
-	default:
-		return kafka.Compression(0)
 	}
 }

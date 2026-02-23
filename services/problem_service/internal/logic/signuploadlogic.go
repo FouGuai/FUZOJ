@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewSignUploadLogic(ctx context.Context, svcCtx *svc.ServiceContext) *SignUp
 }
 
 func (l *SignUploadLogic) SignUpload(req *types.SignPartsRequest) (resp *types.SignPartsResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
-	output, err := manager.SignUploadParts(l.ctx, SignPartsInput{
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	output, err := problemApp.SignUploadParts(l.ctx, problem_app.SignPartsInput{
 		ProblemID:       req.Id,
 		UploadSessionID: req.UploadId,
 		PartNumbers:     req.PartNumbers,

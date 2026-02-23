@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/svc"
 	"fuzoj/services/problem_service/internal/types"
 
@@ -27,7 +28,7 @@ func NewGetLatestLogic(ctx context.Context, svcCtx *svc.ServiceContext) *GetLate
 }
 
 func (l *GetLatestLogic) GetLatest(req *types.GetLatestRequest) (resp *types.LatestMetaResponse, err error) {
-	manager := newProblemManagerFromContext(l.svcCtx)
+	manager := problem_app.NewProblemAppFromContext(l.svcCtx)
 	meta, err := manager.GetLatestMeta(l.ctx, req.Id)
 	if err != nil {
 		return nil, err

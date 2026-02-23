@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	"fuzoj/services/user_service/internal/logic/auth_app"
 	"fuzoj/services/user_service/internal/svc"
 	"fuzoj/services/user_service/internal/types"
 
@@ -28,8 +29,8 @@ func NewLoginLogic(ctx context.Context, svcCtx *svc.ServiceContext) *LoginLogic 
 }
 
 func (l *LoginLogic) Login(req *types.LoginRequest) (resp *types.AuthResponse, err error) {
-	manager := newAuthManager(l.svcCtx)
-	result, err := manager.Login(l.ctx, LoginInput{
+	manager := auth_app.NewAuthApp(l.svcCtx)
+	result, err := manager.Login(l.ctx, auth_app.LoginInput{
 		Username:   strings.TrimSpace(req.Username),
 		Password:   req.Password,
 		IP:         req.IP,

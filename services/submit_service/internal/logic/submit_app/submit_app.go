@@ -1,4 +1,4 @@
-package logic
+package submit_app
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"fuzoj/services/submit_service/internal/svc"
 
 	"github.com/google/uuid"
-	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"go.uber.org/zap"
@@ -50,7 +49,7 @@ type TimeoutConfig struct {
 	Status  time.Duration
 }
 
-type submitParams struct {
+type SubmitParams struct {
 	ProblemID         int64
 	UserID            int64
 	LanguageID        string
@@ -145,7 +144,7 @@ func NewSubmitApp(svcCtx *svc.ServiceContext) (*SubmitApp, error) {
 }
 
 // Submit creates a submission and dispatches it to judge queues.
-func (a *SubmitApp) Submit(ctx context.Context, input submitParams) (string, domain.JudgeStatusPayload, error) {
+func (a *SubmitApp) Submit(ctx context.Context, input SubmitParams) (string, domain.JudgeStatusPayload, error) {
 	logx.WithContext(ctx).Infof("submit start problem_id=%d user_id=%d scene=%s", input.ProblemID, input.UserID, input.Scene)
 	if err := a.validateInput(input); err != nil {
 		return "", domain.JudgeStatusPayload{}, err
@@ -251,7 +250,7 @@ func (a *SubmitApp) GetSource(ctx context.Context, submissionID string) (*reposi
 	return submission, nil
 }
 
-func (a *SubmitApp) validateInput(input submitParams) error {
+func (a *SubmitApp) validateInput(input SubmitParams) error {
 	if input.ProblemID <= 0 {
 		return appErr.ValidationError("problem_id", "required")
 	}
@@ -411,6 +410,7 @@ func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.S
 		UserID:            fmt.Sprintf("%d", submission.UserID),
 		Priority:          resolvePriority(submission.Scene),
 		ExtraCompileFlags: extraFlags,
+		CreatedAt:         time.Now().Unix(),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -441,7 +441,7 @@ func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.S
 	return nil
 }
 
-func (a *SubmitApp) pusherForTopic(topic string) *kq.Pusher {
+func (a *SubmitApp) pusherForTopic(topic string) svc.TopicPusher {
 	switch topic {
 	case a.topics.Level0:
 		return a.pushers.Level0

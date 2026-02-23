@@ -1,4 +1,4 @@
-package logic
+package problem_app
 
 import (
 	"context"
@@ -24,7 +24,7 @@ const (
 	defaultPresignTTL       = 15 * time.Minute
 )
 
-type problemManager struct {
+type problemApp struct {
 	conn             sqlx.SqlConn
 	repo             repository.ProblemRepository
 	uploadRepo       repository.ProblemUploadRepository
@@ -112,7 +112,7 @@ type PublishInput struct {
 	Version   int32
 }
 
-func newProblemManager(repo repository.ProblemRepository, uploadRepo repository.ProblemUploadRepository, storageClient storage.ObjectStorage, publisher cleanupPublisher, conn sqlx.SqlConn, bucket string, keyPrefix string, partSizeBytes int64, sessionTTL, presignTTL time.Duration) *problemManager {
+func newProblemApp(repo repository.ProblemRepository, uploadRepo repository.ProblemUploadRepository, storageClient storage.ObjectStorage, publisher cleanupPublisher, conn sqlx.SqlConn, bucket string, keyPrefix string, partSizeBytes int64, sessionTTL, presignTTL time.Duration) *problemApp {
 	if keyPrefix == "" {
 		keyPrefix = defaultUploadKeyPrefix
 	}
@@ -125,7 +125,7 @@ func newProblemManager(repo repository.ProblemRepository, uploadRepo repository.
 	if presignTTL <= 0 {
 		presignTTL = defaultPresignTTL
 	}
-	return &problemManager{
+	return &problemApp{
 		conn:             conn,
 		repo:             repo,
 		uploadRepo:       uploadRepo,
@@ -139,7 +139,7 @@ func newProblemManager(repo repository.ProblemRepository, uploadRepo repository.
 	}
 }
 
-func (m *problemManager) GetLatestMeta(ctx context.Context, problemID int64) (repository.ProblemLatestMeta, error) {
+func (m *problemApp) GetLatestMeta(ctx context.Context, problemID int64) (repository.ProblemLatestMeta, error) {
 	if problemID <= 0 {
 		return repository.ProblemLatestMeta{}, pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -154,7 +154,7 @@ func (m *problemManager) GetLatestMeta(ctx context.Context, problemID int64) (re
 	return meta, nil
 }
 
-func (m *problemManager) CreateProblem(ctx context.Context, input CreateInput) (int64, error) {
+func (m *problemApp) CreateProblem(ctx context.Context, input CreateInput) (int64, error) {
 	if input.Title == "" {
 		return 0, pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -171,7 +171,7 @@ func (m *problemManager) CreateProblem(ctx context.Context, input CreateInput) (
 	return id, nil
 }
 
-func (m *problemManager) DeleteProblem(ctx context.Context, problemID int64) error {
+func (m *problemApp) DeleteProblem(ctx context.Context, problemID int64) error {
 	if problemID <= 0 {
 		return pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -191,7 +191,7 @@ func (m *problemManager) DeleteProblem(ctx context.Context, problemID int64) err
 	return nil
 }
 
-func (m *problemManager) PrepareDataPackUpload(ctx context.Context, input PrepareUploadInput) (PrepareUploadOutput, error) {
+func (m *problemApp) PrepareDataPackUpload(ctx context.Context, input PrepareUploadInput) (PrepareUploadOutput, error) {
 	if input.ProblemID <= 0 || input.IdempotencyKey == "" {
 		return PrepareUploadOutput{}, pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -297,7 +297,7 @@ func (m *problemManager) PrepareDataPackUpload(ctx context.Context, input Prepar
 	return m.ensureMultipartUpload(ctx, created, contentType)
 }
 
-func (m *problemManager) SignUploadParts(ctx context.Context, input SignPartsInput) (SignPartsOutput, error) {
+func (m *problemApp) SignUploadParts(ctx context.Context, input SignPartsInput) (SignPartsOutput, error) {
 	if input.ProblemID <= 0 || input.UploadSessionID <= 0 || len(input.PartNumbers) == 0 {
 		return SignPartsOutput{}, pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -344,7 +344,7 @@ func (m *problemManager) SignUploadParts(ctx context.Context, input SignPartsInp
 	}, nil
 }
 
-func (m *problemManager) CompleteDataPackUpload(ctx context.Context, input CompleteUploadInput) (CompleteUploadOutput, error) {
+func (m *problemApp) CompleteDataPackUpload(ctx context.Context, input CompleteUploadInput) (CompleteUploadOutput, error) {
 	if input.ProblemID <= 0 || input.UploadSessionID <= 0 || len(input.Parts) == 0 {
 		return CompleteUploadOutput{}, pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -454,7 +454,7 @@ func (m *problemManager) CompleteDataPackUpload(ctx context.Context, input Compl
 	}, nil
 }
 
-func (m *problemManager) AbortDataPackUpload(ctx context.Context, input AbortUploadInput) error {
+func (m *problemApp) AbortDataPackUpload(ctx context.Context, input AbortUploadInput) error {
 	if input.ProblemID <= 0 || input.UploadSessionID <= 0 {
 		return pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -488,7 +488,7 @@ func (m *problemManager) AbortDataPackUpload(ctx context.Context, input AbortUpl
 	return nil
 }
 
-func (m *problemManager) PublishVersion(ctx context.Context, input PublishInput) error {
+func (m *problemApp) PublishVersion(ctx context.Context, input PublishInput) error {
 	if input.ProblemID <= 0 || input.Version <= 0 {
 		return pkgerrors.New(pkgerrors.InvalidParams)
 	}
@@ -506,7 +506,7 @@ func (m *problemManager) PublishVersion(ctx context.Context, input PublishInput)
 	return nil
 }
 
-func (m *problemManager) ensureMultipartUpload(ctx context.Context, session repository.UploadSession, contentType string) (PrepareUploadOutput, error) {
+func (m *problemApp) ensureMultipartUpload(ctx context.Context, session repository.UploadSession, contentType string) (PrepareUploadOutput, error) {
 	if session.State != repository.UploadStateUploading {
 		return PrepareUploadOutput{}, pkgerrors.New(pkgerrors.ProblemUploadStateInvalid)
 	}
@@ -557,11 +557,11 @@ func (m *problemManager) ensureMultipartUpload(ctx context.Context, session repo
 	}, nil
 }
 
-func (m *problemManager) dataPackObjectKey(problemID int64, version int32) string {
+func (m *problemApp) dataPackObjectKey(problemID int64, version int32) string {
 	return fmt.Sprintf("%s/%d/versions/%d/data-pack.tar.zst", m.keyPrefix, problemID, version)
 }
 
-func (m *problemManager) withTransaction(ctx context.Context, fn func(session sqlx.Session) error) error {
+func (m *problemApp) withTransaction(ctx context.Context, fn func(session sqlx.Session) error) error {
 	if m.conn == nil {
 		return fn(nil)
 	}

@@ -1,6 +1,6 @@
 package svc
 
-import "github.com/zeromicro/go-queue/kq"
+import "context"
 
 // TopicConfig defines routing topics for judge tasks.
 type TopicConfig struct {
@@ -10,10 +10,16 @@ type TopicConfig struct {
 	Level3 string
 }
 
+// TopicPusher defines minimal pusher interface for publishing judge tasks.
+type TopicPusher interface {
+	PushWithKey(ctx context.Context, key, value string) error
+	Close() error
+}
+
 // TopicPushers holds Kafka pushers for each topic.
 type TopicPushers struct {
-	Level0 *kq.Pusher
-	Level1 *kq.Pusher
-	Level2 *kq.Pusher
-	Level3 *kq.Pusher
+	Level0 TopicPusher
+	Level1 TopicPusher
+	Level2 TopicPusher
+	Level3 TopicPusher
 }

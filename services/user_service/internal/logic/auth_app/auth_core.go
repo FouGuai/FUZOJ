@@ -1,4 +1,4 @@
-package logic
+package auth_app
 
 import (
 	"context"
@@ -38,7 +38,7 @@ type authConfig struct {
 	Root            config.RootAccountConfig
 }
 
-type authManager struct {
+type authApp struct {
 	conn           sqlx.SqlConn
 	users          repository.UserRepository
 	tokens         repository.TokenRepository
@@ -46,7 +46,7 @@ type authManager struct {
 	config         authConfig
 }
 
-func newAuthManager(svcCtx *svc.ServiceContext) *authManager {
+func NewAuthApp(svcCtx *svc.ServiceContext) *authApp {
 	cfg := authConfig{}
 	if svcCtx != nil {
 		cfg = authConfig{
@@ -76,10 +76,10 @@ func newAuthManager(svcCtx *svc.ServiceContext) *authManager {
 	}
 
 	if svcCtx == nil {
-		return &authManager{config: cfg}
+		return &authApp{config: cfg}
 	}
 
-	return &authManager{
+	return &authApp{
 		conn:           svcCtx.Conn,
 		users:          svcCtx.UserRepo,
 		tokens:         svcCtx.TokenRepo,
@@ -92,11 +92,11 @@ func InitAuth(ctx context.Context, svcCtx *svc.ServiceContext) {
 	if svcCtx == nil {
 		return
 	}
-	manager := newAuthManager(svcCtx)
+	manager := NewAuthApp(svcCtx)
 	manager.ensureRootAccount(ctx)
 }
 
-func (s *authManager) ensureRootAccount(parent context.Context) {
+func (s *authApp) ensureRootAccount(parent context.Context) {
 	cfg := s.config.Root
 	if !cfg.Enabled {
 		return
@@ -164,7 +164,7 @@ func (s *authManager) ensureRootAccount(parent context.Context) {
 	logger.Info(ctx, "root account created", zap.Int64("user_id", userID), zap.String("username", cfg.Username))
 }
 
-func (s *authManager) Register(ctx context.Context, input RegisterInput) (AuthResult, error) {
+func (s *authApp) Register(ctx context.Context, input RegisterInput) (AuthResult, error) {
 	logger.Info(ctx, "auth register start", zap.String("username", input.Username))
 	if err := validateUsername(input.Username); err != nil {
 		logger.Warn(ctx, "auth register invalid username", zap.String("username", input.Username), zap.Error(err))
@@ -216,7 +216,7 @@ func (s *authManager) Register(ctx context.Context, input RegisterInput) (AuthRe
 	return result, nil
 }
 
-func (s *authManager) Login(ctx context.Context, input LoginInput) (AuthResult, error) {
+func (s *authApp) Login(ctx context.Context, input LoginInput) (AuthResult, error) {
 	logger.Info(ctx, "auth login start", zap.String("username", input.Username), zap.String("ip", input.IP))
 
 	if err := s.checkLoginLimit(ctx, input.Username, input.IP); err != nil {
@@ -272,7 +272,7 @@ func (s *authManager) Login(ctx context.Context, input LoginInput) (AuthResult, 
 	return result, nil
 }
 
-func (s *authManager) Refresh(ctx context.Context, input RefreshInput) (AuthResult, error) {
+func (s *authApp) Refresh(ctx context.Context, input RefreshInput) (AuthResult, error) {
 	logger.Info(ctx, "auth refresh start")
 	claims, err := s.parseToken(input.RefreshToken, repository.TokenTypeRefresh)
 	if err != nil {
@@ -370,7 +370,7 @@ func (s *authManager) Refresh(ctx context.Context, input RefreshInput) (AuthResu
 	return result, nil
 }
 
-func (s *authManager) Logout(ctx context.Context, input LogoutInput) error {
+func (s *authApp) Logout(ctx context.Context, input LogoutInput) error {
 	logger.Info(ctx, "auth logout start")
 	claims, err := s.parseToken(input.RefreshToken, repository.TokenTypeRefresh)
 	if err != nil {
@@ -416,7 +416,7 @@ func (s *authManager) Logout(ctx context.Context, input LogoutInput) error {
 	return nil
 }
 
-func (s *authManager) withTransaction(ctx context.Context, fn func(session sqlx.Session) error) error {
+func (s *authApp) withTransaction(ctx context.Context, fn func(session sqlx.Session) error) error {
 	if s.conn == nil {
 		return fn(nil)
 	}
@@ -431,7 +431,7 @@ func (s *authManager) withTransaction(ctx context.Context, fn func(session sqlx.
 	return nil
 }
 
-func (s *authManager) issueTokens(ctx context.Context, tokens repository.TokenRepository, user *repository.User, deviceInfo, ip string) (AuthResult, error) {
+func (s *authApp) issueTokens(ctx context.Context, tokens repository.TokenRepository, user *repository.User, deviceInfo, ip string) (AuthResult, error) {
 	accessToken, accessExp, err := s.generateToken(user.ID, string(user.Role), repository.TokenTypeAccess, s.config.AccessTokenTTL)
 	if err != nil {
 		return AuthResult{}, err
@@ -478,7 +478,7 @@ func (s *authManager) issueTokens(ctx context.Context, tokens repository.TokenRe
 	}, nil
 }
 
-func (s *authManager) newTokenID() (string, error) {
+func (s *authApp) newTokenID() (string, error) {
 	randomBytes := make([]byte, 32)
 	if _, err := rand.Read(randomBytes); err != nil {
 		return "", pkgerrors.Wrap(fmt.Errorf("generate token id failed: %w", err), pkgerrors.TokenGenerationFailed)
@@ -486,7 +486,7 @@ func (s *authManager) newTokenID() (string, error) {
 	return hex.EncodeToString(randomBytes), nil
 }
 
-func (s *authManager) getUserByID(ctx context.Context, users repository.UserRepository, userID int64) (*repository.User, error) {
+func (s *authApp) getUserByID(ctx context.Context, users repository.UserRepository, userID int64) (*repository.User, error) {
 	user, err := users.GetByID(ctx, userID)
 	if err != nil {
 		if stderrors.Is(err, repository.ErrUserNotFound) {
@@ -497,7 +497,7 @@ func (s *authManager) getUserByID(ctx context.Context, users repository.UserRepo
 	return user, nil
 }
 
-func (s *authManager) getUserByUsername(ctx context.Context, users repository.UserRepository, username string) (*repository.User, error) {
+func (s *authApp) getUserByUsername(ctx context.Context, users repository.UserRepository, username string) (*repository.User, error) {
 	user, err := users.GetByUsername(ctx, username)
 	if err != nil {
 		return nil, err

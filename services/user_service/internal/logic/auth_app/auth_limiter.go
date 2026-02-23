@@ -1,4 +1,4 @@
-package logic
+package auth_app
 
 import (
 	"context"
@@ -15,7 +15,7 @@ const (
 	loginFailIPPrefix   = "login:fail:ip:"
 )
 
-func (s *authManager) checkLoginLimit(ctx context.Context, username, ip string) error {
+func (s *authApp) checkLoginLimit(ctx context.Context, username, ip string) error {
 	if s.loginFailCache == nil {
 		return nil
 	}
@@ -35,7 +35,7 @@ func (s *authManager) checkLoginLimit(ctx context.Context, username, ip string) 
 	return nil
 }
 
-func (s *authManager) recordLoginFailure(ctx context.Context, username, ip string) {
+func (s *authApp) recordLoginFailure(ctx context.Context, username, ip string) {
 	if s.loginFailCache == nil {
 		return
 	}
@@ -46,7 +46,7 @@ func (s *authManager) recordLoginFailure(ctx context.Context, username, ip strin
 	}
 }
 
-func (s *authManager) clearLoginFailure(ctx context.Context, username, ip string) {
+func (s *authApp) clearLoginFailure(ctx context.Context, username, ip string) {
 	if s.loginFailCache == nil {
 		return
 	}
@@ -58,7 +58,7 @@ func (s *authManager) clearLoginFailure(ctx context.Context, username, ip string
 	_ = s.loginFailCache.Del(ctx, keys...)
 }
 
-func (s *authManager) getFailCount(ctx context.Context, key string) int {
+func (s *authApp) getFailCount(ctx context.Context, key string) int {
 	value, err := s.loginFailCache.Get(ctx, key)
 	if err != nil {
 		logger.Warn(ctx, "get login fail counter failed", zap.String("key", key), zap.Error(err))
@@ -76,7 +76,7 @@ func (s *authManager) getFailCount(ctx context.Context, key string) int {
 	return count
 }
 
-func (s *authManager) incrementFailKey(ctx context.Context, key string) {
+func (s *authApp) incrementFailKey(ctx context.Context, key string) {
 	count, err := s.loginFailCache.Incr(ctx, key)
 	if err != nil {
 		logger.Warn(ctx, "increment login fail counter failed", zap.String("key", key), zap.Error(err))

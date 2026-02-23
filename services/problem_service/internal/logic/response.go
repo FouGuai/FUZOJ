@@ -8,6 +8,7 @@ import (
 
 	pkgerrors "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
+	"fuzoj/services/problem_service/internal/logic/problem_app"
 	"fuzoj/services/problem_service/internal/repository"
 	"fuzoj/services/problem_service/internal/types"
 )
@@ -50,7 +51,7 @@ func buildLatestMetaResponse(ctx context.Context, meta repository.ProblemLatestM
 	}
 }
 
-func buildPrepareUploadResponse(ctx context.Context, output PrepareUploadOutput) *types.PrepareUploadResponse {
+func buildPrepareUploadResponse(ctx context.Context, output problem_app.PrepareUploadOutput) *types.PrepareUploadResponse {
 	return &types.PrepareUploadResponse{
 		Code:    int(pkgerrors.Success),
 		Message: "Success",
@@ -68,7 +69,7 @@ func buildPrepareUploadResponse(ctx context.Context, output PrepareUploadOutput)
 	}
 }
 
-func buildSignPartsResponse(ctx context.Context, output SignPartsOutput) *types.SignPartsResponse {
+func buildSignPartsResponse(ctx context.Context, output problem_app.SignPartsOutput) *types.SignPartsResponse {
 	urls := make(map[string]string, len(output.URLs))
 	for key, value := range output.URLs {
 		urls[strconv.Itoa(key)] = value
@@ -84,7 +85,7 @@ func buildSignPartsResponse(ctx context.Context, output SignPartsOutput) *types.
 	}
 }
 
-func buildCompleteUploadResponse(ctx context.Context, output CompleteUploadOutput) *types.CompleteUploadResponse {
+func buildCompleteUploadResponse(ctx context.Context, output problem_app.CompleteUploadOutput) *types.CompleteUploadResponse {
 	return &types.CompleteUploadResponse{
 		Code:    int(pkgerrors.Success),
 		Message: "Success",

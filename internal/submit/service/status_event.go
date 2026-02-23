@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"fuzoj/internal/common/mq"
-	"fuzoj/judge_service/internal/model"
+	"fuzoj/internal/judge/model"
 	appErr "fuzoj/pkg/errors"
 )
 

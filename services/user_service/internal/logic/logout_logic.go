@@ -6,6 +6,7 @@ package logic
 import (
 	"context"
 
+	"fuzoj/services/user_service/internal/logic/auth_app"
 	"fuzoj/services/user_service/internal/svc"
 	"fuzoj/services/user_service/internal/types"
 
@@ -27,8 +28,8 @@ func NewLogoutLogic(ctx context.Context, svcCtx *svc.ServiceContext) *LogoutLogi
 }
 
 func (l *LogoutLogic) Logout(req *types.LogoutRequest) (resp *types.SuccessResponse, err error) {
-	manager := newAuthManager(l.svcCtx)
-	if err := manager.Logout(l.ctx, LogoutInput{
+	manager := auth_app.NewAuthApp(l.svcCtx)
+	if err := manager.Logout(l.ctx, auth_app.LogoutInput{
 		RefreshToken: req.RefreshToken,
 	}); err != nil {
 		return nil, err

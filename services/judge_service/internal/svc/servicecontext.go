@@ -5,7 +5,6 @@ package svc
 
 import (
 	cachex "fuzoj/internal/common/cache"
-	"fuzoj/internal/common/mq"
 	"fuzoj/internal/common/storage"
 	"fuzoj/services/judge_service/internal/cache"
 	"fuzoj/services/judge_service/internal/config"
@@ -14,6 +13,7 @@ import (
 	"fuzoj/services/judge_service/internal/repository"
 	"fuzoj/services/judge_service/internal/sandbox"
 
+	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
@@ -29,7 +29,9 @@ type ServiceContext struct {
 	ProblemClient    *problemclient.Client
 	DataCache        *cache.DataPackCache
 	Storage          storage.ObjectStorage
-	Queue            mq.MessageQueue
+	StatusPusher     *kq.Pusher
+	RetryPusher      *kq.Pusher
+	DeadLetterPusher *kq.Pusher
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
