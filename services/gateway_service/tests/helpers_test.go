@@ -3,8 +3,13 @@ package gateway_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type apiResponse struct {
@@ -56,4 +61,34 @@ func applyMiddleware(handler http.HandlerFunc, middlewares ...func(http.HandlerF
 		wrapped = middlewares[i](wrapped)
 	}
 	return wrapped
+}
+
+func newAccessToken(t testingT, secret, issuer string, userID int64, role string, exp time.Duration) string {
+	claims := jwt.MapClaims{
+		"role": role,
+		"typ":  "access",
+		"sub":  fmt.Sprintf("%d", userID),
+		"iss":  issuer,
+		"iat":  time.Now().Unix(),
+		"exp":  time.Now().Add(exp).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	raw, err := token.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign token failed: %v", err)
+	}
+	return raw
+}
+
+func pickFreePort(t testingT) int {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
+}
+
+type testingT interface {
+	Fatalf(format string, args ...interface{})
 }

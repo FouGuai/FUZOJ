@@ -2,13 +2,12 @@ package repository
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
+	"fuzoj/internal/common/cache_helper"
 	appErr "fuzoj/pkg/errors"
 	dbmodel "fuzoj/services/judge_service/internal/model"
 	"fuzoj/services/judge_service/internal/pmodel"
@@ -83,14 +82,14 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (pmodel
 	status, err := r.getFinalStatusFromDB(ctx, submissionID)
 	if err != nil {
 		if appErr.Is(err, appErr.NotFound) {
-			_ = setWithTTL(ctx, r.cache, cacheKey, nullCacheValue, jitterTTL(r.emptyTTL))
+			_ = setWithTTL(ctx, r.cache, cacheKey, nullCacheValue, cache_helper.JitterTTL(r.emptyTTL))
 			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 		}
 		return pmodel.JudgeStatusResponse{}, err
 	}
 	payload := mustMarshalStatus(status)
 	if payload != "" {
-		_ = setWithTTL(ctx, r.cache, cacheKey, payload, jitterTTL(r.ttl))
+		_ = setWithTTL(ctx, r.cache, cacheKey, payload, cache_helper.JitterTTL(r.ttl))
 	}
 	return status, nil
 }
@@ -155,7 +154,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 		if r.cache != nil {
 			for _, st := range dbStatuses {
 				if payload := mustMarshalStatus(st); payload != "" {
-					_ = setWithTTL(ctx, r.cache, statusKeyPrefix+st.SubmissionID, payload, jitterTTL(r.ttl))
+					_ = setWithTTL(ctx, r.cache, statusKeyPrefix+st.SubmissionID, payload, cache_helper.JitterTTL(r.ttl))
 				}
 			}
 		}
@@ -165,7 +164,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 			if id == "" {
 				continue
 			}
-			_ = setWithTTL(ctx, r.cache, statusKeyPrefix+id, nullCacheValue, jitterTTL(r.emptyTTL))
+			_ = setWithTTL(ctx, r.cache, statusKeyPrefix+id, nullCacheValue, cache_helper.JitterTTL(r.emptyTTL))
 		}
 	}
 	return statuses, dbMissing, nil
@@ -195,7 +194,7 @@ func (r *StatusRepository) Save(ctx context.Context, status pmodel.JudgeStatusRe
 			logger.Errorf("marshal status failed: %v", err)
 			return fmt.Errorf("marshal status failed: %w", err)
 		}
-		if err := setWithTTL(ctx, r.cache, statusKeyPrefix+status.SubmissionID, string(data), jitterTTL(r.ttl)); err != nil {
+		if err := setWithTTL(ctx, r.cache, statusKeyPrefix+status.SubmissionID, string(data), cache_helper.JitterTTL(r.ttl)); err != nil {
 			logger.Errorf("store status failed: %v", err)
 			return appErr.Wrapf(err, appErr.CacheError, "store status failed")
 		}
@@ -358,19 +357,4 @@ func durationSeconds(ttl time.Duration) int {
 		return 1
 	}
 	return seconds
-}
-
-func jitterTTL(ttl time.Duration) time.Duration {
-	if ttl <= 0 {
-		return ttl
-	}
-	maxJitter := int64(ttl / 10)
-	if maxJitter <= 0 {
-		return ttl
-	}
-	n, err := rand.Int(rand.Reader, big.NewInt(maxJitter+1))
-	if err != nil {
-		return ttl
-	}
-	return ttl - time.Duration(n.Int64())
 }

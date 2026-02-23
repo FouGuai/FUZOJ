@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"testing"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"fuzoj/services/gateway_service/internal/service"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
@@ -25,14 +23,13 @@ func TestAuthServiceAuthenticate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init redis failed: %v", err)
 	}
-	defer redisClient.Close()
 
 	banLocal := repository.NewLRUCache(32, time.Minute)
 	banRepo := repository.NewBanCacheRepository(banLocal, redisClient, time.Minute)
 	blacklistRepo := repository.NewTokenBlacklistRepository(nil, redisClient, time.Minute)
 	authService := service.NewAuthService(secret, issuer, blacklistRepo, banRepo)
 
-	accessToken := newAccessToken(t, secret, issuer, 123, "user")
+	accessToken := newAccessToken(t, secret, issuer, 123, "user", 5*time.Minute)
 
 	info, err := authService.Authenticate(context.Background(), accessToken)
 	if err != nil {
@@ -58,24 +55,6 @@ func TestAuthServiceAuthenticate(t *testing.T) {
 	if err == nil || errors.GetCode(err) != errors.Forbidden {
 		t.Fatalf("expected forbidden, got %v", err)
 	}
-}
-
-func newAccessToken(t *testing.T, secret, issuer string, userID int64, role string) string {
-	t.Helper()
-	claims := jwt.MapClaims{
-		"role": role,
-		"typ":  "access",
-		"sub":  fmt.Sprintf("%d", userID),
-		"iss":  issuer,
-		"iat":  time.Now().Unix(),
-		"exp":  time.Now().Add(5 * time.Minute).Unix(),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	raw, err := token.SignedString([]byte(secret))
-	if err != nil {
-		t.Fatalf("sign token failed: %v", err)
-	}
-	return raw
 }
 
 func hashToken(raw string) string {

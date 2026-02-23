@@ -5,17 +5,24 @@ import (
 	"testing"
 	"time"
 
-	"fuzoj/internal/gateway/repository"
+	"fuzoj/services/gateway_service/internal/repository"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 func TestBanCacheRepositoryLocalCache(t *testing.T) {
-	setCache := newMockSetCache()
-	local := repository.NewLRUCache(10, time.Minute)
-	repo := repository.NewBanCacheRepository(local, setCache, time.Second, time.Minute)
-
-	if err := setCache.SAdd(context.Background(), "user:banned", int64(100)); err != nil {
-		t.Fatalf("set cache add failed: %v", err)
+	mini := miniredis.RunT(t)
+	redisClient, err := redis.NewRedis(redis.RedisConf{Host: mini.Addr(), Type: "node"})
+	if err != nil {
+		t.Fatalf("init redis failed: %v", err)
 	}
+	defer redisClient.Close()
+
+	local := repository.NewLRUCache(10, time.Minute)
+	repo := repository.NewBanCacheRepository(local, redisClient, time.Minute)
+
+	mini.SAdd("user:banned", "100")
 
 	banned, err := repo.IsBanned(context.Background(), 100)
 	if err != nil {
@@ -32,7 +39,7 @@ func TestBanCacheRepositoryLocalCache(t *testing.T) {
 
 func TestBanCacheRepositoryMarkAndUnmark(t *testing.T) {
 	local := repository.NewLRUCache(10, time.Minute)
-	repo := repository.NewBanCacheRepository(local, nil, time.Second, time.Minute)
+	repo := repository.NewBanCacheRepository(local, nil, time.Minute)
 
 	repo.MarkBanned(200, time.Minute)
 	if val, ok := local.Get("200"); !ok || !val {

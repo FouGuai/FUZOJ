@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"fuzoj/internal/gateway/repository"
+	"fuzoj/services/gateway_service/internal/repository"
 	pkgerrors "fuzoj/pkg/errors"
 
 	"github.com/golang-jwt/jwt/v5"

@@ -4,13 +4,10 @@ import (
 	"net/http"
 	"testing"
 
-	"fuzoj/internal/gateway/middleware"
-
-	"github.com/gin-gonic/gin"
+	"fuzoj/services/gateway_service/internal/middleware"
 )
 
 func TestCORSMiddleware(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	cases := []struct {
 		name       string
 		config     middleware.CORSConfig
@@ -55,17 +52,15 @@ func TestCORSMiddleware(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			router := gin.New()
-			router.Use(middleware.CORSMiddleware(tc.config))
-			router.GET("/resource", func(c *gin.Context) {
-				c.Status(http.StatusOK)
-			})
+			handler := applyMiddleware(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}, middleware.CORSMiddleware(tc.config))
 
 			headers := map[string]string{}
 			if tc.origin != "" {
 				headers["Origin"] = tc.origin
 			}
-			rec, _, err := performRequest(router, tc.method, "/resource", headers)
+			rec, _, err := performRequest(http.HandlerFunc(handler), tc.method, "/resource", headers)
 			if err != nil {
 				t.Fatalf("decode response failed: %v", err)
 			}

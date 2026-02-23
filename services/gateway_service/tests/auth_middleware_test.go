@@ -10,11 +10,9 @@ import (
 	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/services/gateway_service/internal/middleware"
 	"fuzoj/services/gateway_service/internal/service"
-
-	"github.com/golang-jwt/jwt/v5"
 )
 
-func TestAuthMiddleware(t *testing.T) {
+func TestAuthMiddlewareBasic(t *testing.T) {
 	secret := "test-secret"
 	issuer := "fuzoj"
 	authService := service.NewAuthService(secret, issuer, nil, nil)
@@ -32,7 +30,7 @@ func TestAuthMiddleware(t *testing.T) {
 		middleware.AuthMiddleware(authService),
 	)
 
-	token := newAccessToken(t, secret, issuer, 42, "admin")
+	token := newAccessToken(t, secret, issuer, 42, "admin", 5*time.Minute)
 
 	cases := []struct {
 		name       string
@@ -100,7 +98,7 @@ func TestAuthMiddlewareRoleDenied(t *testing.T) {
 		middleware.AuthMiddleware(authService),
 	)
 
-	token := newAccessToken(t, secret, issuer, 99, "user")
+	token := newAccessToken(t, secret, issuer, 99, "user", 5*time.Minute)
 	rec, resp, err := performRequest(http.HandlerFunc(handler), http.MethodGet, "/protected", map[string]string{
 		"Authorization": "Bearer " + token,
 	})
@@ -136,74 +134,4 @@ func TestAuthMiddlewareNilService(t *testing.T) {
 	if resp.Code != int(errors.ServiceUnavailable) {
 		t.Fatalf("unexpected error code: %d", resp.Code)
 	}
-}
-
-func TestAuthServiceAuthenticateErrors(t *testing.T) {
-	secret := "test-secret"
-	issuer := "fuzoj"
-	authService := service.NewAuthService(secret, issuer, nil, nil)
-
-	expiredToken := newTokenWithClaims(t, secret, issuer, 1, "user", time.Now().Add(-1*time.Minute))
-	wrongIssuerToken := newTokenWithClaims(t, secret, "other", 1, "user", time.Now().Add(1*time.Minute))
-	wrongTypeToken := replaceTokenType(t, secret, issuer)
-
-	cases := []struct {
-		name     string
-		token    string
-		wantCode errors.ErrorCode
-	}{
-		{name: "empty token", token: "", wantCode: errors.TokenInvalid},
-		{name: "expired token", token: expiredToken, wantCode: errors.TokenExpired},
-		{name: "wrong issuer", token: wrongIssuerToken, wantCode: errors.TokenInvalid},
-		{name: "wrong type", token: wrongTypeToken, wantCode: errors.TokenInvalid},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := authService.Authenticate(t.Context(), tc.token)
-			if err == nil {
-				t.Fatalf("expected error")
-			}
-			if errors.GetCode(err) != tc.wantCode {
-				t.Fatalf("unexpected error code: %v", err)
-			}
-		})
-	}
-}
-
-func newTokenWithClaims(t *testing.T, secret, issuer string, userID int64, role string, exp time.Time) string {
-	t.Helper()
-	claims := map[string]interface{}{
-		"role": role,
-		"typ":  "access",
-		"sub":  fmt.Sprintf("%d", userID),
-		"iss":  issuer,
-		"iat":  time.Now().Unix(),
-		"exp":  exp.Unix(),
-	}
-	return signTokenWithClaims(t, secret, claims)
-}
-
-func replaceTokenType(t *testing.T, secret, issuer string) string {
-	t.Helper()
-	claims := map[string]interface{}{
-		"role": "user",
-		"typ":  "refresh",
-		"sub":  "1",
-		"iss":  issuer,
-		"iat":  time.Now().Unix(),
-		"exp":  time.Now().Add(time.Minute).Unix(),
-	}
-	return signTokenWithClaims(t, secret, claims)
-}
-
-func signTokenWithClaims(t *testing.T, secret string, claims map[string]interface{}) string {
-	t.Helper()
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims(claims))
-	raw, err := token.SignedString([]byte(secret))
-	if err != nil {
-		t.Fatalf("sign token failed: %v", err)
-	}
-	return raw
 }

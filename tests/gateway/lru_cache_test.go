@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"fuzoj/internal/gateway/repository"
+	"fuzoj/services/gateway_service/internal/repository"
 )
 
 func TestLRUCacheSetGetAndExpire(t *testing.T) {

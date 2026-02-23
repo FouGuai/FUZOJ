@@ -4,20 +4,15 @@ import (
 	"net/http"
 	"testing"
 
-	"fuzoj/internal/gateway/middleware"
-
-	"github.com/gin-gonic/gin"
+	"fuzoj/services/gateway_service/internal/middleware"
 )
 
 func TestTraceMiddleware(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.Use(middleware.TraceMiddleware())
-	router.GET("/trace", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
+	handler := applyMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}, middleware.TraceMiddleware())
 
-	rec, _, err := performRequest(router, http.MethodGet, "/trace", nil)
+	rec, _, err := performRequest(http.HandlerFunc(handler), http.MethodGet, "/trace", nil)
 	if err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}
@@ -28,14 +23,11 @@ func TestTraceMiddleware(t *testing.T) {
 }
 
 func TestTraceMiddlewarePreservesRequestID(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.Use(middleware.TraceMiddleware())
-	router.GET("/trace", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
+	handler := applyMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}, middleware.TraceMiddleware())
 
-	rec, _, err := performRequest(router, http.MethodGet, "/trace", map[string]string{"X-Request-Id": "req-123"})
+	rec, _, err := performRequest(http.HandlerFunc(handler), http.MethodGet, "/trace", map[string]string{"X-Request-Id": "req-123"})
 	if err != nil {
 		t.Fatalf("decode response failed: %v", err)
 	}

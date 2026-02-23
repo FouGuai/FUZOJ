@@ -6,22 +6,20 @@ import (
 	"fmt"
 	"time"
 
-	"fuzoj/internal/common/cache"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 // BanCacheRepository checks banned users with local cache + Redis.
 type BanCacheRepository struct {
-	local       *LRUCache
-	redis       cache.SetOps
-	redisTTL    time.Duration
-	redisTimeout time.Duration
+	local        *LRUCache
+	redis        *redis.Redis
+	redisTTL     time.Duration
 }
 
-func NewBanCacheRepository(local *LRUCache, redis cache.SetOps, redisTimeout time.Duration, ttl time.Duration) *BanCacheRepository {
+func NewBanCacheRepository(local *LRUCache, redisClient *redis.Redis, ttl time.Duration) *BanCacheRepository {
 	return &BanCacheRepository{
 		local:        local,
-		redis:        redis,
-		redisTimeout: redisTimeout,
+		redis:        redisClient,
 		redisTTL:     ttl,
 	}
 }
@@ -36,9 +34,7 @@ func (r *BanCacheRepository) IsBanned(ctx context.Context, userID int64) (bool, 
 	if r.redis == nil {
 		return false, errors.New("redis is nil")
 	}
-	ctxCache, cancel := context.WithTimeout(ctx, r.redisTimeout)
-	defer cancel()
-	banned, err := r.redis.SIsMember(ctxCache, userBannedKey, userID)
+	banned, err := r.redis.SismemberCtx(ctx, userBannedKey, userID)
 	if err != nil {
 		return false, err
 	}

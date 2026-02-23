@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"fuzoj/internal/common/cache_helper"
 	"fuzoj/services/problem_service/internal/model"
 
 	"github.com/zeromicro/go-zero/core/stores/cache"
@@ -75,12 +76,12 @@ func (r *MySQLProblemRepository) GetLatestMeta(ctx context.Context, session sqlx
 		meta, err := r.getLatestMetaFromDB(ctx, nil, problemID)
 		if err != nil {
 			if errors.Is(err, ErrProblemNotFound) {
-				_ = r.cache.SetWithExpireCtx(ctx, key, ProblemLatestMeta{}, jitterTTL(r.emptyTTL))
+				_ = r.cache.SetWithExpireCtx(ctx, key, ProblemLatestMeta{}, cache_helper.JitterTTL(r.emptyTTL))
 				return ProblemLatestMeta{}, ErrProblemNotFound
 			}
 			return ProblemLatestMeta{}, err
 		}
-		_ = r.cache.SetWithExpireCtx(ctx, key, meta, jitterTTL(r.ttl))
+		_ = r.cache.SetWithExpireCtx(ctx, key, meta, cache_helper.JitterTTL(r.ttl))
 		return meta, nil
 	}
 	return r.getLatestMetaFromDB(ctx, session, problemID)

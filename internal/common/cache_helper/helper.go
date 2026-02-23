@@ -1,4 +1,4 @@
-package repository
+package cache_helper
 
 import (
 	"crypto/rand"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func jitterTTL(ttl time.Duration) time.Duration {
+func JitterTTL(ttl time.Duration) time.Duration {
 	if ttl <= 0 {
 		return ttl
 	}

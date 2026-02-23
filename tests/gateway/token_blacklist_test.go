@@ -5,17 +5,24 @@ import (
 	"testing"
 	"time"
 
-	"fuzoj/internal/gateway/repository"
+	"fuzoj/services/gateway_service/internal/repository"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 func TestTokenBlacklistRepositoryLocalCache(t *testing.T) {
-	setCache := newMockSetCache()
-	local := repository.NewLRUCache(10, time.Minute)
-	repo := repository.NewTokenBlacklistRepository(local, setCache, time.Second, time.Minute)
-
-	if err := setCache.SAdd(context.Background(), "token:blacklist", "hash-1"); err != nil {
-		t.Fatalf("set cache add failed: %v", err)
+	mini := miniredis.RunT(t)
+	redisClient, err := redis.NewRedis(redis.RedisConf{Host: mini.Addr(), Type: "node"})
+	if err != nil {
+		t.Fatalf("init redis failed: %v", err)
 	}
+	defer redisClient.Close()
+
+	local := repository.NewLRUCache(10, time.Minute)
+	repo := repository.NewTokenBlacklistRepository(local, redisClient, time.Minute)
+
+	mini.SAdd("token:blacklist", "hash-1")
 
 	blacklisted, err := repo.IsBlacklisted(context.Background(), "hash-1")
 	if err != nil {
@@ -32,7 +39,7 @@ func TestTokenBlacklistRepositoryLocalCache(t *testing.T) {
 
 func TestTokenBlacklistRepositoryEmptyHash(t *testing.T) {
 	local := repository.NewLRUCache(10, time.Minute)
-	repo := repository.NewTokenBlacklistRepository(local, nil, time.Second, time.Minute)
+	repo := repository.NewTokenBlacklistRepository(local, nil, time.Minute)
 
 	blacklisted, err := repo.IsBlacklisted(context.Background(), "")
 	if err != nil {
