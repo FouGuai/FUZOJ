@@ -77,7 +77,6 @@
 
 - **缓存框架和工具**：
   - 新代码优先使用 go-zero `cache.Cache` / `cache.CacheConf` 与 model 层 `sqlc.CachedConn`
-  - 历史模块可参考 **已实现的模块文档** 中的 `Common Cache Interface`
   - 复用现有的缓存实现，不要重复造轮子
 
 
@@ -168,7 +167,6 @@
 
 ## 已实现的模块文档
 
-- **Common Cache Interface**：`internal/common/cache/interface.go` — 统一的缓存操作接口定义（历史模块）
 - **User Auth Service**：`docs/user_auth_service.md` — 用户认证、仓储与 Token/黑名单管理的模块说明
 - **Sandbox Engine**：`docs/sandbox_engine.md` — Linux 原生沙箱引擎与初始化流程说明
 - **Sandbox Runner**：`docs/sandbox_runner.md` — 判题编排层，负责生成 RunSpec 并执行编译、运行与 SPJ

@@ -1,40 +1,12 @@
 package db
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
 )
-
-// Querier abstracts database operations for both database and transaction.
-type Querier interface {
-	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
-	QueryRow(ctx context.Context, query string, args ...interface{}) Row
-	Exec(ctx context.Context, query string, args ...interface{}) (Result, error)
-}
-
-// GetQuerier returns transaction if provided, otherwise uses the database.
-func GetQuerier(database Database, tx Transaction) Querier {
-	if tx != nil {
-		return tx
-	}
-	return database
-}
-
-// GetProviderQuerier returns transaction if provided, otherwise uses database from provider.
-func GetProviderQuerier(provider Provider, tx Transaction) (Querier, error) {
-	if tx != nil {
-		return tx, nil
-	}
-	database, err := CurrentDatabase(provider)
-	if err != nil {
-		return nil, err
-	}
-	return database, nil
-}
 
 // IsNoRows checks if the error is sql.ErrNoRows.
 func IsNoRows(err error) bool {

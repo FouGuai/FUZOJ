@@ -28,8 +28,8 @@ func NewGetLatestLogic(ctx context.Context, svcCtx *svc.ServiceContext) *GetLate
 }
 
 func (l *GetLatestLogic) GetLatest(req *types.GetLatestRequest) (resp *types.LatestMetaResponse, err error) {
-	manager := problem_app.NewProblemAppFromContext(l.svcCtx)
-	meta, err := manager.GetLatestMeta(l.ctx, req.Id)
+	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
+	meta, err := problemApp.GetLatestMeta(l.ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
