@@ -16,7 +16,7 @@ const (
 )
 
 func (s *authApp) checkLoginLimit(ctx context.Context, username, ip string) error {
-	if s.loginFailCache == nil {
+	if s.loginFailRedis == nil {
 		return nil
 	}
 	if s.config.LoginFailLimit <= 0 {
@@ -36,7 +36,7 @@ func (s *authApp) checkLoginLimit(ctx context.Context, username, ip string) erro
 }
 
 func (s *authApp) recordLoginFailure(ctx context.Context, username, ip string) {
-	if s.loginFailCache == nil {
+	if s.loginFailRedis == nil {
 		return
 	}
 
@@ -47,7 +47,7 @@ func (s *authApp) recordLoginFailure(ctx context.Context, username, ip string) {
 }
 
 func (s *authApp) clearLoginFailure(ctx context.Context, username, ip string) {
-	if s.loginFailCache == nil {
+	if s.loginFailRedis == nil {
 		return
 	}
 
@@ -55,11 +55,11 @@ func (s *authApp) clearLoginFailure(ctx context.Context, username, ip string) {
 	if ip != "" {
 		keys = append(keys, loginFailIPPrefix+ip)
 	}
-	_ = s.loginFailCache.Del(ctx, keys...)
+	_, _ = s.loginFailRedis.DelCtx(ctx, keys...)
 }
 
 func (s *authApp) getFailCount(ctx context.Context, key string) int {
-	value, err := s.loginFailCache.Get(ctx, key)
+	value, err := s.loginFailRedis.GetCtx(ctx, key)
 	if err != nil {
 		logger.Warn(ctx, "get login fail counter failed", zap.String("key", key), zap.Error(err))
 		return 0
@@ -77,15 +77,18 @@ func (s *authApp) getFailCount(ctx context.Context, key string) int {
 }
 
 func (s *authApp) incrementFailKey(ctx context.Context, key string) {
-	count, err := s.loginFailCache.Incr(ctx, key)
+	count, err := s.loginFailRedis.IncrCtx(ctx, key)
 	if err != nil {
 		logger.Warn(ctx, "increment login fail counter failed", zap.String("key", key), zap.Error(err))
 		return
 	}
 
 	if count == 1 {
-		if err := s.loginFailCache.Expire(ctx, key, s.config.LoginFailTTL); err != nil {
-			logger.Warn(ctx, "set login fail counter ttl failed", zap.String("key", key), zap.Error(err))
+		ttlSeconds := int(s.config.LoginFailTTL.Seconds())
+		if ttlSeconds > 0 {
+			if err := s.loginFailRedis.ExpireCtx(ctx, key, ttlSeconds); err != nil {
+				logger.Warn(ctx, "set login fail counter ttl failed", zap.String("key", key), zap.Error(err))
+			}
 		}
 	}
 }

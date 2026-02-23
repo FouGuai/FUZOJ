@@ -32,6 +32,14 @@
 - 在关键地方写上清楚的注释
 - **除非我明确指定，否则运行时配置信息不能从环境变量中获取，优先从配置文件中获取**
 
+## go-zero 使用注意事项
+
+- 依赖必须通过 `internal/svc` 注入，禁止绕过 `ServiceContext` 直接创建外部客户端
+- 优先使用 go-zero 的 model 缓存（`sqlc.CachedConn`）与 `cache.Cache` 的 `Take` 实现 Cache-Aside
+- 不要新增通用缓存抽象；仅在 go-zero 无法覆盖的高级 Redis 操作时才使用历史 `Common Cache Interface`
+- 配置读取遵循 go-zero 配置结构；除非明确指定，不从环境变量读取运行时配置
+- 外部调用务必设置 `context` 超时，并在异常分支记录结构化日志
+
 ## 测试规范
 
 - 每完成一个模块都需要写一套完整测试

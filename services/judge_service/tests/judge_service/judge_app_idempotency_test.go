@@ -1,4 +1,4 @@
-package judge_service_test
+package judge_service
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 func TestJudgeAppHandleMessageIdempotentAheadStatus(t *testing.T) {
 	t.Parallel()
 
-	cache := newFakeCache()
+	cache := newFakeCache(t)
 	statusRepo := repository.NewStatusRepository(cache, nil, time.Minute, time.Minute, nil)
 	// Store a running status in cache so it is ahead of pending.
 	if err := statusRepo.Save(context.Background(), pmodel.JudgeStatusResponse{

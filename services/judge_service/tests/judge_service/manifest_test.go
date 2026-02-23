@@ -1,4 +1,4 @@
-package judge_service_test
+package judge_service
 
 import (
 	"os"

@@ -2,21 +2,24 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
-	cachex "fuzoj/internal/common/cache"
 	appErr "fuzoj/pkg/errors"
 	dbmodel "fuzoj/services/judge_service/internal/model"
 	"fuzoj/services/judge_service/internal/pmodel"
 	"fuzoj/services/judge_service/internal/sandbox/result"
 
 	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 const statusKeyPrefix = "judge:status:"
+const nullCacheValue = "$NULL$"
 const (
 	defaultStatusCacheTTL      = 30 * time.Minute
 	defaultStatusCacheEmptyTTL = 5 * time.Minute
@@ -24,7 +27,7 @@ const (
 
 // StatusRepository handles status persistence.
 type StatusRepository struct {
-	cache            cachex.Cache
+	cache            *redis.Redis
 	submissionsModel dbmodel.SubmissionsModel
 	publisher        StatusEventPublisher
 	ttl              time.Duration
@@ -32,7 +35,7 @@ type StatusRepository struct {
 }
 
 // NewStatusRepository creates a new repository.
-func NewStatusRepository(cacheClient cachex.Cache, submissionsModel dbmodel.SubmissionsModel, ttl, emptyTTL time.Duration, publisher StatusEventPublisher) *StatusRepository {
+func NewStatusRepository(cacheClient *redis.Redis, submissionsModel dbmodel.SubmissionsModel, ttl, emptyTTL time.Duration, publisher StatusEventPublisher) *StatusRepository {
 	if ttl <= 0 {
 		ttl = defaultStatusCacheTTL
 	}
@@ -60,34 +63,36 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (pmodel
 		return r.getFinalStatusFromDB(ctx, submissionID)
 	}
 
-	status, err := cachex.GetWithCached[*pmodel.JudgeStatusResponse](
-		ctx,
-		r.cache,
-		statusKeyPrefix+submissionID,
-		cachex.JitterTTL(r.ttl),
-		cachex.JitterTTL(r.emptyTTL),
-		func(st *pmodel.JudgeStatusResponse) bool { return st == nil },
-		marshalStatus,
-		unmarshalStatus,
-		func(ctx context.Context) (*pmodel.JudgeStatusResponse, error) {
-			status, err := r.getFinalStatusFromDB(ctx, submissionID)
-			if err != nil {
-				if appErr.Is(err, appErr.NotFound) {
-					return nil, nil
-				}
-				return nil, err
-			}
-			return &status, nil
-		},
-	)
+	cacheKey := statusKeyPrefix + submissionID
+	cached, err := r.cache.GetCtx(ctx, cacheKey)
 	if err != nil {
-		logger.Errorf("get status failed: %v", err)
+		logger.Errorf("get status cache failed: %v", err)
+		return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
+	}
+	if cached != "" {
+		if cached == nullCacheValue {
+			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
+		}
+		status, err := unmarshalStatus(cached)
+		if err == nil && status != nil {
+			return *status, nil
+		}
+		logger.Errorf("decode status cache failed: %v", err)
+	}
+
+	status, err := r.getFinalStatusFromDB(ctx, submissionID)
+	if err != nil {
+		if appErr.Is(err, appErr.NotFound) {
+			_ = setWithTTL(ctx, r.cache, cacheKey, nullCacheValue, jitterTTL(r.emptyTTL))
+			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
+		}
 		return pmodel.JudgeStatusResponse{}, err
 	}
-	if status == nil {
-		return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
+	payload := mustMarshalStatus(status)
+	if payload != "" {
+		_ = setWithTTL(ctx, r.cache, cacheKey, payload, jitterTTL(r.ttl))
 	}
-	return *status, nil
+	return status, nil
 }
 
 // GetBatch returns statuses for multiple submission ids.
@@ -109,7 +114,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 			}
 			keys = append(keys, statusKeyPrefix+submissionID)
 		}
-		values, err := r.cache.MGet(ctx, keys...)
+		values, err := r.cache.Mget(keys...)
 		if err != nil {
 			logger.Errorf("batch get status cache failed: %v", err)
 			return nil, nil, appErr.Wrapf(err, appErr.CacheError, "batch get status failed")
@@ -119,7 +124,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 				missing = append(missing, submissionIDs[i])
 				continue
 			}
-			if raw == cachex.NullCacheValue {
+			if raw == nullCacheValue {
 				continue
 			}
 			var resp pmodel.JudgeStatusResponse
@@ -150,7 +155,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 		if r.cache != nil {
 			for _, st := range dbStatuses {
 				if payload := mustMarshalStatus(st); payload != "" {
-					_ = r.cache.Set(ctx, statusKeyPrefix+st.SubmissionID, payload, cachex.JitterTTL(r.ttl))
+					_ = setWithTTL(ctx, r.cache, statusKeyPrefix+st.SubmissionID, payload, jitterTTL(r.ttl))
 				}
 			}
 		}
@@ -160,7 +165,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 			if id == "" {
 				continue
 			}
-			_ = r.cache.Set(ctx, statusKeyPrefix+id, cachex.NullCacheValue, cachex.JitterTTL(r.emptyTTL))
+			_ = setWithTTL(ctx, r.cache, statusKeyPrefix+id, nullCacheValue, jitterTTL(r.emptyTTL))
 		}
 	}
 	return statuses, dbMissing, nil
@@ -190,7 +195,7 @@ func (r *StatusRepository) Save(ctx context.Context, status pmodel.JudgeStatusRe
 			logger.Errorf("marshal status failed: %v", err)
 			return fmt.Errorf("marshal status failed: %w", err)
 		}
-		if err := r.cache.Set(ctx, statusKeyPrefix+status.SubmissionID, string(data), cachex.JitterTTL(r.ttl)); err != nil {
+		if err := setWithTTL(ctx, r.cache, statusKeyPrefix+status.SubmissionID, string(data), jitterTTL(r.ttl)); err != nil {
 			logger.Errorf("store status failed: %v", err)
 			return appErr.Wrapf(err, appErr.CacheError, "store status failed")
 		}
@@ -332,4 +337,40 @@ func unmarshalStatus(data string) (*pmodel.JudgeStatusResponse, error) {
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func setWithTTL(ctx context.Context, cacheClient *redis.Redis, key, value string, ttl time.Duration) error {
+	if cacheClient == nil {
+		return errors.New("cache client is nil")
+	}
+	if ttl > 0 {
+		return cacheClient.SetexCtx(ctx, key, value, durationSeconds(ttl))
+	}
+	return cacheClient.SetCtx(ctx, key, value)
+}
+
+func durationSeconds(ttl time.Duration) int {
+	if ttl <= 0 {
+		return 0
+	}
+	seconds := int(ttl / time.Second)
+	if seconds <= 0 {
+		return 1
+	}
+	return seconds
+}
+
+func jitterTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return ttl
+	}
+	maxJitter := int64(ttl / 10)
+	if maxJitter <= 0 {
+		return ttl
+	}
+	n, err := rand.Int(rand.Reader, big.NewInt(maxJitter+1))
+	if err != nil {
+		return ttl
+	}
+	return ttl - time.Duration(n.Int64())
 }

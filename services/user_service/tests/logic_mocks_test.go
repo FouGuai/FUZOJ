@@ -5,12 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	commoncache "fuzoj/internal/common/cache"
 	"fuzoj/services/user_service/internal/config"
 	"fuzoj/services/user_service/internal/repository"
 	"fuzoj/services/user_service/internal/svc"
@@ -229,180 +227,6 @@ func (r *fakeTokenRepo) IsBlacklisted(ctx context.Context, tokenHash string) (bo
 	return ok, nil
 }
 
-type fakeBasicCache struct {
-	mu      sync.Mutex
-	values  map[string]string
-	expires map[string]time.Time
-}
-
-func newFakeBasicCache() *fakeBasicCache {
-	return &fakeBasicCache{
-		values:  make(map[string]string),
-		expires: make(map[string]time.Time),
-	}
-}
-
-func (c *fakeBasicCache) Get(ctx context.Context, key string) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.isExpiredLocked(key) {
-		return "", nil
-	}
-	return c.values[key], nil
-}
-
-func (c *fakeBasicCache) MGet(ctx context.Context, keys ...string) ([]string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	results := make([]string, 0, len(keys))
-	for _, key := range keys {
-		if c.isExpiredLocked(key) {
-			results = append(results, "")
-			continue
-		}
-		results = append(results, c.values[key])
-	}
-	return results, nil
-}
-
-func (c *fakeBasicCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.values[key] = fmt.Sprint(value)
-	c.setTTLLocked(key, ttl)
-	return nil
-}
-
-func (c *fakeBasicCache) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.isExpiredLocked(key)
-	if _, ok := c.values[key]; ok {
-		return false, nil
-	}
-	c.values[key] = fmt.Sprint(value)
-	c.setTTLLocked(key, ttl)
-	return true, nil
-}
-
-func (c *fakeBasicCache) GetSet(ctx context.Context, key string, value interface{}) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	prev := ""
-	c.isExpiredLocked(key)
-	if val, ok := c.values[key]; ok {
-		prev = val
-	}
-	c.values[key] = fmt.Sprint(value)
-	delete(c.expires, key)
-	return prev, nil
-}
-
-func (c *fakeBasicCache) Del(ctx context.Context, keys ...string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, key := range keys {
-		delete(c.values, key)
-		delete(c.expires, key)
-	}
-	return nil
-}
-
-func (c *fakeBasicCache) Exists(ctx context.Context, keys ...string) (int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var count int64
-	for _, key := range keys {
-		if c.isExpiredLocked(key) {
-			continue
-		}
-		if _, ok := c.values[key]; ok {
-			count++
-		}
-	}
-	return count, nil
-}
-
-func (c *fakeBasicCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.values[key]; !ok {
-		return nil
-	}
-	c.setTTLLocked(key, ttl)
-	return nil
-}
-
-func (c *fakeBasicCache) TTL(ctx context.Context, key string) (time.Duration, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.isExpiredLocked(key) {
-		return -2, nil
-	}
-	exp, ok := c.expires[key]
-	if !ok {
-		if _, exists := c.values[key]; exists {
-			return -1, nil
-		}
-		return -2, nil
-	}
-	return time.Until(exp), nil
-}
-
-func (c *fakeBasicCache) Incr(ctx context.Context, key string) (int64, error) {
-	return c.IncrBy(ctx, key, 1)
-}
-
-func (c *fakeBasicCache) IncrBy(ctx context.Context, key string, value int64) (int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.isExpiredLocked(key)
-	current := parseInt(c.values[key])
-	current += value
-	c.values[key] = strconv.FormatInt(current, 10)
-	return current, nil
-}
-
-func (c *fakeBasicCache) Decr(ctx context.Context, key string) (int64, error) {
-	return c.DecrBy(ctx, key, 1)
-}
-
-func (c *fakeBasicCache) DecrBy(ctx context.Context, key string, value int64) (int64, error) {
-	return c.IncrBy(ctx, key, -value)
-}
-
-func (c *fakeBasicCache) isExpiredLocked(key string) bool {
-	exp, ok := c.expires[key]
-	if !ok {
-		return false
-	}
-	if time.Now().After(exp) {
-		delete(c.values, key)
-		delete(c.expires, key)
-		return true
-	}
-	return false
-}
-
-func (c *fakeBasicCache) setTTLLocked(key string, ttl time.Duration) {
-	if ttl <= 0 {
-		delete(c.expires, key)
-		return
-	}
-	c.expires[key] = time.Now().Add(ttl)
-}
-
-func parseInt(value string) int64 {
-	if value == "" {
-		return 0
-	}
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return parsed
-}
-
 func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
@@ -411,14 +235,12 @@ func hashToken(raw string) string {
 type testDeps struct {
 	users  *fakeUserRepo
 	tokens *fakeTokenRepo
-	cache  *fakeBasicCache
 	svcCtx *svc.ServiceContext
 }
 
 func newTestDeps() *testDeps {
 	users := newFakeUserRepo()
 	tokens := newFakeTokenRepo()
-	cache := newFakeBasicCache()
 	cfg := config.Config{
 		Auth: config.AuthConfig{
 			JWTSecret:       "test-secret",
@@ -431,16 +253,15 @@ func newTestDeps() *testDeps {
 		},
 	}
 	svcCtx := &svc.ServiceContext{
-		Config:         cfg,
-		Conn:           nil,
-		UserRepo:       users,
-		TokenRepo:      tokens,
-		LoginFailCache: cache,
+		Config:    cfg,
+		Conn:      nil,
+		Redis:     nil,
+		UserRepo:  users,
+		TokenRepo: tokens,
 	}
 	return &testDeps{
 		users:  users,
 		tokens: tokens,
-		cache:  cache,
 		svcCtx: svcCtx,
 	}
 }
@@ -453,5 +274,3 @@ func mustHashPassword(t *testing.T, raw string) string {
 	}
 	return string(hash)
 }
-
-var _ commoncache.BasicOps = (*fakeBasicCache)(nil)

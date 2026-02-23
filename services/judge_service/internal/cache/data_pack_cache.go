@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/storage"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/judge_service/internal/pmodel"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 const (
@@ -46,7 +46,9 @@ type DataPackCache struct {
 	maxBytes   int64
 	bucket     string
 	storage    storage.ObjectStorage
-	lock       cache.LockOps
+	lockClient *redis.Redis
+	lockMu     sync.Mutex
+	locks      map[string]*redis.RedisLock
 	mu         sync.Mutex
 	entries    map[string]*cacheEntry
 	lruKeys    []string
@@ -54,7 +56,7 @@ type DataPackCache struct {
 }
 
 // NewDataPackCache creates a new cache.
-func NewDataPackCache(rootDir string, ttl time.Duration, lockWait time.Duration, maxEntries int, maxBytes int64, bucket string, storageClient storage.ObjectStorage, lock cache.LockOps) *DataPackCache {
+func NewDataPackCache(rootDir string, ttl time.Duration, lockWait time.Duration, maxEntries int, maxBytes int64, bucket string, storageClient storage.ObjectStorage, lockClient *redis.Redis) *DataPackCache {
 	if maxEntries <= 0 {
 		maxEntries = 64
 	}
@@ -69,7 +71,8 @@ func NewDataPackCache(rootDir string, ttl time.Duration, lockWait time.Duration,
 		maxBytes:   maxBytes,
 		bucket:     bucket,
 		storage:    storageClient,
-		lock:       lock,
+		lockClient: lockClient,
+		locks:      make(map[string]*redis.RedisLock),
 		entries:    make(map[string]*cacheEntry),
 	}
 }
@@ -142,19 +145,22 @@ func (c *DataPackCache) checkDisk(path string, meta pmodel.ProblemMeta) bool {
 }
 
 func (c *DataPackCache) fetchAndExtract(ctx context.Context, meta pmodel.ProblemMeta, path string) error {
-	if c.lock == nil {
+	if c.lockClient == nil {
 		return appErr.New(appErr.CacheError).WithMessage("lock client is not initialized")
 	}
 	lockKey := lockKeyPrefix + cacheKey(meta.ProblemID, meta.Version)
-	locked, err := c.lock.TryLock(ctx, lockKey, 5*time.Minute)
+	lock := redis.NewRedisLock(c.lockClient, lockKey)
+	lock.SetExpire(durationSeconds(5 * time.Minute))
+	locked, err := lock.AcquireCtx(ctx)
 	if err != nil {
 		return appErr.Wrapf(err, appErr.LockFailed, "acquire data pack lock failed")
 	}
 	if !locked {
 		return c.waitForCache(ctx, meta, path)
 	}
+	c.storeLock(lockKey, lock)
 	defer func() {
-		_ = c.lock.Unlock(ctx, lockKey)
+		_ = c.releaseLock(ctx, lockKey)
 	}()
 
 	if ok := c.checkDisk(path, meta); ok {
@@ -350,8 +356,45 @@ func (c *DataPackCache) removeEntryLocked(key string) {
 	_ = os.RemoveAll(entry.path)
 }
 
+func (c *DataPackCache) storeLock(key string, lock *redis.RedisLock) {
+	c.lockMu.Lock()
+	c.locks[key] = lock
+	c.lockMu.Unlock()
+}
+
+func (c *DataPackCache) releaseLock(ctx context.Context, key string) error {
+	lock := c.takeLock(key)
+	if lock == nil {
+		return nil
+	}
+	_, err := lock.ReleaseCtx(ctx)
+	return err
+}
+
+func (c *DataPackCache) takeLock(key string) *redis.RedisLock {
+	c.lockMu.Lock()
+	defer c.lockMu.Unlock()
+	lock := c.locks[key]
+	if lock == nil {
+		return nil
+	}
+	delete(c.locks, key)
+	return lock
+}
+
 func cacheKey(problemID int64, version int32) string {
 	return fmt.Sprintf("%d:%d", problemID, version)
+}
+
+func durationSeconds(ttl time.Duration) int {
+	if ttl <= 0 {
+		return 0
+	}
+	seconds := int(ttl / time.Second)
+	if seconds <= 0 {
+		return 1
+	}
+	return seconds
 }
 
 func dirSize(path string) int64 {

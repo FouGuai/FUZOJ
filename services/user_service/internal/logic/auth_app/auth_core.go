@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"time"
 
-	commoncache "fuzoj/internal/common/cache"
 	pkgerrors "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/user_service/internal/config"
 	"fuzoj/services/user_service/internal/repository"
 	"fuzoj/services/user_service/internal/svc"
 
+	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -42,7 +42,7 @@ type authApp struct {
 	conn           sqlx.SqlConn
 	users          repository.UserRepository
 	tokens         repository.TokenRepository
-	loginFailCache commoncache.BasicOps
+	loginFailRedis *redis.Redis
 	config         authConfig
 }
 
@@ -83,7 +83,7 @@ func NewAuthApp(svcCtx *svc.ServiceContext) *authApp {
 		conn:           svcCtx.Conn,
 		users:          svcCtx.UserRepo,
 		tokens:         svcCtx.TokenRepo,
-		loginFailCache: svcCtx.LoginFailCache,
+		loginFailRedis: svcCtx.Redis,
 		config:         cfg,
 	}
 }

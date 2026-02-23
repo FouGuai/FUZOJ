@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"fuzoj/internal/common/storage"
-	"fuzoj/internal/problem/model"
+	"fuzoj/services/problem_service/internal/domain"
 	"fuzoj/services/problem_service/internal/repository"
 
 	"github.com/zeromicro/go-queue/kq"
@@ -105,12 +105,12 @@ func (c *ProblemCleanupConsumer) Consume(ctx context.Context, key, value string)
 	if value == "" {
 		return nil
 	}
-	var event model.ProblemCleanupEvent
+	var event domain.ProblemCleanupEvent
 	if err := json.Unmarshal([]byte(value), &event); err != nil {
 		logx.WithContext(ctx).Errorf("parse cleanup event failed: %v", err)
 		return nil
 	}
-	if event.EventType != model.ProblemCleanupEventDeleted {
+	if event.EventType != domain.ProblemCleanupEventDeleted {
 		return nil
 	}
 	if event.ProblemID <= 0 {
@@ -136,7 +136,7 @@ func (c *ProblemCleanupConsumer) Consume(ctx context.Context, key, value string)
 	return nil
 }
 
-func (c *ProblemCleanupConsumer) handleEvent(ctx context.Context, event model.ProblemCleanupEvent) error {
+func (c *ProblemCleanupConsumer) handleEvent(ctx context.Context, event domain.ProblemCleanupEvent) error {
 	bucket := event.Bucket
 	if bucket == "" {
 		bucket = c.bucket

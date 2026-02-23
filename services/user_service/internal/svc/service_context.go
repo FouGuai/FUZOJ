@@ -4,8 +4,6 @@
 package svc
 
 import (
-	commoncache "fuzoj/internal/common/cache"
-	cachex "fuzoj/services/user_service/internal/cache"
 	"fuzoj/services/user_service/internal/config"
 	"fuzoj/services/user_service/internal/model"
 	"fuzoj/services/user_service/internal/repository"
@@ -24,7 +22,6 @@ type ServiceContext struct {
 	BanCacheRepo    repository.BanCacheRepository
 	UserRepo        repository.UserRepository
 	TokenRepo       repository.TokenRepository
-	LoginFailCache  commoncache.BasicOps
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -34,7 +31,6 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	usersModel := model.NewUsersModel(conn, c.Cache)
 	userRepo := repository.NewUserRepository(usersModel)
 	tokenRepo := repository.NewTokenRepository(tokensModel, redisClient)
-	loginFailCache := cachex.NewRedisBasicCache(redisClient)
 	return &ServiceContext{
 		Config:          c,
 		Conn:            conn,
@@ -45,6 +41,5 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		BanCacheRepo:    repository.NewBanCacheRepository(redisClient),
 		UserRepo:        userRepo,
 		TokenRepo:       tokenRepo,
-		LoginFailCache:  loginFailCache,
 	}
 }

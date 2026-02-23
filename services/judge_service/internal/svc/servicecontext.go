@@ -4,7 +4,6 @@
 package svc
 
 import (
-	cachex "fuzoj/internal/common/cache"
 	"fuzoj/internal/common/storage"
 	"fuzoj/services/judge_service/internal/cache"
 	"fuzoj/services/judge_service/internal/config"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
@@ -22,7 +22,7 @@ type ServiceContext struct {
 	Config           config.Config
 	Conn             sqlx.SqlConn
 	SubmissionsModel model.SubmissionsModel
-	StatusCache      cachex.Cache
+	StatusCache      *redis.Redis
 	StatusPublisher  repository.StatusEventPublisher
 	StatusRepo       *repository.StatusRepository
 	Worker           *sandbox.Worker
@@ -54,18 +54,14 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 }
 
-func newStatusCache(c config.Config) cachex.Cache {
+func newStatusCache(c config.Config) *redis.Redis {
 	if c.Redis.Host == "" {
 		return nil
 	}
-	redisConfig := cachex.DefaultRedisConfig()
-	redisConfig.Addr = c.Redis.Host
-	redisConfig.Password = c.Redis.Pass
-	redisConfig.DialTimeout = c.Redis.PingTimeout
-	cacheClient, err := cachex.NewRedisCacheWithConfig(redisConfig)
+	client, err := redis.NewRedis(c.Redis)
 	if err != nil {
 		logx.Errorf("init status cache failed: %v", err)
 		return nil
 	}
-	return cacheClient
+	return client
 }
