@@ -64,9 +64,12 @@ minio:
   useSSL: false
   bucket: "fuzoj"
 
-problemRPC:
-  addr: "127.0.0.1:9093"
-  timeout: 3s
+problemRpc:
+  etcd:
+    hosts: ["127.0.0.1:2379"]
+    key: "problem.rpc"
+  timeout: 2000
+  callTimeout: 3s
   metaTTL: 30s
 
 cache:

@@ -1,8 +1,12 @@
 Name: problem
 Host: 0.0.0.0
 Port: 8888
-Grpc:
-  Addr: 0.0.0.0:9093
+Rpc:
+  ListenOn: 0.0.0.0:9093
+  Etcd:
+    Hosts:
+      - 127.0.0.1:2379
+    Key: problem.rpc
 Mysql:
   DataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
 Cache:

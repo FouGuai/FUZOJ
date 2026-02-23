@@ -12,6 +12,7 @@ import (
 	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/rest"
+	"github.com/zeromicro/go-zero/zrpc"
 )
 
 type Config struct {
@@ -19,20 +20,20 @@ type Config struct {
 	Mysql struct {
 		DataSource string `json:"dataSource"`
 	} `json:"mysql"`
-	Cache               cache.CacheConf `json:"cache"`
-	Redis               redis.RedisConf `json:"redis"`
-	StatusCacheTTL      time.Duration   `json:"statusCacheTTL"`
-	StatusCacheEmptyTTL time.Duration   `json:"statusCacheEmptyTTL"`
-	Kafka               KafkaConfig     `json:"kafka"`
-	MinIO               MinIOConfig     `json:"minio"`
-	CacheConfig         CacheConfig     `json:"cacheConfig"`
-	Worker              WorkerConfig    `json:"worker"`
-	Source              SourceConfig    `json:"source"`
-	Problem             ProblemConfig   `json:"problem"`
-	Status              StatusConfig    `json:"status"`
-	Judge               JudgeConfig     `json:"judge"`
-	Sandbox             SandboxConfig   `json:"sandbox"`
-	Language            LanguageConfig  `json:"language"`
+	Cache               cache.CacheConf  `json:"cache"`
+	Redis               redis.RedisConf  `json:"redis"`
+	StatusCacheTTL      time.Duration    `json:"statusCacheTTL"`
+	StatusCacheEmptyTTL time.Duration    `json:"statusCacheEmptyTTL"`
+	Kafka               KafkaConfig      `json:"kafka"`
+	MinIO               MinIOConfig      `json:"minio"`
+	CacheConfig         CacheConfig      `json:"cacheConfig"`
+	Worker              WorkerConfig     `json:"worker"`
+	Source              SourceConfig     `json:"source"`
+	ProblemRpc          ProblemRpcConfig `json:"problemRpc"`
+	Status              StatusConfig     `json:"status"`
+	Judge               JudgeConfig      `json:"judge"`
+	Sandbox             SandboxConfig    `json:"sandbox"`
+	Language            LanguageConfig   `json:"language"`
 }
 
 // KafkaConfig holds Kafka settings.
@@ -95,11 +96,11 @@ type SourceConfig struct {
 	Timeout time.Duration `json:"timeout"`
 }
 
-// ProblemConfig holds problem service settings.
-type ProblemConfig struct {
-	Addr    string        `json:"addr"`
-	Timeout time.Duration `json:"timeout"`
-	MetaTTL time.Duration `json:"metaTTL"`
+// ProblemRpcConfig holds problem service rpc settings.
+type ProblemRpcConfig struct {
+	zrpc.RpcClientConf
+	CallTimeout time.Duration `json:"callTimeout"`
+	MetaTTL     time.Duration `json:"metaTTL"`
 }
 
 // StatusConfig holds status persistence settings.

@@ -5,7 +5,6 @@ package main
 
 import (
 	"flag"
-	"net"
 
 	problemv1 "fuzoj/api/gen/problem/v1"
 	"fuzoj/services/problem_service/internal/config"
@@ -16,6 +15,7 @@ import (
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest"
+	"github.com/zeromicro/go-zero/zrpc"
 	"google.golang.org/grpc"
 )
 
@@ -33,21 +33,15 @@ func main() {
 	ctx := svc.NewServiceContext(c)
 	handler.RegisterHandlers(server, ctx)
 
-	var grpcServer *grpc.Server
-	if c.Grpc.Addr != "" {
-		lis, err := net.Listen("tcp", c.Grpc.Addr)
-		if err != nil {
-			logx.Errorf("Start grpc listener failed: %v", err)
-		} else {
-			grpcServer = grpc.NewServer()
+	var rpcServer *zrpc.RpcServer
+	if c.Rpc.ListenOn != "" {
+		rpcServer = zrpc.MustNewServer(c.Rpc, func(grpcServer *grpc.Server) {
 			problemv1.RegisterProblemServiceServer(grpcServer, grpcserver.NewProblemRPCServer(ctx))
-			go func() {
-				logx.Infof("Starting gRPC server at %s...", c.Grpc.Addr)
-				if err := grpcServer.Serve(lis); err != nil {
-					logx.Errorf("gRPC server stopped: %v", err)
-				}
-			}()
-		}
+		})
+		go func() {
+			logx.Infof("Starting RPC server at %s...", c.Rpc.ListenOn)
+			rpcServer.Start()
+		}()
 	}
 
 	if ctx.CleanupQueue != nil {
@@ -60,8 +54,8 @@ func main() {
 	if ctx.DeadLetterPusher != nil {
 		defer ctx.DeadLetterPusher.Close()
 	}
-	if grpcServer != nil {
-		defer grpcServer.GracefulStop()
+	if rpcServer != nil {
+		defer rpcServer.Stop()
 	}
 
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)

@@ -101,6 +101,22 @@ wait_for_kafka() {
   exit 1
 }
 
+wait_for_etcd() {
+  local network="${COMPOSE_PROJECT_NAME}_default"
+  local max_attempts=60
+  local attempt=1
+  while [[ $attempt -le $max_attempts ]]; do
+    if docker run --rm --network "$network" curlimages/curl:8.6.0 \
+      -fsS http://etcd:2379/health >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  echo "etcd did not become ready in time" >&2
+  exit 1
+}
+
 wait_for_minio() {
   local network="${COMPOSE_PROJECT_NAME}_default"
   local max_attempts=60
@@ -255,12 +271,12 @@ write_runtime_profile() {
   local gateway_port
   local user_port
   local problem_port
-  local problem_grpc_port
+  local problem_rpc_port
   local submit_port
   local judge_port
   local dsn
   dsn="user:password@tcp(127.0.0.1:3306)/fuzoj?parseTime=true&loc=Local"
-  read -r gateway_port user_port problem_port problem_grpc_port submit_port judge_port < <(pick_free_ports 6)
+  read -r gateway_port user_port problem_port problem_rpc_port submit_port judge_port < <(pick_free_ports 6)
   mkdir -p "$OUTPUT_DIR"
   cat >"$OUTPUT_DIR/test.yaml" <<EOF
 mysql:
@@ -329,8 +345,11 @@ services:
     overrides:
       server:
         addr: "0.0.0.0:${problem_port}"
-      grpc:
-        addr: "0.0.0.0:${problem_grpc_port}"
+      rpc:
+        listenOn: "0.0.0.0:${problem_rpc_port}"
+        etcd:
+          hosts: ["127.0.0.1:2379"]
+          key: "problem.rpc"
       database:
         dsn: "$dsn"
       redis:
@@ -375,8 +394,10 @@ services:
         addr: "127.0.0.1:6379"
         password: ""
         db: 0
-      problemRPC:
-        addr: "127.0.0.1:${problem_grpc_port}"
+      problemRpc:
+        etcd:
+          hosts: ["127.0.0.1:2379"]
+          key: "problem.rpc"
       kafka:
         brokers: ["127.0.0.1:9092"]
       minio:
@@ -395,6 +416,7 @@ step "starting dependencies..." compose up -d
 step "waiting for mysql..." wait_for_mysql
 step "waiting for redis..." wait_for_redis
 step "waiting for kafka..." wait_for_kafka
+step "waiting for etcd..." wait_for_etcd
 step "waiting for elasticsearch..." wait_for_elasticsearch
 step "waiting for kibana..." wait_for_kibana
 

@@ -4,7 +4,7 @@
 
 - `services/`：go-zero 服务入口与代码（例如 `services/judge_service/`、`services/user_service/`）。
   - 每个服务是独立的 go-zero 项目结构，目录结构：`internal/handler` → `internal/logic` → `internal/repository` → `internal/model`，依赖由 `internal/svc` 注入。
-- `internal/`：历史核心业务逻辑；严格遵循分层调用链
+- `internal/`：业务的共用逻辑
   **Controller → Logic → Repository → Model**（禁止反向调用或跨层调用）。
 - `pkg/`：可被其他模块复用的公共库；**统一错误码**存放在 `pkg/errors/`。
 - `api/`：API 定义（OpenAPI / Proto 等规范）。
@@ -35,6 +35,7 @@
 ## go-zero 使用注意事项
 
 - 依赖必须通过 `internal/svc` 注入，禁止绕过 `ServiceContext` 直接创建外部客户端
+- RPC 全部使用 go-zero 的 zrpc 框架，禁止直接使用原生 gRPC 直连（除非明确说明）
 - 优先使用 go-zero 的 model 缓存（`sqlc.CachedConn`）与 `cache.Cache` 的 `Take` 实现 Cache-Aside
 - 不要新增通用缓存抽象；仅在 go-zero 无法覆盖的高级 Redis 操作时才使用历史 `Common Cache Interface`
 - 配置读取遵循 go-zero 配置结构；除非明确指定，不从环境变量读取运行时配置

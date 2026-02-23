@@ -47,6 +47,17 @@ services:
     volumes:
       - fuzoj_kafka:/var/lib/kafka/data
 
+  etcd:
+    image: bitnami/etcd:3.5
+    environment:
+      ALLOW_NONE_AUTHENTICATION: "yes"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://etcd:2379"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+    ports:
+      - "2379:2379"
+    volumes:
+      - fuzoj_etcd:/bitnami/etcd
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     environment:
@@ -84,3 +95,4 @@ volumes:
   fuzoj_minio:
   fuzoj_kafka:
   fuzoj_es:
+  fuzoj_etcd:

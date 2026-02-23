@@ -4,8 +4,11 @@ server:
   writeTimeout: "10s"
   idleTimeout: "60s"
 
-grpc:
-  addr: "0.0.0.0:9093"
+rpc:
+  listenOn: "0.0.0.0:9093"
+  etcd:
+    hosts: ["127.0.0.1:2379"]
+    key: "problem.rpc"
 
 logger:
   level: "info"

@@ -29,8 +29,7 @@ import (
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/zeromicro/go-zero/zrpc"
 )
 
 var configFile = flag.String("f", "etc/judge.yaml", "the config file")
@@ -119,18 +118,13 @@ func main() {
 	ctx.DataCache = dataCache
 	ctx.Storage = objStorage
 
-	grpcCtx, cancel := context.WithTimeout(context.Background(), c.Problem.Timeout)
-	defer cancel()
-	grpcConn, err := grpc.DialContext(grpcCtx, c.Problem.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	rpcClient, err := zrpc.NewClient(c.ProblemRpc.RpcClientConf)
 	if err != nil {
-		logx.Errorf("init problem grpc client failed: %v", err)
+		logx.Errorf("init problem rpc client failed: %v", err)
 		return
 	}
-	defer func() {
-		_ = grpcConn.Close()
-	}()
 
-	problemClient := problemclient.NewClient(problemv1.NewProblemServiceClient(grpcConn))
+	problemClient := problemclient.NewClient(problemv1.NewProblemServiceClient(rpcClient.Conn()))
 	ctx.ProblemClient = problemClient
 
 	consumer := logic.NewJudgeConsumerLogic(context.Background(), ctx)
@@ -171,8 +165,11 @@ func validateConfig(ctx *svc.ServiceContext, c *config.Config) error {
 	if ctx.StatusCache == nil {
 		return fmt.Errorf("status cache is not configured")
 	}
-	if c.Problem.Addr == "" {
-		return fmt.Errorf("problem addr is required")
+	if len(c.ProblemRpc.Etcd.Hosts) == 0 || c.ProblemRpc.Etcd.Key == "" {
+		return fmt.Errorf("problem rpc etcd config is required")
+	}
+	if c.ProblemRpc.CallTimeout <= 0 {
+		return fmt.Errorf("problem rpc call timeout is required")
 	}
 	if len(c.Kafka.Topics) == 0 {
 		return fmt.Errorf("kafka topics are required")
@@ -207,6 +204,9 @@ func applyDefaults(c *config.Config) {
 	}
 	if c.Kafka.PoolRetryMaxD == 0 {
 		c.Kafka.PoolRetryMaxD = 30 * time.Second
+	}
+	if c.ProblemRpc.CallTimeout == 0 {
+		c.ProblemRpc.CallTimeout = 3 * time.Second
 	}
 	if len(c.Kafka.TopicWeights) == 0 && len(c.Kafka.Topics) > 0 {
 		c.Kafka.TopicWeights = defaultTopicWeights(c.Kafka.Topics)
