@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/klauspost/compress/zstd"
-
 	"fuzoj/internal/common/cache"
 	"fuzoj/internal/common/storage"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/judge_service/internal/pmodel"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 const (

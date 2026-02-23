@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"fuzoj/internal/problem/model"
+	"fuzoj/services/problem_service/internal/domain"
 
 	"github.com/zeromicro/go-queue/kq"
 )
@@ -50,8 +50,8 @@ func (p *ProblemCleanupPublisher) PublishProblemDeleted(ctx context.Context, pro
 	if problemID <= 0 {
 		return errors.New("problemID is required")
 	}
-	event := model.ProblemCleanupEvent{
-		EventType:   model.ProblemCleanupEventDeleted,
+	event := domain.ProblemCleanupEvent{
+		EventType:   domain.ProblemCleanupEventDeleted,
 		ProblemID:   problemID,
 		Bucket:      p.bucket,
 		Prefix:      problemObjectPrefix(p.keyPrefix, problemID),
