@@ -89,6 +89,11 @@ const (
 	ProblemUploadObjectStorageFailed ErrorCode = 12014
 	ProblemVersionNotReadyToPublish  ErrorCode = 12015
 
+	// Problem statement (12020-12029)
+	ProblemStatementNotFound     ErrorCode = 12020
+	ProblemStatementNotEditable  ErrorCode = 12021
+	ProblemStatementUpdateFailed ErrorCode = 12022
+
 	// Test cases (12100-12199)
 	TestCaseNotFound     ErrorCode = 12100
 	TestCaseUploadFailed ErrorCode = 12101
@@ -241,6 +246,11 @@ var errorMessages = map[ErrorCode]string{
 	ProblemUploadObjectStorageFailed: "Object storage operation failed",
 	ProblemVersionNotReadyToPublish:  "Problem version is not ready to publish",
 
+	// Problem statement
+	ProblemStatementNotFound:     "Problem statement not found",
+	ProblemStatementNotEditable:  "Problem statement is not editable",
+	ProblemStatementUpdateFailed: "Failed to update problem statement",
+
 	// Test cases
 	TestCaseNotFound:     "Test case not found",
 	TestCaseUploadFailed: "Failed to upload test case",
@@ -334,8 +344,10 @@ func (c ErrorCode) HTTPStatus() int {
 		return 401
 	case c == Forbidden, c >= 16000 && c < 16100: // Permission errors
 		return 403
-	case c == NotFound, c == UserNotFound, c == ProblemNotFound, c == ContestNotFound:
+	case c == NotFound, c == UserNotFound, c == ProblemNotFound, c == ContestNotFound, c == ProblemStatementNotFound:
 		return 404
+	case c == ProblemStatementNotEditable:
+		return 409
 	case c == TooManyRequests, c == SubmitTooFrequently:
 		return 429
 	case c == ServiceUnavailable:

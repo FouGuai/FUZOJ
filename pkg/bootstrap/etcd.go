@@ -49,6 +49,14 @@ func LoadJSON(ctx context.Context, etcdConf discov.EtcdConf, key string, out any
 	return nil
 }
 
+// LoadConfig loads full service config JSON from etcd.
+func LoadConfig(ctx context.Context, etcdConf discov.EtcdConf, key string, out any) error {
+	if key == "" {
+		return fmt.Errorf("config key is required")
+	}
+	return LoadJSON(ctx, etcdConf, key, out)
+}
+
 // RegisterService registers value under key with lease keepalive.
 func RegisterService(etcdConf discov.EtcdConf, key, value string) (*discov.Publisher, error) {
 	if err := etcdConf.Validate(); err != nil {

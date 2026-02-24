@@ -21,12 +21,13 @@ type Config struct {
 	Mysql     struct {
 		DataSource string `json:"dataSource"`
 	} `json:"mysql"`
-	Cache   cache.CacheConf `json:"cache"`
-	Redis   redis.RedisConf `json:"redis"`
-	Kafka   KafkaConfig     `json:"kafka"`
-	MinIO   MinIOConfig     `json:"minio"`
-	Upload  UploadConfig    `json:"upload"`
-	Cleanup CleanupConfig   `json:"cleanup"`
+	Cache     cache.CacheConf `json:"cache"`
+	Redis     redis.RedisConf `json:"redis"`
+	Kafka     KafkaConfig     `json:"kafka"`
+	MinIO     MinIOConfig     `json:"minio"`
+	Upload    UploadConfig    `json:"upload"`
+	Cleanup   CleanupConfig   `json:"cleanup"`
+	Statement StatementConfig `json:"statement"`
 }
 
 // KafkaConfig holds Kafka settings for kq.
@@ -70,4 +71,14 @@ type CleanupConfig struct {
 	ListTimeout   time.Duration `json:"listTimeout"`
 	DeleteTimeout time.Duration `json:"deleteTimeout"`
 	MaxUploads    int           `json:"maxUploads"`
+}
+
+// StatementConfig holds statement settings.
+type StatementConfig struct {
+	MaxBytes       int           `json:"maxBytes"`
+	RedisTTL       time.Duration `json:"redisTTL"`
+	EmptyTTL       time.Duration `json:"emptyTTL"`
+	LocalCacheSize int           `json:"localCacheSize"`
+	LocalCacheTTL  time.Duration `json:"localCacheTTL"`
+	Timeout        time.Duration `json:"timeout"`
 }

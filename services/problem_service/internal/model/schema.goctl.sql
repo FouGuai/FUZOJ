@@ -50,6 +50,21 @@ CREATE TABLE IF NOT EXISTS problem_data_pack (
   KEY problem_data_pack_version_idx (problem_version_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Problem data packs';
 
+CREATE TABLE IF NOT EXISTS problem_statement (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  problem_version_id BIGINT NOT NULL,
+  problem_id BIGINT NOT NULL,
+  version INT NOT NULL,
+  statement_md MEDIUMTEXT NOT NULL,
+  statement_hash VARCHAR(64) NOT NULL DEFAULT '',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY problem_statement_version_uq (problem_id, version),
+  UNIQUE KEY problem_statement_pv_uq (problem_version_id),
+  KEY problem_statement_problem_idx (problem_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Problem statements';
+
 CREATE TABLE IF NOT EXISTS problem_version_seq (
   problem_id BIGINT NOT NULL,
   next_version INT NOT NULL,

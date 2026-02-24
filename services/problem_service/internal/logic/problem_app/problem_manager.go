@@ -2,6 +2,8 @@ package problem_app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,16 +27,18 @@ const (
 )
 
 type problemApp struct {
-	conn             sqlx.SqlConn
-	repo             repository.ProblemRepository
-	uploadRepo       repository.ProblemUploadRepository
-	storage          storage.ObjectStorage
-	cleanupPublisher cleanupPublisher
-	bucket           string
-	keyPrefix        string
-	partSizeBytes    int64
-	sessionTTL       time.Duration
-	presignTTL       time.Duration
+	conn              sqlx.SqlConn
+	repo              repository.ProblemRepository
+	statementRepo     repository.ProblemStatementRepository
+	uploadRepo        repository.ProblemUploadRepository
+	storage           storage.ObjectStorage
+	cleanupPublisher  cleanupPublisher
+	bucket            string
+	keyPrefix         string
+	partSizeBytes     int64
+	sessionTTL        time.Duration
+	presignTTL        time.Duration
+	statementMaxBytes int
 }
 
 type cleanupPublisher interface {
@@ -112,7 +116,7 @@ type PublishInput struct {
 	Version   int32
 }
 
-func newProblemApp(repo repository.ProblemRepository, uploadRepo repository.ProblemUploadRepository, storageClient storage.ObjectStorage, publisher cleanupPublisher, conn sqlx.SqlConn, bucket string, keyPrefix string, partSizeBytes int64, sessionTTL, presignTTL time.Duration) *problemApp {
+func newProblemApp(repo repository.ProblemRepository, statementRepo repository.ProblemStatementRepository, uploadRepo repository.ProblemUploadRepository, storageClient storage.ObjectStorage, publisher cleanupPublisher, conn sqlx.SqlConn, bucket string, keyPrefix string, partSizeBytes int64, sessionTTL, presignTTL time.Duration, statementMaxBytes int) *problemApp {
 	if keyPrefix == "" {
 		keyPrefix = defaultUploadKeyPrefix
 	}
@@ -126,16 +130,18 @@ func newProblemApp(repo repository.ProblemRepository, uploadRepo repository.Prob
 		presignTTL = defaultPresignTTL
 	}
 	return &problemApp{
-		conn:             conn,
-		repo:             repo,
-		uploadRepo:       uploadRepo,
-		storage:          storageClient,
-		cleanupPublisher: publisher,
-		bucket:           bucket,
-		keyPrefix:        keyPrefix,
-		partSizeBytes:    partSizeBytes,
-		sessionTTL:       sessionTTL,
-		presignTTL:       presignTTL,
+		conn:              conn,
+		repo:              repo,
+		statementRepo:     statementRepo,
+		uploadRepo:        uploadRepo,
+		storage:           storageClient,
+		cleanupPublisher:  publisher,
+		bucket:            bucket,
+		keyPrefix:         keyPrefix,
+		partSizeBytes:     partSizeBytes,
+		sessionTTL:        sessionTTL,
+		presignTTL:        presignTTL,
+		statementMaxBytes: statementMaxBytes,
 	}
 }
 
@@ -183,6 +189,9 @@ func (m *problemApp) DeleteProblem(ctx context.Context, problemID int64) error {
 		return pkgerrors.Wrap(fmt.Errorf("delete problem failed: %w", err), pkgerrors.ProblemDeleteFailed)
 	}
 	_ = m.repo.InvalidateLatestMetaCache(ctx, problemID)
+	if m.statementRepo != nil {
+		_ = m.statementRepo.InvalidateLatestCache(ctx, problemID)
+	}
 	if m.cleanupPublisher != nil {
 		if err := m.cleanupPublisher.PublishProblemDeleted(ctx, problemID); err != nil {
 			logger.Warn(ctx, "publish cleanup event failed", zap.Int64("problem_id", problemID), zap.Error(err))
@@ -492,6 +501,16 @@ func (m *problemApp) PublishVersion(ctx context.Context, input PublishInput) err
 	if input.ProblemID <= 0 || input.Version <= 0 {
 		return pkgerrors.New(pkgerrors.InvalidParams)
 	}
+	if m.statementRepo != nil {
+		exists, err := m.statementRepo.ExistsByVersion(ctx, nil, input.ProblemID, input.Version)
+		if err != nil {
+			logger.Error(ctx, "check statement exists failed", zap.Int64("problem_id", input.ProblemID), zap.Error(err))
+			return pkgerrors.Wrap(fmt.Errorf("check statement exists failed: %w", err), pkgerrors.DatabaseError)
+		}
+		if !exists {
+			return pkgerrors.New(pkgerrors.ProblemStatementNotFound)
+		}
+	}
 	if err := m.uploadRepo.PublishVersion(ctx, nil, input.ProblemID, input.Version); err != nil {
 		if errors.Is(err, repository.ErrProblemVersionNotFound) {
 			return pkgerrors.New(pkgerrors.NotFound)
@@ -503,6 +522,90 @@ func (m *problemApp) PublishVersion(ctx context.Context, input PublishInput) err
 		return pkgerrors.Wrap(fmt.Errorf("publish version failed: %w", err), pkgerrors.DatabaseError)
 	}
 	_ = m.repo.InvalidateLatestMetaCache(ctx, input.ProblemID)
+	if m.statementRepo != nil {
+		_ = m.statementRepo.InvalidateLatestCache(ctx, input.ProblemID)
+	}
+	return nil
+}
+
+func (m *problemApp) GetLatestStatement(ctx context.Context, problemID int64) (repository.ProblemStatement, error) {
+	if problemID <= 0 {
+		return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.InvalidParams)
+	}
+	if m.statementRepo == nil {
+		return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.ServiceUnavailable)
+	}
+	statement, err := m.statementRepo.GetLatestPublished(ctx, nil, problemID)
+	if err != nil {
+		if errors.Is(err, repository.ErrProblemStatementNotFound) {
+			return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.ProblemStatementNotFound)
+		}
+		logger.Error(ctx, "get latest statement failed", zap.Int64("problem_id", problemID), zap.Error(err))
+		return repository.ProblemStatement{}, pkgerrors.Wrap(fmt.Errorf("get latest statement failed: %w", err), pkgerrors.DatabaseError)
+	}
+	return statement, nil
+}
+
+func (m *problemApp) GetStatementByVersion(ctx context.Context, problemID int64, version int32) (repository.ProblemStatement, error) {
+	if problemID <= 0 || version <= 0 {
+		return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.InvalidParams)
+	}
+	if m.statementRepo == nil {
+		return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.ServiceUnavailable)
+	}
+	statement, err := m.statementRepo.GetByVersion(ctx, nil, problemID, version)
+	if err != nil {
+		if errors.Is(err, repository.ErrProblemStatementNotFound) {
+			return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.ProblemStatementNotFound)
+		}
+		logger.Error(ctx, "get statement by version failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		return repository.ProblemStatement{}, pkgerrors.Wrap(fmt.Errorf("get statement by version failed: %w", err), pkgerrors.DatabaseError)
+	}
+	return statement, nil
+}
+
+func (m *problemApp) UpdateStatement(ctx context.Context, problemID int64, version int32, statementMd string) error {
+	if problemID <= 0 || version <= 0 || statementMd == "" {
+		return pkgerrors.New(pkgerrors.InvalidParams)
+	}
+	if m.statementRepo == nil {
+		return pkgerrors.New(pkgerrors.ServiceUnavailable)
+	}
+	if m.statementMaxBytes > 0 && len(statementMd) > m.statementMaxBytes {
+		return pkgerrors.New(pkgerrors.InvalidParams)
+	}
+	meta, err := m.uploadRepo.GetProblemVersionMeta(ctx, nil, problemID, version)
+	if err != nil {
+		if errors.Is(err, repository.ErrProblemVersionNotFound) {
+			return pkgerrors.New(pkgerrors.ProblemNotFound)
+		}
+		logger.Error(ctx, "load version meta failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		return pkgerrors.Wrap(fmt.Errorf("load version meta failed: %w", err), pkgerrors.DatabaseError)
+	}
+	if meta.State != repository.ProblemVersionStateDraft {
+		return pkgerrors.New(pkgerrors.ProblemStatementNotEditable)
+	}
+	versionID, err := m.uploadRepo.GetProblemVersionID(ctx, nil, problemID, version)
+	if err != nil {
+		if errors.Is(err, repository.ErrProblemVersionNotFound) {
+			return pkgerrors.New(pkgerrors.ProblemNotFound)
+		}
+		logger.Error(ctx, "load version id failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		return pkgerrors.Wrap(fmt.Errorf("load version id failed: %w", err), pkgerrors.DatabaseError)
+	}
+	hashBytes := sha256.Sum256([]byte(statementMd))
+	statementHash := hex.EncodeToString(hashBytes[:])
+	if err := m.statementRepo.Upsert(ctx, nil, repository.ProblemStatement{
+		ProblemID:     problemID,
+		Version:       version,
+		StatementMd:   statementMd,
+		StatementHash: statementHash,
+	}, versionID); err != nil {
+		logger.Error(ctx, "update statement failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		return pkgerrors.Wrap(fmt.Errorf("update statement failed: %w", err), pkgerrors.ProblemStatementUpdateFailed)
+	}
+	_ = m.statementRepo.InvalidateVersionCache(ctx, problemID, version)
+	_ = m.statementRepo.InvalidateLatestCache(ctx, problemID)
 	return nil
 }
 

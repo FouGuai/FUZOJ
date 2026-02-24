@@ -1,0 +1,55 @@
+rootDir: "."
+logDir: "logs"
+binDir: "logs/bin"
+deps:
+  composeFile: "deploy/docker-compose.deps.yml"
+  projectName: "fuzoj"
+  mysql:
+    rootPassword: "root"
+    dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj?parseTime=true&loc=Local"
+    schemas:
+      - "internal/user/schema.sql"
+      - "internal/problem/schema.sql"
+      - "internal/submit/schema.sql"
+  redis:
+    addr: "127.0.0.1:6379"
+  kafka:
+    brokers:
+      - "127.0.0.1:9092"
+    ensureTopicsScript: "scripts/ensure_kafka_topics.py"
+  etcd:
+    healthURL: "http://127.0.0.1:2379/health"
+  minio:
+    endpoint: "http://minio:9000"
+    accessKey: "minioadmin"
+    secretKey: "minioadmin"
+    buckets:
+      - "problem-data"
+      - "fuzoj"
+    healthURL: "http://127.0.0.1:9000/minio/health/ready"
+  elasticsearch:
+    healthURL: "http://127.0.0.1:9200/_cluster/health"
+  kibana:
+    healthURL: "http://127.0.0.1:5601/api/status"
+services:
+  - name: "user-service"
+    build: "./services/user_service"
+    config: "services/user_service/etc/user.yaml"
+  - name: "problem-service"
+    build: "./services/problem_service"
+    config: "services/problem_service/etc/problem.yaml"
+  - name: "submit-service"
+    build: "./services/submit_service"
+    config: "services/submit_service/etc/submit.yaml"
+  - name: "judge-service"
+    build: "./services/judge_service"
+    config: "services/judge_service/etc/judge.yaml"
+  - name: "contest-service"
+    build: "./services/contest_service"
+    config: "services/contest_service/etc/contest.yaml"
+  - name: "contest-rpc-service"
+    build: "./services/contest_rpc_service"
+    config: "services/contest_rpc_service/etc/contest.yaml"
+  - name: "gateway"
+    build: "./services/gateway_service"
+    config: "services/gateway_service/etc/gateway.yaml"

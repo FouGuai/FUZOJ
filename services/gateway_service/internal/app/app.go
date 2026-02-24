@@ -2,22 +2,24 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/config"
+	"fuzoj/services/gateway_service/internal/discovery"
 	"fuzoj/services/gateway_service/internal/middleware"
+	"fuzoj/services/gateway_service/internal/proxy"
 	"fuzoj/services/gateway_service/internal/response"
 	"fuzoj/services/gateway_service/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
-	"github.com/zeromicro/go-zero/gateway"
+	"github.com/zeromicro/go-zero/rest"
 	"github.com/zeromicro/go-zero/rest/httpx"
 	"go.uber.org/zap"
 )
@@ -51,31 +53,31 @@ func Run(configPath string) {
 		go ctx.MQClient.Start()
 	}
 
-	gwConf, matcher, err := buildGatewayConf(cfg)
+	routes, matcher, err := buildGatewayRoutes(cfg, ctx.Registry)
 	if err != nil {
 		logger.Error(context.Background(), "build gateway config failed", zap.Error(err))
 		return
 	}
 
-	server := gateway.MustNewServer(gwConf, gateway.WithMiddleware(
-		middleware.TraceMiddleware(),
-		middleware.CORSMiddleware(buildCORSConfig(cfg.CORS)),
-		middleware.RoutePolicyMiddleware(matcher),
-		middleware.AuthMiddleware(ctx.AuthService),
-		middleware.RateLimitMiddleware(ctx.RateService, cfg.Rate.Window),
-		middleware.RouteMiddleware(),
-		middleware.RequestLogger(),
-	))
+	server := rest.MustNewServer(cfg.RestConf)
 	defer server.Stop()
+	server.Use(middleware.TraceMiddleware())
+	server.Use(middleware.CORSMiddleware(buildCORSConfig(cfg.CORS)))
+	server.Use(middleware.RoutePolicyMiddleware(matcher))
+	server.Use(middleware.AuthMiddleware(ctx.AuthService))
+	server.Use(middleware.RateLimitMiddleware(ctx.RateService, cfg.Rate.Window))
+	server.Use(middleware.RouteMiddleware())
+	server.Use(middleware.RequestLogger())
+	server.AddRoutes(routes)
 
-	server.AddRoute(gateway.Route{
+	server.AddRoute(rest.Route{
 		Method: http.MethodGet,
 		Path:   "/healthz",
 		Handler: func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		},
 	})
-	server.AddRoute(gateway.Route{
+	server.AddRoute(rest.Route{
 		Method: http.MethodGet,
 		Path:   "/readyz",
 		Handler: func(w http.ResponseWriter, r *http.Request) {
@@ -87,29 +89,39 @@ func Run(configPath string) {
 	server.Start()
 }
 
-func buildGatewayConf(cfg config.Config) (gateway.GatewayConf, *middleware.PolicyMatcher, error) {
+func buildGatewayRoutes(cfg config.Config, registry *discovery.RegistryManager) ([]rest.Route, *middleware.PolicyMatcher, error) {
 	matcher := middleware.NewPolicyMatcher()
-	upstreams := make([]gateway.Upstream, 0, len(cfg.Upstreams))
+	routes := make([]rest.Route, 0, len(cfg.Upstreams))
 
 	for _, upstream := range cfg.Upstreams {
 		if upstream.Http == nil {
-			return gateway.GatewayConf{}, nil, errors.New(errors.InvalidParams).WithMessage("upstream http config is required")
+			return nil, nil, fmt.Errorf("upstream http config is required")
 		}
-		gwUp := gateway.Upstream{
-			Name:      upstream.Name,
-			Http:      &gateway.HttpClientConf{Target: upstream.Http.Target, Prefix: upstream.Http.Prefix, Timeout: upstream.Http.Timeout},
-			ProtoSets: upstream.ProtoSets,
+		if registry == nil {
+			return nil, nil, fmt.Errorf("registry manager is required")
 		}
+		registryKey := upstream.RegistryKey
+		if registryKey == "" {
+			if upstream.Name == "" {
+				return nil, nil, fmt.Errorf("upstream name or registryKey is required")
+			}
+			registryKey = upstream.Name + ".rest"
+		}
+		picker, err := registry.GetPicker(registryKey)
+		if err != nil {
+			return nil, nil, fmt.Errorf("get registry picker failed: %w", err)
+		}
+		handler := proxy.NewHTTPForwarder(picker, *upstream.Http)
 
 		for _, mapping := range upstream.Mappings {
 			method := strings.ToUpper(mapping.Method)
 			if method == "" {
 				method = http.MethodGet
 			}
-			gwUp.Mappings = append(gwUp.Mappings, gateway.RouteMapping{
+			routes = append(routes, rest.Route{
 				Method:  method,
 				Path:    mapping.Path,
-				RpcPath: mapping.RpcPath,
+				Handler: handler,
 			})
 
 			policy := middleware.RoutePolicy{
@@ -125,9 +137,10 @@ func buildGatewayConf(cfg config.Config) (gateway.GatewayConf, *middleware.Polic
 			if strings.HasSuffix(mapping.Path, "/*any") {
 				basePath := strings.TrimSuffix(mapping.Path, "/*any")
 				if basePath != "" {
-					gwUp.Mappings = append(gwUp.Mappings, gateway.RouteMapping{
-						Method: method,
-						Path:   basePath,
+					routes = append(routes, rest.Route{
+						Method:  method,
+						Path:    basePath,
+						Handler: handler,
 					})
 					basePolicy := policy
 					basePolicy.Path = basePath
@@ -136,10 +149,9 @@ func buildGatewayConf(cfg config.Config) (gateway.GatewayConf, *middleware.Polic
 				}
 			}
 		}
-		upstreams = append(upstreams, gwUp)
 	}
 
-	return gateway.GatewayConf{RestConf: cfg.RestConf, Upstreams: upstreams}, matcher, nil
+	return routes, matcher, nil
 }
 
 func buildRateLimit(defaults config.RateLimitConfig, override config.RouteRateLimit) middleware.RateLimitPolicy {

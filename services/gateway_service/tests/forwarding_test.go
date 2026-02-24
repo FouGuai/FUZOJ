@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"fuzoj/services/gateway_service/internal/config"
+	"fuzoj/services/gateway_service/internal/discovery"
 	"fuzoj/services/gateway_service/internal/middleware"
+	"fuzoj/services/gateway_service/internal/proxy"
 	"fuzoj/services/gateway_service/internal/service"
 
-	"github.com/zeromicro/go-zero/gateway"
 	"github.com/zeromicro/go-zero/rest"
 )
 
@@ -42,19 +45,6 @@ func TestGatewayForwardingBasic(t *testing.T) {
 	defer upstream.Close()
 
 	port := pickFreePort(t)
-	gwConf := gateway.GatewayConf{
-		RestConf: rest.RestConf{Host: "127.0.0.1", Port: port},
-		Upstreams: []gateway.Upstream{
-			{
-				Name: "upstream-a",
-				Http: &gateway.HttpClientConf{Target: upstream.Listener.Addr().String(), Prefix: "", Timeout: 3000},
-				Mappings: []gateway.RouteMapping{
-					{Method: http.MethodGet, Path: "/api/v1/echo"},
-				},
-			},
-		},
-	}
-
 	matcher := middleware.NewPolicyMatcher()
 	matcher.AddExact(http.MethodGet, "/api/v1/echo", middleware.RoutePolicy{
 		Name:        "route-echo",
@@ -64,13 +54,18 @@ func TestGatewayForwardingBasic(t *testing.T) {
 	})
 
 	authService := service.NewAuthService(secret, issuer, nil, nil)
-	server := gateway.MustNewServer(gwConf, gateway.WithMiddleware(
-		middleware.TraceMiddleware(),
-		middleware.RoutePolicyMiddleware(matcher),
-		middleware.AuthMiddleware(authService),
-		middleware.RouteMiddleware(),
-	))
+	server := rest.MustNewServer(rest.RestConf{Host: "127.0.0.1", Port: port})
 	defer server.Stop()
+	server.Use(middleware.TraceMiddleware())
+	server.Use(middleware.RoutePolicyMiddleware(matcher))
+	server.Use(middleware.AuthMiddleware(authService))
+	server.Use(middleware.RouteMiddleware())
+
+	picker := discovery.NewRoundRobinPicker([]string{upstream.Listener.Addr().String()})
+	handler := proxy.NewHTTPForwarder(picker, config.HttpClientConf{Prefix: "", Timeout: 3000})
+	server.AddRoutes([]rest.Route{
+		{Method: http.MethodGet, Path: "/api/v1/echo", Handler: handler},
+	})
 	go server.Start()
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/api/v1/echo", port)
@@ -121,6 +116,79 @@ func TestGatewayForwardingBasic(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("upstream did not receive request")
+	}
+}
+
+func TestGatewayForwardingRoundRobin(t *testing.T) {
+	secret := "test-secret"
+	issuer := "fuzoj"
+
+	var hitA int32
+	var hitB int32
+
+	upstreamA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hitA, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstreamA.Close()
+
+	upstreamB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hitB, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstreamB.Close()
+
+	port := pickFreePort(t)
+	matcher := middleware.NewPolicyMatcher()
+	matcher.AddExact(http.MethodGet, "/api/v1/ping", middleware.RoutePolicy{
+		Name:        "route-ping",
+		Path:        "/api/v1/ping",
+		StripPrefix: "/api/v1",
+		Auth:        middleware.AuthPolicy{Mode: "protected", Roles: []string{"admin"}},
+	})
+
+	authService := service.NewAuthService(secret, issuer, nil, nil)
+	server := rest.MustNewServer(rest.RestConf{Host: "127.0.0.1", Port: port})
+	defer server.Stop()
+	server.Use(middleware.TraceMiddleware())
+	server.Use(middleware.RoutePolicyMiddleware(matcher))
+	server.Use(middleware.AuthMiddleware(authService))
+	server.Use(middleware.RouteMiddleware())
+
+	picker := discovery.NewRoundRobinPicker([]string{
+		upstreamA.Listener.Addr().String(),
+		upstreamB.Listener.Addr().String(),
+	})
+	handler := proxy.NewHTTPForwarder(picker, config.HttpClientConf{Prefix: "", Timeout: 3000})
+	server.AddRoutes([]rest.Route{
+		{Method: http.MethodGet, Path: "/api/v1/ping", Handler: handler},
+	})
+	go server.Start()
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/api/v1/ping", port)
+	if err := waitForGateway(url, 2*time.Second); err != nil {
+		t.Fatalf("gateway not ready: %v", err)
+	}
+
+	token := newAccessToken(t, secret, issuer, 42, "admin", 5*time.Minute)
+	for i := 0; i < 2; i++ {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatalf("build request failed: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status: %d", resp.StatusCode)
+		}
+	}
+
+	if atomic.LoadInt32(&hitA) == 0 || atomic.LoadInt32(&hitB) == 0 {
+		t.Fatalf("expected requests to hit both upstreams, got A=%d B=%d", hitA, hitB)
 	}
 }
 

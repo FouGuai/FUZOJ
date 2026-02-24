@@ -37,7 +37,7 @@ func TestAbortUploadHandler(t *testing.T) {
 				return nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, st, defaultTestConfig())
 		rr := doRequest(t, handler.AbortUploadHandler(ctx), http.MethodPost, "/api/v1/problems/1/data-pack/uploads/1/abort", nil, nil, map[string]string{"id": "1", "upload_id": "1"})
 		if rr.Code != http.StatusOK {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -49,7 +49,7 @@ func TestAbortUploadHandler(t *testing.T) {
 	})
 
 	t.Run("invalid params", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		rr := doRequest(t, handler.AbortUploadHandler(ctx), http.MethodPost, "/api/v1/problems/0/data-pack/uploads/0/abort", nil, nil, map[string]string{"id": "0", "upload_id": "0"})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -66,7 +66,7 @@ func TestAbortUploadHandler(t *testing.T) {
 				return repository.UploadSession{}, repository.ErrUploadNotFound
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		rr := doRequest(t, handler.AbortUploadHandler(ctx), http.MethodPost, "/api/v1/problems/1/data-pack/uploads/9/abort", nil, nil, map[string]string{"id": "1", "upload_id": "9"})
 		if rr.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -87,7 +87,7 @@ func TestAbortUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		rr := doRequest(t, handler.AbortUploadHandler(ctx), http.MethodPost, "/api/v1/problems/1/data-pack/uploads/1/abort", nil, nil, map[string]string{"id": "1", "upload_id": "1"})
 		if rr.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -117,7 +117,7 @@ func TestAbortUploadHandler(t *testing.T) {
 				return errors.New("abort failed")
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, st, defaultTestConfig())
 		rr := doRequest(t, handler.AbortUploadHandler(ctx), http.MethodPost, "/api/v1/problems/1/data-pack/uploads/1/abort", nil, nil, map[string]string{"id": "1", "upload_id": "1"})
 		if rr.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -138,7 +138,7 @@ func TestAbortUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, nil, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, nil, defaultTestConfig())
 		rr := doRequest(t, handler.AbortUploadHandler(ctx), http.MethodPost, "/api/v1/problems/1/data-pack/uploads/1/abort", nil, nil, map[string]string{"id": "1", "upload_id": "1"})
 		if rr.Code != http.StatusServiceUnavailable {
 			t.Fatalf("unexpected status: %d", rr.Code)

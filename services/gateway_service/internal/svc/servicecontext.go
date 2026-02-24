@@ -5,6 +5,7 @@ import (
 
 	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/config"
+	"fuzoj/services/gateway_service/internal/discovery"
 	"fuzoj/services/gateway_service/internal/repository"
 	"fuzoj/services/gateway_service/internal/service"
 
@@ -22,6 +23,7 @@ type ServiceContext struct {
 	BlacklistRepo *repository.TokenBlacklistRepository
 	MQClient      queue.MessageQueue
 	RedisClient   *redis.Redis
+	Registry      *discovery.RegistryManager
 }
 
 func NewServiceContext(cfg config.Config) (*ServiceContext, error) {
@@ -47,9 +49,17 @@ func NewServiceContext(cfg config.Config) (*ServiceContext, error) {
 		RedisClient:   redisClient,
 	}
 
+	registry, err := discovery.NewRegistryManager(cfg.Bootstrap.Etcd)
+	if err != nil {
+		redisClient.Close()
+		return nil, err
+	}
+	ctx.Registry = registry
+
 	if cfg.BanEvent.Enabled {
 		mqClient, mqErr := kq.NewQueue(cfg.BuildKqConf(), service.NewBanEventHandler(banRepo, cfg.Cache.BanLocalTTL))
 		if mqErr != nil {
+			registry.Close()
 			redisClient.Close()
 			return nil, mqErr
 		}
@@ -62,6 +72,9 @@ func NewServiceContext(cfg config.Config) (*ServiceContext, error) {
 func (s *ServiceContext) Close() {
 	if s.MQClient != nil {
 		s.MQClient.Stop()
+	}
+	if s.Registry != nil {
+		s.Registry.Close()
 	}
 	if s.RedisClient != nil {
 		if err := s.RedisClient.Close(); err != nil {

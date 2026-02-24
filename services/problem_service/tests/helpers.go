@@ -24,12 +24,13 @@ type errorResponse struct {
 	TraceId string            `json:"trace_id,omitempty"`
 }
 
-func newTestServiceContext(problemRepo repository.ProblemRepository, uploadRepo repository.ProblemUploadRepository, storage storage.ObjectStorage, cfg config.Config) *svc.ServiceContext {
+func newTestServiceContext(problemRepo repository.ProblemRepository, statementRepo repository.ProblemStatementRepository, uploadRepo repository.ProblemUploadRepository, storage storage.ObjectStorage, cfg config.Config) *svc.ServiceContext {
 	ctx := &svc.ServiceContext{
-		Config:      cfg,
-		ProblemRepo: problemRepo,
-		UploadRepo:  uploadRepo,
-		Conn:        nil,
+		Config:        cfg,
+		ProblemRepo:   problemRepo,
+		StatementRepo: statementRepo,
+		UploadRepo:    uploadRepo,
+		Conn:          nil,
 	}
 	ctx.Storage = storage
 	return ctx
@@ -86,6 +87,14 @@ func defaultTestConfig() config.Config {
 		},
 		MinIO: config.MinIOConfig{
 			Bucket: "problem-bucket",
+		},
+		Statement: config.StatementConfig{
+			MaxBytes:       128 * 1024,
+			RedisTTL:       30 * time.Minute,
+			EmptyTTL:       5 * time.Minute,
+			LocalCacheSize: 128,
+			LocalCacheTTL:  5 * time.Minute,
+			Timeout:        time.Second,
 		},
 	}
 }

@@ -7,6 +7,7 @@ bootstrap:
     hosts:
       - 127.0.0.1:2379
   keys:
+    config: gateway.config
     runtime: gateway.rest.runtime
     log: gateway.log
 Middlewares:
@@ -167,6 +168,35 @@ upstreams:
       - name: "judge.status"
         method: "GET"
         path: "/api/v1/judge/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+
+  - name: "contest"
+    http:
+      target: "127.0.0.1:0"
+      timeout: 0
+    mappings:
+      - name: "contest.public"
+        method: "GET"
+        path: "/api/v1/contests/*any"
+        auth:
+          mode: "public"
+      - name: "contest.manage"
+        method: "POST"
+        path: "/api/v1/contests/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "PUT"
+        path: "/api/v1/contests/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "DELETE"
+        path: "/api/v1/contests/*any"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]

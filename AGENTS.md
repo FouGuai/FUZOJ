@@ -155,7 +155,7 @@
 - **Controller API Index**：`docs/controller_api.md` — Controller 层接口汇总（按 Service 划分）
 - 接口请放在 `docs/controller_api.md`
 - **新增/变更 Controller 接口时必须同步更新 CLI 调试客户端与 `docs/cli_client.md`**
-- **新增服务时必须同步更新启动脚本（如 `scripts/start_services.sh`）**
+- **新增服务时必须同步更新启动脚本（如 `scripts/debug_start.py`）**
 
 ### 在 AGENTS.md 中的注册方式
 

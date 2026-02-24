@@ -31,8 +31,8 @@ make -C tests down
 如需只启动/关闭某个服务：
 
 ```bash
-../scripts/start_services.sh --only gateway
-../scripts/stop_services.sh --only gateway
+python3 ../scripts/debug_start.py --only gateway
+python3 ../scripts/debug_stop.py --only gateway
 ```
 
 ### 运行指定测试

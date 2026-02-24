@@ -54,6 +54,57 @@ func (f *fakeProblemRepo) InvalidateLatestMetaCache(ctx context.Context, problem
 	return f.invalidateCacheFn(ctx, problemID)
 }
 
+type fakeStatementRepo struct {
+	getLatestFn         func(ctx context.Context, session sqlx.Session, problemID int64) (repository.ProblemStatement, error)
+	getByVersionFn      func(ctx context.Context, session sqlx.Session, problemID int64, version int32) (repository.ProblemStatement, error)
+	existsFn            func(ctx context.Context, session sqlx.Session, problemID int64, version int32) (bool, error)
+	upsertFn            func(ctx context.Context, session sqlx.Session, statement repository.ProblemStatement, problemVersionID int64) error
+	invalidateLatestFn  func(ctx context.Context, problemID int64) error
+	invalidateVersionFn func(ctx context.Context, problemID int64, version int32) error
+}
+
+func (f *fakeStatementRepo) GetLatestPublished(ctx context.Context, session sqlx.Session, problemID int64) (repository.ProblemStatement, error) {
+	if f.getLatestFn == nil {
+		return repository.ProblemStatement{}, repository.ErrProblemStatementNotFound
+	}
+	return f.getLatestFn(ctx, session, problemID)
+}
+
+func (f *fakeStatementRepo) GetByVersion(ctx context.Context, session sqlx.Session, problemID int64, version int32) (repository.ProblemStatement, error) {
+	if f.getByVersionFn == nil {
+		return repository.ProblemStatement{}, repository.ErrProblemStatementNotFound
+	}
+	return f.getByVersionFn(ctx, session, problemID, version)
+}
+
+func (f *fakeStatementRepo) ExistsByVersion(ctx context.Context, session sqlx.Session, problemID int64, version int32) (bool, error) {
+	if f.existsFn == nil {
+		return false, nil
+	}
+	return f.existsFn(ctx, session, problemID, version)
+}
+
+func (f *fakeStatementRepo) Upsert(ctx context.Context, session sqlx.Session, statement repository.ProblemStatement, problemVersionID int64) error {
+	if f.upsertFn == nil {
+		return errors.New("upsert statement not implemented")
+	}
+	return f.upsertFn(ctx, session, statement, problemVersionID)
+}
+
+func (f *fakeStatementRepo) InvalidateLatestCache(ctx context.Context, problemID int64) error {
+	if f.invalidateLatestFn == nil {
+		return nil
+	}
+	return f.invalidateLatestFn(ctx, problemID)
+}
+
+func (f *fakeStatementRepo) InvalidateVersionCache(ctx context.Context, problemID int64, version int32) error {
+	if f.invalidateVersionFn == nil {
+		return nil
+	}
+	return f.invalidateVersionFn(ctx, problemID, version)
+}
+
 type fakeUploadRepo struct {
 	allocateNextVersionFn    func(ctx context.Context, session sqlx.Session, problemID int64) (int32, error)
 	getSessionByIdemFn       func(ctx context.Context, session sqlx.Session, problemID int64, idempotencyKey string) (repository.UploadSession, error)

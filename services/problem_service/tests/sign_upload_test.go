@@ -37,7 +37,7 @@ func TestSignUploadHandler(t *testing.T) {
 				return "https://example.com/part", nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, st, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{1, 2},
 		}
@@ -52,7 +52,7 @@ func TestSignUploadHandler(t *testing.T) {
 	})
 
 	t.Run("invalid params", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{},
 		}
@@ -85,7 +85,7 @@ func TestSignUploadHandler(t *testing.T) {
 				return "ok", nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, st, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{0},
 		}
@@ -105,7 +105,7 @@ func TestSignUploadHandler(t *testing.T) {
 				return repository.UploadSession{}, repository.ErrUploadNotFound
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{1},
 		}
@@ -129,7 +129,7 @@ func TestSignUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{1},
 		}
@@ -158,7 +158,7 @@ func TestSignUploadHandler(t *testing.T) {
 				return nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{1},
 		}
@@ -191,7 +191,7 @@ func TestSignUploadHandler(t *testing.T) {
 				return "", errors.New("presign failed")
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, st, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{1},
 		}
@@ -215,7 +215,7 @@ func TestSignUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, nil, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, nil, defaultTestConfig())
 		body := map[string]any{
 			"part_numbers": []int{1},
 		}

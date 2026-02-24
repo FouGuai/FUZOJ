@@ -56,7 +56,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				return storage.ObjectStat{SizeBytes: 10}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, st, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  `{"name":"x"}`,
@@ -75,7 +75,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 	})
 
 	t.Run("invalid params", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{},
 			"manifest_json":  "",
@@ -99,7 +99,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				return repository.UploadSession{}, repository.ErrUploadNotFound
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  "{}",
@@ -137,7 +137,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  "{}",
@@ -165,7 +165,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  "{}",
@@ -198,7 +198,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				return nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  "{}",
@@ -229,7 +229,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  "{}",
@@ -266,7 +266,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				return "", errors.New("upload failed")
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, st, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  "{}",
@@ -294,7 +294,7 @@ func TestCompleteUploadHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(&fakeProblemRepo{}, uploadRepo, nil, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, uploadRepo, nil, defaultTestConfig())
 		body := map[string]any{
 			"parts":          []types.CompletedPartInput{{PartNumber: 1, ETag: "etag"}},
 			"manifest_json":  "{}",

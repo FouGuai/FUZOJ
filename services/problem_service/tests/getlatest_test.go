@@ -29,7 +29,7 @@ func TestGetLatestHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.GetLatestHandler(ctx), http.MethodGet, "/api/v1/problems/10/latest", nil, nil, map[string]string{"id": "10"})
 		if rr.Code != http.StatusOK {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -44,7 +44,7 @@ func TestGetLatestHandler(t *testing.T) {
 	})
 
 	t.Run("invalid id", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.GetLatestHandler(ctx), http.MethodGet, "/api/v1/problems/0/latest", nil, nil, map[string]string{"id": "0"})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -61,7 +61,7 @@ func TestGetLatestHandler(t *testing.T) {
 				return repository.ProblemLatestMeta{}, repository.ErrProblemNotFound
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.GetLatestHandler(ctx), http.MethodGet, "/api/v1/problems/99/latest", nil, nil, map[string]string{"id": "99"})
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -78,7 +78,7 @@ func TestGetLatestHandler(t *testing.T) {
 				return repository.ProblemLatestMeta{}, errors.New("db error")
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.GetLatestHandler(ctx), http.MethodGet, "/api/v1/problems/1/latest", nil, nil, map[string]string{"id": "1"})
 		if rr.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", rr.Code)

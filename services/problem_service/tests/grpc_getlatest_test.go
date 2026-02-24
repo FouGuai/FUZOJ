@@ -35,7 +35,7 @@ func TestGrpcGetLatest(t *testing.T) {
 				}, nil
 			},
 		}
-		svcCtx := newTestServiceContext(repo, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		svcCtx := newTestServiceContext(repo, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 
 		conn := startGrpcServer(t, svcCtx)
 		defer conn.Close()
@@ -51,7 +51,7 @@ func TestGrpcGetLatest(t *testing.T) {
 	})
 
 	t.Run("invalid argument", func(t *testing.T) {
-		svcCtx := newTestServiceContext(&fakeProblemRepo{}, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		svcCtx := newTestServiceContext(&fakeProblemRepo{}, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		conn := startGrpcServer(t, svcCtx)
 		defer conn.Close()
 
@@ -68,7 +68,7 @@ func TestGrpcGetLatest(t *testing.T) {
 				return repository.ProblemLatestMeta{}, repository.ErrProblemNotFound
 			},
 		}
-		svcCtx := newTestServiceContext(repo, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		svcCtx := newTestServiceContext(repo, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		conn := startGrpcServer(t, svcCtx)
 		defer conn.Close()
 
@@ -85,7 +85,7 @@ func TestGrpcGetLatest(t *testing.T) {
 				return repository.ProblemLatestMeta{}, pkgerrors.New(pkgerrors.DatabaseError)
 			},
 		}
-		svcCtx := newTestServiceContext(repo, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		svcCtx := newTestServiceContext(repo, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		conn := startGrpcServer(t, svcCtx)
 		defer conn.Close()
 

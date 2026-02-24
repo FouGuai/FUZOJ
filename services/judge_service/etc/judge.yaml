@@ -6,6 +6,7 @@ bootstrap:
     hosts:
       - 127.0.0.1:2379
   keys:
+    config: judge.config
     runtime: judge.rest.runtime
     log: judge.log
 Mysql:

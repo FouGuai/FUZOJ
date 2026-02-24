@@ -6,6 +6,7 @@ bootstrap:
     hosts:
       - 127.0.0.1:2379
   keys:
+    config: user.config
     runtime: user.rest.runtime
     log: user.log
 Mysql:

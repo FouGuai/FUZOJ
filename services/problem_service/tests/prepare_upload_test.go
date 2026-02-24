@@ -38,7 +38,7 @@ func TestPrepareUploadHandler(t *testing.T) {
 			},
 		}
 		st := &fakeStorage{}
-		ctx := newTestServiceContext(repo, uploadRepo, st, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, uploadRepo, st, defaultTestConfig())
 		headers := map[string]string{
 			"Idempotency-Key": "k1",
 		}
@@ -61,7 +61,7 @@ func TestPrepareUploadHandler(t *testing.T) {
 	})
 
 	t.Run("missing idempotency key", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		rr := doRequest(t, handler.PrepareUploadHandler(ctx), http.MethodPost, "/api/v1/problems/1/data-pack/uploads:prepare", nil, nil, map[string]string{"id": "1"})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -73,7 +73,7 @@ func TestPrepareUploadHandler(t *testing.T) {
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		rr := doRequest(t, handler.PrepareUploadHandler(ctx), http.MethodPost, "/api/v1/problems/1/data-pack/uploads:prepare", "{", nil, map[string]string{"id": "1"})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -90,7 +90,7 @@ func TestPrepareUploadHandler(t *testing.T) {
 				return false, nil
 			},
 		}
-		ctx := newTestServiceContext(repo, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, &fakeUploadRepo{}, &fakeStorage{}, defaultTestConfig())
 		headers := map[string]string{"Idempotency-Key": "k2"}
 		body := map[string]any{
 			"expected_size_bytes": 0,
@@ -116,7 +116,7 @@ func TestPrepareUploadHandler(t *testing.T) {
 				return true, nil
 			},
 		}
-		ctx := newTestServiceContext(repo, &fakeUploadRepo{}, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, &fakeUploadRepo{}, nil, defaultTestConfig())
 		headers := map[string]string{"Idempotency-Key": "k1"}
 		body := map[string]any{
 			"expected_size_bytes": 0,
@@ -144,7 +144,7 @@ func TestPrepareUploadHandler(t *testing.T) {
 		}
 		cfg := defaultTestConfig()
 		cfg.MinIO.Bucket = ""
-		ctx := newTestServiceContext(repo, &fakeUploadRepo{}, &fakeStorage{}, cfg)
+		ctx := newTestServiceContext(repo, nil, &fakeUploadRepo{}, &fakeStorage{}, cfg)
 		headers := map[string]string{"Idempotency-Key": "k1"}
 		body := map[string]any{
 			"expected_size_bytes": 0,
@@ -175,7 +175,7 @@ func TestPrepareUploadHandler(t *testing.T) {
 				return repository.UploadSession{}, errors.New("db error")
 			},
 		}
-		ctx := newTestServiceContext(repo, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, uploadRepo, &fakeStorage{}, defaultTestConfig())
 		headers := map[string]string{"Idempotency-Key": "k1"}
 		body := map[string]any{
 			"expected_size_bytes": 0,

@@ -81,6 +81,30 @@ type LatestMetaResponse struct {
 	TraceId string            `json:"trace_id,omitempty"`
 }
 
+type GetStatementRequest struct {
+	Id int64 `path:"id"`
+}
+
+type GetStatementVersionRequest struct {
+	Id      int64 `path:"id"`
+	Version int32 `path:"version"`
+}
+
+type StatementPayload struct {
+	ProblemId   int64  `json:"problem_id"`
+	Version     int32  `json:"version"`
+	StatementMd string `json:"statement_md"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type StatementResponse struct {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    StatementPayload  `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
 type PrepareUploadPayload struct {
 	UploadId          int64  `json:"upload_id"`
 	ProblemId         int64  `json:"problem_id"`
@@ -114,6 +138,12 @@ type PrepareUploadResponse struct {
 type PublishVersionRequest struct {
 	Id      int64 `path:"id"`
 	Version int32 `path:"version"`
+}
+
+type UpdateStatementRequest struct {
+	Id          int64  `path:"id"`
+	Version     int32  `path:"version"`
+	StatementMd string `json:"statement_md"`
 }
 
 type SignPartsPayload struct {

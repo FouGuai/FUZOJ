@@ -118,6 +118,8 @@ build_service "user-service" "./cmd/user-service"
 build_service "problem-service" "./cmd/problem-service"
 build_service "submit-service" "./cmd/submit-service"
 build_service "judge-service" "./cmd/judge-service"
+build_service "contest-service" "./services/contest_service"
+build_service "contest-rpc-service" "./services/contest_rpc_service"
 build_service "gateway" "./cmd/gateway"
 
 echo "binaries ready: $BIN_DIR"

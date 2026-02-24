@@ -3,12 +3,10 @@
 start:
 	@$(MAKE) down
 	@$(MAKE) build
-	@../scripts/start_deps.sh
-	@../scripts/start_services.sh --profile "$(ROOT_DIR)/configs/dev.generated/dev-profile.runtime.yaml"
+	@python3 ../scripts/debug_start.py
 
 down:
-	@../scripts/stop_services.sh
-	@../scripts/stop_deps.sh
+	@python3 ../scripts/debug_stop.py
 
 build:
 	@../scripts/build_services.sh

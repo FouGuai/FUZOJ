@@ -103,10 +103,11 @@ type HttpClientConf struct {
 
 // Upstream is the configuration for an upstream.
 type Upstream struct {
-	Name      string          `json:"name,optional"`
-	Http      *HttpClientConf `json:"http,optional"`
-	ProtoSets []string        `json:"protoSets,optional"`
-	Mappings  []RouteMapping  `json:"mappings,optional"`
+	Name        string          `json:"name,optional"`
+	RegistryKey string          `json:"registryKey,optional"`
+	Http        *HttpClientConf `json:"http,optional"`
+	ProtoSets   []string        `json:"protoSets,optional"`
+	Mappings    []RouteMapping  `json:"mappings,optional"`
 }
 
 // Config holds the gateway configuration.
@@ -164,6 +165,14 @@ func (c *Config) Normalize() error {
 
 	if len(c.Upstreams) == 0 {
 		return fmt.Errorf("at least one upstream is required")
+	}
+	for _, upstream := range c.Upstreams {
+		if upstream.Http == nil {
+			return fmt.Errorf("upstream http config is required")
+		}
+		if upstream.Name == "" && upstream.RegistryKey == "" {
+			return fmt.Errorf("upstream name or registryKey is required")
+		}
 	}
 
 	if c.BanEvent.Enabled {

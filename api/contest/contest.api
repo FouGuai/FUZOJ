@@ -1,0 +1,509 @@
+syntax = "v1"
+
+info (
+	title: "Contest Service API"
+	desc:  "Contest lifecycle, registration, problems, leaderboard, and results endpoints."
+)
+
+type SuccessResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type PageInfo {
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+	Total    int `json:"total"`
+}
+
+type ContestRulePayload {
+	RuleType                    string `json:"rule_type"`
+	PenaltyMinutes              int    `json:"penalty_minutes"`
+	PenaltyFormula              string `json:"penalty_formula"`
+	PenaltyCapMinutes           int    `json:"penalty_cap_minutes"`
+	FreezeMinutesBeforeEnd      int    `json:"freeze_minutes_before_end"`
+	AllowHack                   bool   `json:"allow_hack"`
+	HackReward                  int    `json:"hack_reward"`
+	HackPenalty                 int    `json:"hack_penalty"`
+	MaxSubmissionsPerProblem    int    `json:"max_submissions_per_problem"`
+	ScoreMode                   string `json:"score_mode"`
+	PublishSolutionsAfterEnd    bool   `json:"publish_solutions_after_end"`
+	VirtualParticipationEnabled bool   `json:"virtual_participation_enabled"`
+}
+
+type ContestSummary {
+	ContestId string `json:"contest_id"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	RuleType  string `json:"rule_type"`
+	StartAt   string `json:"start_at"`
+	EndAt     string `json:"end_at"`
+}
+
+type ContestDetail {
+	ContestId   string             `json:"contest_id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	Status      string             `json:"status"`
+	Visibility  string             `json:"visibility"`
+	OwnerId     int64              `json:"owner_id"`
+	OrgId       int64              `json:"org_id"`
+	StartAt     string             `json:"start_at"`
+	EndAt       string             `json:"end_at"`
+	Rule        ContestRulePayload `json:"rule"`
+	CreatedAt   string             `json:"created_at"`
+	UpdatedAt   string             `json:"updated_at"`
+}
+
+type CreateContestRequest {
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	Visibility  string             `json:"visibility"`
+	OwnerId     int64              `json:"owner_id"`
+	OrgId       int64              `json:"org_id"`
+	StartAt     string             `json:"start_at"`
+	EndAt       string             `json:"end_at"`
+	Rule        ContestRulePayload `json:"rule"`
+}
+
+type CreateContestPayload {
+	ContestId string `json:"contest_id"`
+}
+
+type CreateContestResponse {
+	Code    int                  `json:"code"`
+	Message string               `json:"message"`
+	Data    CreateContestPayload `json:"data"`
+	Details map[string]string    `json:"details,omitempty"`
+	TraceId string               `json:"trace_id,omitempty"`
+}
+
+type UpdateContestRequest {
+	Id          string             `path:"id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	Visibility  string             `json:"visibility"`
+	StartAt     string             `json:"start_at"`
+	EndAt       string             `json:"end_at"`
+	Rule        ContestRulePayload `json:"rule"`
+}
+
+type GetContestRequest {
+	Id string `path:"id"`
+}
+
+type GetContestResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    ContestDetail     `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type ListContestsRequest {
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+	Status   string `form:"status"`
+	OwnerId  int64  `form:"owner_id"`
+	OrgId    int64  `form:"org_id"`
+}
+
+type ListContestsPayload {
+	Items []ContestSummary `json:"items"`
+	Page  PageInfo         `json:"page"`
+}
+
+type ListContestsResponse {
+	Code    int                 `json:"code"`
+	Message string              `json:"message"`
+	Data    ListContestsPayload `json:"data"`
+	Details map[string]string   `json:"details,omitempty"`
+	TraceId string              `json:"trace_id,omitempty"`
+}
+
+type RegisterContestRequest {
+	Id         string `path:"id"`
+	UserId     int64  `json:"user_id"`
+	TeamId     string `json:"team_id"`
+	InviteCode string `json:"invite_code"`
+}
+
+type ApproveContestRequest {
+	Id     string `path:"id"`
+	UserId int64  `json:"user_id"`
+	Action string `json:"action"`
+	Reason string `json:"reason"`
+}
+
+type QuitContestRequest {
+	Id     string `path:"id"`
+	UserId int64  `json:"user_id"`
+}
+
+type ListParticipantsRequest {
+	Id       string `path:"id"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+}
+
+type ParticipantInfo {
+	UserId   int64  `json:"user_id"`
+	TeamId   string `json:"team_id"`
+	Status   string `json:"status"`
+	JoinedAt string `json:"joined_at"`
+}
+
+type ListParticipantsPayload {
+	Items []ParticipantInfo `json:"items"`
+	Page  PageInfo          `json:"page"`
+}
+
+type ListParticipantsResponse {
+	Code    int                     `json:"code"`
+	Message string                  `json:"message"`
+	Data    ListParticipantsPayload `json:"data"`
+	Details map[string]string       `json:"details,omitempty"`
+	TraceId string                  `json:"trace_id,omitempty"`
+}
+
+type CreateTeamRequest {
+	Id       string `path:"id"`
+	Name     string `json:"name"`
+	LeaderId int64  `json:"leader_id"`
+}
+
+type CreateTeamPayload {
+	TeamId string `json:"team_id"`
+}
+
+type CreateTeamResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    CreateTeamPayload `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type JoinTeamRequest {
+	Id     string `path:"id"`
+	TeamId string `path:"team_id"`
+	UserId int64  `json:"user_id"`
+}
+
+type LeaveTeamRequest {
+	Id     string `path:"id"`
+	TeamId string `path:"team_id"`
+	UserId int64  `json:"user_id"`
+}
+
+type ListTeamsRequest {
+	Id       string `path:"id"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+}
+
+type TeamInfo {
+	TeamId    string `json:"team_id"`
+	Name      string `json:"name"`
+	LeaderId  int64  `json:"leader_id"`
+	MemberCnt int    `json:"member_cnt"`
+}
+
+type ListTeamsPayload {
+	Items []TeamInfo `json:"items"`
+	Page  PageInfo   `json:"page"`
+}
+
+type ListTeamsResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    ListTeamsPayload  `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type AddContestProblemRequest {
+	Id        string `path:"id"`
+	ProblemId int64  `json:"problem_id"`
+	Order     int    `json:"order"`
+	Score     int    `json:"score"`
+	Visible   bool   `json:"visible"`
+	Version   int32  `json:"version"`
+}
+
+type UpdateContestProblemRequest {
+	Id        string `path:"id"`
+	ProblemId int64  `path:"problem_id"`
+	Order     int    `json:"order"`
+	Score     int    `json:"score"`
+	Visible   bool   `json:"visible"`
+}
+
+type RemoveContestProblemRequest {
+	Id        string `path:"id"`
+	ProblemId int64  `path:"problem_id"`
+}
+
+type ListContestProblemsRequest {
+	Id string `path:"id"`
+}
+
+type ContestProblemInfo {
+	ProblemId int64 `json:"problem_id"`
+	Order     int   `json:"order"`
+	Score     int   `json:"score"`
+	Visible   bool  `json:"visible"`
+	Version   int32 `json:"version"`
+}
+
+type ListContestProblemsResponse {
+	Code    int                  `json:"code"`
+	Message string               `json:"message"`
+	Data    []ContestProblemInfo `json:"data"`
+	Details map[string]string    `json:"details,omitempty"`
+	TraceId string               `json:"trace_id,omitempty"`
+}
+
+type LeaderboardRequest {
+	Id       string `path:"id"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+}
+
+type LeaderboardReplayRequest {
+	Id       string `path:"id"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+	At       int64  `form:"at"`
+}
+
+type LeaderboardEntry {
+	MemberId string            `json:"member_id"`
+	Rank     int               `json:"rank"`
+	Score    int64             `json:"score"`
+	Penalty  int64             `json:"penalty"`
+	Detail   map[string]string `json:"detail"`
+}
+
+type LeaderboardPayload {
+	Items []LeaderboardEntry `json:"items"`
+	Page  PageInfo           `json:"page"`
+}
+
+type LeaderboardResponse {
+	Code    int                `json:"code"`
+	Message string             `json:"message"`
+	Data    LeaderboardPayload `json:"data"`
+	Details map[string]string  `json:"details,omitempty"`
+	TraceId string             `json:"trace_id,omitempty"`
+}
+
+type ResultDetail {
+	ProblemId      int64  `json:"problem_id"`
+	Status         string `json:"status"`
+	FirstAcAt      string `json:"first_ac_at"`
+	WrongAttempts  int    `json:"wrong_attempts"`
+	PenaltyMinutes int64  `json:"penalty_minutes"`
+}
+
+type MyResultRequest {
+	Id string `path:"id"`
+}
+
+type ContestResultPayload {
+	MemberId     string         `json:"member_id"`
+	Rank         int            `json:"rank"`
+	Score        int64          `json:"score"`
+	TotalPenalty int64          `json:"total_penalty"`
+	AcCount      int            `json:"ac_count"`
+	Details      []ResultDetail `json:"details"`
+}
+
+type MyResultResponse {
+	Code    int                  `json:"code"`
+	Message string               `json:"message"`
+	Data    ContestResultPayload `json:"data"`
+	Details map[string]string    `json:"details,omitempty"`
+	TraceId string               `json:"trace_id,omitempty"`
+}
+
+type MemberResultRequest {
+	Id       string `path:"id"`
+	MemberId string `path:"member_id"`
+}
+
+type CreateHackRequest {
+	Id                 string `path:"id"`
+	ProblemId          int64  `json:"problem_id"`
+	TargetSubmissionId string `json:"target_submission_id"`
+	UserId             int64  `json:"user_id"`
+	Data               string `json:"data"`
+}
+
+type HackInfo {
+	HackId             string `json:"hack_id"`
+	Status             string `json:"status"`
+	ProblemId          int64  `json:"problem_id"`
+	TargetSubmissionId string `json:"target_submission_id"`
+	UserId             int64  `json:"user_id"`
+	CreatedAt          string `json:"created_at"`
+}
+
+type CreateHackPayload {
+	HackId string `json:"hack_id"`
+}
+
+type CreateHackResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    CreateHackPayload `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type GetHackRequest {
+	Id     string `path:"id"`
+	HackId string `path:"hack_id"`
+}
+
+type GetHackResponse {
+	Code    int               `json:"code"`
+	Message string            `json:"message"`
+	Data    HackInfo          `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string            `json:"trace_id,omitempty"`
+}
+
+type CreateAnnouncementRequest {
+	Id      string `path:"id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+	UserId  int64  `json:"user_id"`
+}
+
+type AnnouncementInfo {
+	AnnouncementId string `json:"announcement_id"`
+	Title          string `json:"title"`
+	Content        string `json:"content"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type CreateAnnouncementPayload {
+	AnnouncementId string `json:"announcement_id"`
+}
+
+type CreateAnnouncementResponse {
+	Code    int                       `json:"code"`
+	Message string                    `json:"message"`
+	Data    CreateAnnouncementPayload `json:"data"`
+	Details map[string]string         `json:"details,omitempty"`
+	TraceId string                    `json:"trace_id,omitempty"`
+}
+
+type ListAnnouncementsRequest {
+	Id       string `path:"id"`
+	Page     int    `form:"page"`
+	PageSize int    `form:"page_size"`
+}
+
+type ListAnnouncementsPayload {
+	Items []AnnouncementInfo `json:"items"`
+	Page  PageInfo           `json:"page"`
+}
+
+type ListAnnouncementsResponse {
+	Code    int                      `json:"code"`
+	Message string                   `json:"message"`
+	Data    ListAnnouncementsPayload `json:"data"`
+	Details map[string]string        `json:"details,omitempty"`
+	TraceId string                   `json:"trace_id,omitempty"`
+}
+
+@server (
+	prefix: /api/v1/contests
+)
+service contest {
+	@handler Create
+	post / (CreateContestRequest) returns (CreateContestResponse)
+
+	@handler Update
+	put /:id (UpdateContestRequest) returns (SuccessResponse)
+
+	@handler Publish
+	post /:id/publish (GetContestRequest) returns (SuccessResponse)
+
+	@handler Close
+	post /:id/close (GetContestRequest) returns (SuccessResponse)
+
+	@handler Get
+	get /:id (GetContestRequest) returns (GetContestResponse)
+
+	@handler List
+	get / (ListContestsRequest) returns (ListContestsResponse)
+
+	@handler Register
+	post /:id/register (RegisterContestRequest) returns (SuccessResponse)
+
+	@handler Approve
+	post /:id/approve (ApproveContestRequest) returns (SuccessResponse)
+
+	@handler Quit
+	post /:id/quit (QuitContestRequest) returns (SuccessResponse)
+
+	@handler Participants
+	get /:id/participants (ListParticipantsRequest) returns (ListParticipantsResponse)
+
+	@handler TeamCreate
+	post /:id/teams (CreateTeamRequest) returns (CreateTeamResponse)
+
+	@handler TeamJoin
+	post /:id/teams/:team_id/join (JoinTeamRequest) returns (SuccessResponse)
+
+	@handler TeamLeave
+	post /:id/teams/:team_id/leave (LeaveTeamRequest) returns (SuccessResponse)
+
+	@handler TeamList
+	get /:id/teams (ListTeamsRequest) returns (ListTeamsResponse)
+
+	@handler ProblemAdd
+	post /:id/problems (AddContestProblemRequest) returns (SuccessResponse)
+
+	@handler ProblemUpdate
+	put /:id/problems/:problem_id (UpdateContestProblemRequest) returns (SuccessResponse)
+
+	@handler ProblemRemove
+	delete /:id/problems/:problem_id (RemoveContestProblemRequest) returns (SuccessResponse)
+
+	@handler ProblemList
+	get /:id/problems (ListContestProblemsRequest) returns (ListContestProblemsResponse)
+
+	@handler Leaderboard
+	get /:id/leaderboard (LeaderboardRequest) returns (LeaderboardResponse)
+
+	@handler LeaderboardFrozen
+	get /:id/leaderboard/frozen (LeaderboardRequest) returns (LeaderboardResponse)
+
+	@handler LeaderboardReplay
+	get /:id/leaderboard/replay (LeaderboardReplayRequest) returns (LeaderboardResponse)
+
+	@handler MyResult
+	get /:id/my_result (MyResultRequest) returns (MyResultResponse)
+
+	@handler MemberResult
+	get /:id/results/:member_id (MemberResultRequest) returns (MyResultResponse)
+
+	@handler HackCreate
+	post /:id/hacks (CreateHackRequest) returns (CreateHackResponse)
+
+	@handler HackGet
+	get /:id/hacks/:hack_id (GetHackRequest) returns (GetHackResponse)
+
+	@handler AnnouncementCreate
+	post /:id/announcements (CreateAnnouncementRequest) returns (CreateAnnouncementResponse)
+
+	@handler AnnouncementList
+	get /:id/announcements (ListAnnouncementsRequest) returns (ListAnnouncementsResponse)
+}
+

@@ -6,6 +6,9 @@ const (
 	ProblemStatusDraft     int32 = 0
 	ProblemStatusPublished int32 = 1
 	ProblemStatusArchived  int32 = 2
+
+	ProblemVersionStateDraft     int32 = 0
+	ProblemVersionStatePublished int32 = 1
 )
 
 // Problem represents the basic problem entity.
@@ -26,6 +29,15 @@ type ProblemLatestMeta struct {
 	DataPackKey  string
 	DataPackHash string
 	UpdatedAt    time.Time
+}
+
+// ProblemStatement represents statement content for a problem version.
+type ProblemStatement struct {
+	ProblemID     int64
+	Version       int32
+	StatementMd   string
+	StatementHash string
+	UpdatedAt     time.Time
 }
 
 // UploadSession represents one multipart upload session.

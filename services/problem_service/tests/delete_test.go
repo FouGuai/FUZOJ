@@ -20,7 +20,7 @@ func TestDeleteHandler(t *testing.T) {
 				return nil
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.DeleteHandler(ctx), http.MethodDelete, "/api/v1/problems/1", nil, nil, map[string]string{"id": "1"})
 		if rr.Code != http.StatusOK {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -32,7 +32,7 @@ func TestDeleteHandler(t *testing.T) {
 	})
 
 	t.Run("invalid id", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.DeleteHandler(ctx), http.MethodDelete, "/api/v1/problems/0", nil, nil, map[string]string{"id": "0"})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -49,7 +49,7 @@ func TestDeleteHandler(t *testing.T) {
 				return repository.ErrProblemNotFound
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.DeleteHandler(ctx), http.MethodDelete, "/api/v1/problems/10", nil, nil, map[string]string{"id": "10"})
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -66,7 +66,7 @@ func TestDeleteHandler(t *testing.T) {
 				return errors.New("delete failed")
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.DeleteHandler(ctx), http.MethodDelete, "/api/v1/problems/10", nil, nil, map[string]string{"id": "10"})
 		if rr.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", rr.Code)

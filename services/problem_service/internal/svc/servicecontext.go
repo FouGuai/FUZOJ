@@ -24,6 +24,7 @@ type ServiceContext struct {
 	Conn             sqlx.SqlConn
 	Cache            cache.Cache
 	ProblemRepo      repository.ProblemRepository
+	StatementRepo    repository.ProblemStatementRepository
 	UploadRepo       repository.ProblemUploadRepository
 	Storage          storage.ObjectStorage
 	CleanupQueue     queue.MessageQueue
@@ -56,6 +57,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	problemRepo := repository.NewProblemRepository(conn, cacheClient)
+	var statementLocal *repository.StatementLocalCache
+	if c.Statement.LocalCacheSize > 0 {
+		statementLocal = repository.NewStatementLocalCache(c.Statement.LocalCacheSize, c.Statement.LocalCacheTTL)
+	}
+	statementRepo := repository.NewProblemStatementRepositoryWithTTL(conn, cacheClient, statementLocal, c.Statement.RedisTTL, c.Statement.EmptyTTL)
 	uploadRepo := repository.NewProblemUploadRepository(conn)
 
 	var cleanupConsumer *cleanup.ProblemCleanupConsumer
@@ -95,6 +101,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		Conn:             conn,
 		Cache:            cacheClient,
 		ProblemRepo:      problemRepo,
+		StatementRepo:    statementRepo,
 		UploadRepo:       uploadRepo,
 		Storage:          storageClient,
 		CleanupQueue:     cleanupQueue,

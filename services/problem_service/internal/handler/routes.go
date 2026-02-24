@@ -50,6 +50,21 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				Handler: GetLatestHandler(serverCtx),
 			},
 			{
+				Method:  http.MethodGet,
+				Path:    "/:id/statement",
+				Handler: GetStatementHandler(serverCtx),
+			},
+			{
+				Method:  http.MethodGet,
+				Path:    "/:id/versions/:version/statement",
+				Handler: GetStatementVersionHandler(serverCtx),
+			},
+			{
+				Method:  http.MethodPut,
+				Path:    "/:id/versions/:version/statement",
+				Handler: UpdateStatementHandler(serverCtx),
+			},
+			{
 				Method:  http.MethodPost,
 				Path:    "/:id/versions/:version/publish",
 				Handler: PublishVersionHandler(serverCtx),

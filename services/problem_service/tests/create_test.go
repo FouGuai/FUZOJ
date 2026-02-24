@@ -21,7 +21,7 @@ func TestCreateHandler(t *testing.T) {
 				return 123, nil
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		req := types.CreateProblemRequest{
 			Title:   "Hello",
 			OwnerId: 7,
@@ -37,7 +37,7 @@ func TestCreateHandler(t *testing.T) {
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
-		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(&fakeProblemRepo{}, nil, nil, nil, defaultTestConfig())
 		rr := doRequest(t, handler.CreateHandler(ctx), http.MethodPost, "/api/v1/problems", "{", nil, nil)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -54,7 +54,7 @@ func TestCreateHandler(t *testing.T) {
 				return 0, nil
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		req := types.CreateProblemRequest{
 			Title:   "",
 			OwnerId: 7,
@@ -75,7 +75,7 @@ func TestCreateHandler(t *testing.T) {
 				return 0, errors.New("create failed")
 			},
 		}
-		ctx := newTestServiceContext(repo, nil, nil, defaultTestConfig())
+		ctx := newTestServiceContext(repo, nil, nil, nil, defaultTestConfig())
 		req := types.CreateProblemRequest{
 			Title:   "Hello",
 			OwnerId: 7,

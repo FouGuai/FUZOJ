@@ -29,6 +29,20 @@ func main() {
 	var c config.Config
 	conf.MustLoad(*configFile, &c)
 
+	boot := c.Bootstrap
+	if boot.Keys.Config == "" {
+		logx.Error("bootstrap.keys.config is required")
+		return
+	}
+
+	var full config.Config
+	if err := bootstrap.LoadConfig(context.Background(), boot.Etcd, boot.Keys.Config, &full); err != nil {
+		logx.Errorf("load full config failed: %v", err)
+		return
+	}
+	full.Bootstrap = boot
+	c = full
+
 	restRuntime, err := bootstrap.LoadRestRuntime(context.Background(), c.Bootstrap)
 	if err != nil {
 		logx.Errorf("load rest runtime config failed: %v", err)

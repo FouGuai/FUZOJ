@@ -14,10 +14,11 @@ type ProblemApp interface {
 
 func NewProblemAppFromContext(svcCtx *svc.ServiceContext) *problemApp {
 	if svcCtx == nil {
-		return newProblemApp(nil, nil, nil, nil, nil, "", "", 0, 0, 0)
+		return newProblemApp(nil, nil, nil, nil, nil, nil, "", "", 0, 0, 0, 0)
 	}
 	return newProblemApp(
 		svcCtx.ProblemRepo,
+		svcCtx.StatementRepo,
 		svcCtx.UploadRepo,
 		svcCtx.Storage,
 		svcCtx.CleanupPublisher,
@@ -27,6 +28,7 @@ func NewProblemAppFromContext(svcCtx *svc.ServiceContext) *problemApp {
 		svcCtx.Config.Upload.PartSizeBytes,
 		svcCtx.Config.Upload.SessionTTL,
 		svcCtx.Config.Upload.PresignTTL,
+		svcCtx.Config.Statement.MaxBytes,
 	)
 }
 

@@ -4,7 +4,7 @@
 Gateway 作为全站统一入口，提供鉴权、限流、黑名单/封禁校验与反向代理转发能力。设计目标是低延迟与高可用：请求在网关完成 JWT 自验证与快速失败，减少业务服务负载；封禁与黑名单检查遵循缓存优先原则，采用本地内存 + Redis 双层缓存；限流采用固定窗口计数器并支持按路由、用户与 IP 维度配置。网关支持通过配置文件定义路由与上游服务，便于扩展与灰度发布。
 
 ## 2. 关键接口与结构
-- 配置：`configs/gateway.yaml`
+- 配置：`services/gateway_service/etc/gateway.yaml`
   - `upstreams`：上游服务定义
   - `routes`：路由匹配、鉴权策略、限流与超时配置
   - `auth`：JWT secret/issuer

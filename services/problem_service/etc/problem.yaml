@@ -6,6 +6,7 @@ bootstrap:
     hosts:
       - 127.0.0.1:2379
   keys:
+    config: problem.config
     runtime: problem.rest.runtime
     rpcRuntime: problem.rpc.runtime
     log: problem.log
@@ -54,3 +55,10 @@ Cleanup:
   ListTimeout: 30s
   DeleteTimeout: 2m
   MaxUploads: 1000
+Statement:
+  MaxBytes: 131072
+  RedisTTL: 30m
+  EmptyTTL: 5m
+  LocalCacheSize: 1024
+  LocalCacheTTL: 5m
+  Timeout: 2s

@@ -50,6 +50,30 @@ type LatestMetaResponse {
 	TraceId string            `json:"trace_id,omitempty"`
 }
 
+type GetStatementRequest {
+	Id int64 `path:"id"`
+}
+
+type GetStatementVersionRequest {
+	Id      int64 `path:"id"`
+	Version int32 `path:"version"`
+}
+
+type StatementPayload {
+	ProblemId   int64  `json:"problem_id"`
+	Version     int32  `json:"version"`
+	StatementMd string `json:"statement_md"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type StatementResponse {
+	Code    int              `json:"code"`
+	Message string           `json:"message"`
+	Data    StatementPayload `json:"data"`
+	Details map[string]string `json:"details,omitempty"`
+	TraceId string           `json:"trace_id,omitempty"`
+}
+
 type DeleteProblemRequest {
 	Id int64 `path:"id"`
 }
@@ -144,6 +168,12 @@ type PublishVersionRequest {
 	Version int32 `path:"version"`
 }
 
+type UpdateStatementRequest {
+	Id          int64  `path:"id"`
+	Version     int32  `path:"version"`
+	StatementMd string `json:"statement_md"`
+}
+
 @server (
 	prefix: /api/v1/problems
 )
@@ -153,6 +183,15 @@ service problem {
 
 	@handler GetLatest
 	get /:id/latest (GetLatestRequest) returns (LatestMetaResponse)
+
+	@handler GetStatement
+	get /:id/statement (GetStatementRequest) returns (StatementResponse)
+
+	@handler GetStatementVersion
+	get /:id/versions/:version/statement (GetStatementVersionRequest) returns (StatementResponse)
+
+	@handler UpdateStatement
+	put /:id/versions/:version/statement (UpdateStatementRequest) returns (SuccessResponse)
 
 	@handler Delete
 	delete /:id (DeleteProblemRequest) returns (SuccessResponse)

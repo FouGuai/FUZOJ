@@ -23,6 +23,28 @@
     - `data_pack_hash`（string）
     - `updated_at`（RFC3339 string）
 
+- **GetStatement**：获取题目的最新已发布题面
+  - 路径参数：`id`（problem_id）
+  - 响应体：`StatementResponse`
+    - `problem_id`（int64）
+    - `version`（int32）
+    - `statement_md`（string）
+    - `updated_at`（RFC3339 string）
+
+- **GetStatementVersion**：获取题目的指定版本题面
+  - 路径参数：`id`（problem_id）、`version`
+  - 响应体：`StatementResponse`
+    - `problem_id`（int64）
+    - `version`（int32）
+    - `statement_md`（string）
+    - `updated_at`（RFC3339 string）
+
+- **UpdateStatement**：更新题目的指定版本题面（仅草稿版本可编辑）
+  - 路径参数：`id`（problem_id）、`version`
+  - 请求体：`UpdateStatementRequest`
+    - `statement_md`（string，必填）
+  - 响应：`SuccessWithMessage`
+
 - **Delete**：删除题目
   - 路径参数：`id`（problem_id）
   - 响应：`SuccessWithMessage`
@@ -155,3 +177,122 @@
     - `language_id`（string）
     - `source_code`（string）
     - `created_at`（RFC3339 string）
+
+## Contest Service
+
+### ContestController
+
+- **Create**：创建比赛
+  - 请求体：`CreateContestRequest`
+    - `title`（string，必填）
+    - `description`（string）
+    - `visibility`（string）
+    - `owner_id`（int64）
+    - `org_id`（int64）
+    - `start_at`（RFC3339 string）
+    - `end_at`（RFC3339 string）
+    - `rule`（ContestRulePayload）
+  - 响应体：`CreateContestResponse`
+    - `contest_id`（string）
+
+- **Update**：更新比赛
+  - 路径参数：`id`（contest_id）
+  - 请求体：`UpdateContestRequest`
+
+- **Publish**：发布比赛
+  - 路径参数：`id`（contest_id）
+
+- **Close**：关闭比赛
+  - 路径参数：`id`（contest_id）
+
+- **Get**：获取比赛详情
+  - 路径参数：`id`（contest_id）
+  - 响应体：`GetContestResponse`
+
+- **List**：分页查询比赛列表
+  - 请求参数：`page`、`page_size`、`status`、`owner_id`、`org_id`
+  - 响应体：`ListContestsResponse`
+
+- **Register**：报名参赛
+  - 路径参数：`id`（contest_id）
+  - 请求体：`RegisterContestRequest`
+
+- **Approve**：审核报名
+  - 路径参数：`id`（contest_id）
+  - 请求体：`ApproveContestRequest`
+
+- **Quit**：退赛
+  - 路径参数：`id`（contest_id）
+  - 请求体：`QuitContestRequest`
+
+- **Participants**：参赛者列表
+  - 路径参数：`id`（contest_id）
+  - 请求参数：`page`、`page_size`
+  - 响应体：`ListParticipantsResponse`
+
+- **TeamCreate**：创建队伍
+  - 路径参数：`id`（contest_id）
+  - 请求体：`CreateTeamRequest`
+
+- **TeamJoin**：加入队伍
+  - 路径参数：`id`（contest_id）、`team_id`
+  - 请求体：`JoinTeamRequest`
+
+- **TeamLeave**：离开队伍
+  - 路径参数：`id`（contest_id）、`team_id`
+  - 请求体：`LeaveTeamRequest`
+
+- **TeamList**：队伍列表
+  - 路径参数：`id`（contest_id）
+  - 请求参数：`page`、`page_size`
+
+- **ProblemAdd**：绑定题目
+  - 路径参数：`id`（contest_id）
+  - 请求体：`AddContestProblemRequest`
+
+- **ProblemUpdate**：更新题目编排
+  - 路径参数：`id`（contest_id）、`problem_id`
+  - 请求体：`UpdateContestProblemRequest`
+
+- **ProblemRemove**：移除题目
+  - 路径参数：`id`（contest_id）、`problem_id`
+
+- **ProblemList**：题单列表
+  - 路径参数：`id`（contest_id）
+  - 响应体：`ListContestProblemsResponse`
+
+- **Leaderboard**：实时榜单
+  - 路径参数：`id`（contest_id）
+  - 请求参数：`page`、`page_size`
+
+- **LeaderboardFrozen**：封榜榜单
+  - 路径参数：`id`（contest_id）
+  - 请求参数：`page`、`page_size`
+
+- **LeaderboardReplay**：回放榜单
+  - 路径参数：`id`（contest_id）
+  - 请求参数：`page`、`page_size`、`at`
+
+- **MyResult**：个人最终结果
+  - 路径参数：`id`（contest_id）
+  - 响应体：`MyResultResponse`
+
+- **MemberResult**：成员结果查询
+  - 路径参数：`id`（contest_id）、`member_id`
+  - 响应体：`MyResultResponse`
+
+- **HackCreate**：发起 Hack
+  - 路径参数：`id`（contest_id）
+  - 请求体：`CreateHackRequest`
+
+- **HackGet**：获取 Hack 详情
+  - 路径参数：`id`（contest_id）、`hack_id`
+  - 响应体：`GetHackResponse`
+
+- **AnnouncementCreate**：发布公告
+  - 路径参数：`id`（contest_id）
+  - 请求体：`CreateAnnouncementRequest`
+
+- **AnnouncementList**：公告列表
+  - 路径参数：`id`（contest_id）
+  - 请求参数：`page`、`page_size`

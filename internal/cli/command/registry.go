@@ -74,6 +74,40 @@ func Registry() map[string]Command {
 		},
 		{
 			Service:      "problem",
+			Action:       "statement",
+			Method:       "GET",
+			PathTemplate: "/api/v1/problems/:id/statement",
+			RequiresAuth: false,
+			Fields: []Field{
+				{Name: "id", Prompt: "problem_id", Type: FieldInt64, Required: true},
+			},
+		},
+		{
+			Service:      "problem",
+			Action:       "statement-version",
+			Method:       "GET",
+			PathTemplate: "/api/v1/problems/:id/versions/:version/statement",
+			RequiresAuth: false,
+			Fields: []Field{
+				{Name: "id", Prompt: "problem_id", Type: FieldInt64, Required: true},
+				{Name: "version", Prompt: "version", Type: FieldInt, Required: true},
+			},
+		},
+		{
+			Service:      "problem",
+			Action:       "statement-update",
+			Method:       "PUT",
+			PathTemplate: "/api/v1/problems/:id/versions/:version/statement",
+			RequiresAuth: true,
+			Fields: []Field{
+				{Name: "id", Prompt: "problem_id", Type: FieldInt64, Required: true},
+				{Name: "version", Prompt: "version", Type: FieldInt, Required: true},
+				{Name: "statement_md", Prompt: "statement_md", Type: FieldString, Required: false},
+				{Name: "statement_file", Prompt: "statement_file", Type: FieldFile, Required: false},
+			},
+		},
+		{
+			Service:      "problem",
 			Action:       "delete",
 			Method:       "DELETE",
 			PathTemplate: "/api/v1/problems/:id",
@@ -210,6 +244,114 @@ func Registry() map[string]Command {
 				{Name: "id", Prompt: "submission_id", Type: FieldString, Required: true},
 			},
 		},
+		{
+			Service:      "contest",
+			Action:       "create",
+			Method:       "POST",
+			PathTemplate: "/api/v1/contests",
+			RequiresAuth: true,
+			Fields: []Field{
+				{Name: "title", Prompt: "title", Type: FieldString, Required: true},
+				{Name: "description", Prompt: "description", Type: FieldString, Required: false},
+				{Name: "visibility", Prompt: "visibility", Type: FieldString, Required: false},
+				{Name: "owner_id", Prompt: "owner_id", Type: FieldInt64, Required: false},
+				{Name: "org_id", Prompt: "org_id", Type: FieldInt64, Required: false},
+				{Name: "start_at", Prompt: "start_at (RFC3339)", Type: FieldString, Required: false},
+				{Name: "end_at", Prompt: "end_at (RFC3339)", Type: FieldString, Required: false},
+				{Name: "rule_json", Prompt: "rule_json (JSON)", Type: FieldJSON, Required: false},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "get",
+			Method:       "GET",
+			PathTemplate: "/api/v1/contests/:id",
+			RequiresAuth: false,
+			Fields: []Field{
+				{Name: "id", Prompt: "contest_id", Type: FieldString, Required: true},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "list",
+			Method:       "GET",
+			PathTemplate: "/api/v1/contests",
+			RequiresAuth: false,
+			Fields: []Field{
+				{Name: "page", Prompt: "page", Type: FieldInt, Required: false},
+				{Name: "page_size", Prompt: "page_size", Type: FieldInt, Required: false},
+				{Name: "status", Prompt: "status", Type: FieldString, Required: false},
+				{Name: "owner_id", Prompt: "owner_id", Type: FieldInt64, Required: false},
+				{Name: "org_id", Prompt: "org_id", Type: FieldInt64, Required: false},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "publish",
+			Method:       "POST",
+			PathTemplate: "/api/v1/contests/:id/publish",
+			RequiresAuth: true,
+			Fields: []Field{
+				{Name: "id", Prompt: "contest_id", Type: FieldString, Required: true},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "close",
+			Method:       "POST",
+			PathTemplate: "/api/v1/contests/:id/close",
+			RequiresAuth: true,
+			Fields: []Field{
+				{Name: "id", Prompt: "contest_id", Type: FieldString, Required: true},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "register",
+			Method:       "POST",
+			PathTemplate: "/api/v1/contests/:id/register",
+			RequiresAuth: true,
+			Fields: []Field{
+				{Name: "id", Prompt: "contest_id", Type: FieldString, Required: true},
+				{Name: "user_id", Prompt: "user_id", Type: FieldInt64, Required: true},
+				{Name: "team_id", Prompt: "team_id", Type: FieldString, Required: false},
+				{Name: "invite_code", Prompt: "invite_code", Type: FieldString, Required: false},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "participants",
+			Method:       "GET",
+			PathTemplate: "/api/v1/contests/:id/participants",
+			RequiresAuth: true,
+			Fields: []Field{
+				{Name: "id", Prompt: "contest_id", Type: FieldString, Required: true},
+				{Name: "page", Prompt: "page", Type: FieldInt, Required: false},
+				{Name: "page_size", Prompt: "page_size", Type: FieldInt, Required: false},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "leaderboard",
+			Method:       "GET",
+			PathTemplate: "/api/v1/contests/:id/leaderboard",
+			RequiresAuth: false,
+			Fields: []Field{
+				{Name: "id", Prompt: "contest_id", Type: FieldString, Required: true},
+				{Name: "page", Prompt: "page", Type: FieldInt, Required: false},
+				{Name: "page_size", Prompt: "page_size", Type: FieldInt, Required: false},
+			},
+		},
+		{
+			Service:      "contest",
+			Action:       "my-result",
+			Method:       "GET",
+			PathTemplate: "/api/v1/contests/:id/my_result",
+			RequiresAuth: true,
+			Fields: []Field{
+				{Name: "id", Prompt: "contest_id", Type: FieldString, Required: true},
+			},
+		},
 	}
 
 	result := make(map[string]Command, len(commands))
@@ -333,6 +475,21 @@ func buildPayload(cmd Command, params Params) (interface{}, error) {
 			}, nil
 		case "upload-complete":
 			return buildUploadCompletePayload(params)
+		case "statement-update":
+			statement := params.Get("statement_md")
+			if (statement == "" || statement == "_file_") && params.Get("statement_file") != "" {
+				content, err := ReadFile(params.Get("statement_file"))
+				if err != nil {
+					return nil, err
+				}
+				statement = content
+			}
+			if statement == "" {
+				return nil, fmt.Errorf("statement_md is required")
+			}
+			return map[string]interface{}{
+				"statement_md": statement,
+			}, nil
 		}
 	case "submit":
 		switch cmd.Action {
@@ -343,6 +500,62 @@ func buildPayload(cmd Command, params Params) (interface{}, error) {
 			return map[string]interface{}{
 				"submission_ids": ids,
 			}, nil
+		}
+	case "contest":
+		switch cmd.Action {
+		case "create":
+			payload := map[string]interface{}{
+				"title": params.Get("title"),
+			}
+			if params.Get("description") != "" {
+				payload["description"] = params.Get("description")
+			}
+			if params.Get("visibility") != "" {
+				payload["visibility"] = params.Get("visibility")
+			}
+			if params.Get("owner_id") != "" {
+				ownerID, err := ParseInt64(params.Get("owner_id"))
+				if err != nil {
+					return nil, fmt.Errorf("invalid owner_id: %w", err)
+				}
+				payload["owner_id"] = ownerID
+			}
+			if params.Get("org_id") != "" {
+				orgID, err := ParseInt64(params.Get("org_id"))
+				if err != nil {
+					return nil, fmt.Errorf("invalid org_id: %w", err)
+				}
+				payload["org_id"] = orgID
+			}
+			if params.Get("start_at") != "" {
+				payload["start_at"] = params.Get("start_at")
+			}
+			if params.Get("end_at") != "" {
+				payload["end_at"] = params.Get("end_at")
+			}
+			if params.Get("rule_json") != "" {
+				rulePayload, err := ParseJSON(params.Get("rule_json"))
+				if err != nil {
+					return nil, err
+				}
+				payload["rule"] = rulePayload
+			}
+			return payload, nil
+		case "register":
+			userID, err := ParseInt64(params.Get("user_id"))
+			if err != nil {
+				return nil, fmt.Errorf("invalid user_id: %w", err)
+			}
+			payload := map[string]interface{}{
+				"user_id": userID,
+			}
+			if params.Get("team_id") != "" {
+				payload["team_id"] = params.Get("team_id")
+			}
+			if params.Get("invite_code") != "" {
+				payload["invite_code"] = params.Get("invite_code")
+			}
+			return payload, nil
 		}
 	}
 	return nil, nil

@@ -51,6 +51,20 @@ func buildLatestMetaResponse(ctx context.Context, meta repository.ProblemLatestM
 	}
 }
 
+func buildStatementResponse(ctx context.Context, statement repository.ProblemStatement) *types.StatementResponse {
+	return &types.StatementResponse{
+		Code:    int(pkgerrors.Success),
+		Message: "Success",
+		Data: types.StatementPayload{
+			ProblemId:   statement.ProblemID,
+			Version:     statement.Version,
+			StatementMd: statement.StatementMd,
+			UpdatedAt:   formatTime(statement.UpdatedAt),
+		},
+		TraceId: traceIDFromContext(ctx),
+	}
+}
+
 func buildPrepareUploadResponse(ctx context.Context, output problem_app.PrepareUploadOutput) *types.PrepareUploadResponse {
 	return &types.PrepareUploadResponse{
 		Code:    int(pkgerrors.Success),
