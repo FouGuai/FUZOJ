@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"fuzoj/pkg/bootstrap"
 	"fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/pkg/utils/logger"
@@ -30,16 +33,34 @@ func main() {
 
 	var cfg config.Config
 	conf.MustLoad(*configFile, &cfg)
+
+	runtime, err := bootstrap.LoadRestRuntime(context.Background(), cfg.Bootstrap)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load runtime config failed: %v\n", err)
+		return
+	}
+	if err := bootstrap.ApplyRestRuntime(&cfg.RestConf, runtime); err != nil {
+		fmt.Fprintf(os.Stderr, "apply runtime config failed: %v\n", err)
+		return
+	}
+
+	var logCfg logger.Config
+	if err := bootstrap.LoadJSON(context.Background(), cfg.Bootstrap.Etcd, cfg.Bootstrap.Keys.Log, &logCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "load log config failed: %v\n", err)
+		return
+	}
+	cfg.Logger = logCfg
+
+	if err := logger.Init(cfg.Logger); err != nil {
+		fmt.Fprintf(os.Stderr, "init logger failed: %v\n", err)
+		return
+	}
+	defer func() { _ = logger.Sync() }()
+
 	if err := cfg.Normalize(); err != nil {
 		logger.Error(context.Background(), "load config failed", zap.Error(err))
 		return
 	}
-
-	if err := logger.Init(cfg.Logger); err != nil {
-		logger.Error(context.Background(), "init logger failed", zap.Error(err))
-		return
-	}
-	defer func() { _ = logger.Sync() }()
 
 	applyHTTPTransport(cfg.Proxy)
 	setErrorHandler()
@@ -89,6 +110,22 @@ func main() {
 	})
 
 	logger.Info(context.Background(), "gateway http server started", zap.String("addr", cfg.Host+":"+intToString(cfg.Port)))
+	registerKey, err := bootstrap.RestRegisterKey(runtime)
+	if err != nil {
+		logger.Error(context.Background(), "build register key failed", zap.Error(err))
+		return
+	}
+	registerValue, err := bootstrap.RestRegisterValue(runtime)
+	if err != nil {
+		logger.Error(context.Background(), "build register value failed", zap.Error(err))
+		return
+	}
+	pub, err := bootstrap.RegisterService(cfg.Bootstrap.Etcd, registerKey, registerValue)
+	if err != nil {
+		logger.Error(context.Background(), "register service failed", zap.Error(err))
+		return
+	}
+	defer pub.Stop()
 	server.Start()
 }
 

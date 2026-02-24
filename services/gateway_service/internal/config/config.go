@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"fuzoj/pkg/bootstrap"
 	"fuzoj/pkg/utils/logger"
 
 	"github.com/zeromicro/go-queue/kq"
@@ -102,15 +103,16 @@ type HttpClientConf struct {
 
 // Upstream is the configuration for an upstream.
 type Upstream struct {
-	Name      string         `json:"name,optional"`
+	Name      string          `json:"name,optional"`
 	Http      *HttpClientConf `json:"http,optional"`
-	ProtoSets []string       `json:"protoSets,optional"`
-	Mappings  []RouteMapping `json:"mappings,optional"`
+	ProtoSets []string        `json:"protoSets,optional"`
+	Mappings  []RouteMapping  `json:"mappings,optional"`
 }
 
 // Config holds the gateway configuration.
 type Config struct {
 	rest.RestConf
+	Bootstrap bootstrap.Config `json:"bootstrap"`
 	Upstreams []Upstream       `json:"upstreams"`
 	Auth      AuthConfig       `json:"auth"`
 	Redis     redis.RedisConf  `json:"redis"`

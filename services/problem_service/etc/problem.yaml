@@ -1,6 +1,14 @@
 Name: problem
 Host: 0.0.0.0
 Port: 8888
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+  keys:
+    runtime: problem.rest.runtime
+    rpcRuntime: problem.rpc.runtime
+    log: problem.log
 Rpc:
   ListenOn: 0.0.0.0:9093
   Etcd:

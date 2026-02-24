@@ -11,6 +11,7 @@ import (
 
 	"fuzoj/internal/common/mq/weighted_kq"
 	"fuzoj/internal/common/storage"
+	"fuzoj/pkg/bootstrap"
 	"fuzoj/services/judge_service/internal/cache"
 	"fuzoj/services/judge_service/internal/config"
 	"fuzoj/services/judge_service/internal/handler"
@@ -41,8 +42,42 @@ func main() {
 	conf.MustLoad(*configFile, &c)
 	applyDefaults(&c)
 
+	runtime, err := bootstrap.LoadRestRuntime(context.Background(), c.Bootstrap)
+	if err != nil {
+		logx.Errorf("load runtime config failed: %v", err)
+		return
+	}
+	if err := bootstrap.ApplyRestRuntime(&c.RestConf, runtime); err != nil {
+		logx.Errorf("apply runtime config failed: %v", err)
+		return
+	}
+
+	var logConf logx.LogConf
+	if err := bootstrap.LoadJSON(context.Background(), c.Bootstrap.Etcd, c.Bootstrap.Keys.Log, &logConf); err != nil {
+		logx.Errorf("load log config failed: %v", err)
+		return
+	}
+	logx.MustSetup(logConf)
+
 	server := rest.MustNewServer(c.RestConf)
 	defer server.Stop()
+
+	registerKey, err := bootstrap.RestRegisterKey(runtime)
+	if err != nil {
+		logx.Errorf("build register key failed: %v", err)
+		return
+	}
+	registerValue, err := bootstrap.RestRegisterValue(runtime)
+	if err != nil {
+		logx.Errorf("build register value failed: %v", err)
+		return
+	}
+	pub, err := bootstrap.RegisterService(c.Bootstrap.Etcd, registerKey, registerValue)
+	if err != nil {
+		logx.Errorf("register service failed: %v", err)
+		return
+	}
+	defer pub.Stop()
 
 	ctx := svc.NewServiceContext(c)
 	if err := validateConfig(ctx, &c); err != nil {

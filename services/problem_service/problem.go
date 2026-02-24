@@ -4,9 +4,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 
 	problemv1 "fuzoj/api/gen/problem/v1"
+	"fuzoj/pkg/bootstrap"
 	"fuzoj/services/problem_service/internal/config"
 	"fuzoj/services/problem_service/internal/grpcserver"
 	"fuzoj/services/problem_service/internal/handler"
@@ -27,8 +29,51 @@ func main() {
 	var c config.Config
 	conf.MustLoad(*configFile, &c)
 
+	restRuntime, err := bootstrap.LoadRestRuntime(context.Background(), c.Bootstrap)
+	if err != nil {
+		logx.Errorf("load rest runtime config failed: %v", err)
+		return
+	}
+	if err := bootstrap.ApplyRestRuntime(&c.RestConf, restRuntime); err != nil {
+		logx.Errorf("apply rest runtime config failed: %v", err)
+		return
+	}
+	rpcRuntime, err := bootstrap.LoadRpcRuntime(context.Background(), c.Bootstrap)
+	if err != nil {
+		logx.Errorf("load rpc runtime config failed: %v", err)
+		return
+	}
+	if err := bootstrap.ApplyRpcRuntime(&c.Rpc, rpcRuntime); err != nil {
+		logx.Errorf("apply rpc runtime config failed: %v", err)
+		return
+	}
+
+	var logConf logx.LogConf
+	if err := bootstrap.LoadJSON(context.Background(), c.Bootstrap.Etcd, c.Bootstrap.Keys.Log, &logConf); err != nil {
+		logx.Errorf("load log config failed: %v", err)
+		return
+	}
+	logx.MustSetup(logConf)
+
 	server := rest.MustNewServer(c.RestConf)
 	defer server.Stop()
+
+	registerKey, err := bootstrap.RestRegisterKey(restRuntime)
+	if err != nil {
+		logx.Errorf("build register key failed: %v", err)
+		return
+	}
+	registerValue, err := bootstrap.RestRegisterValue(restRuntime)
+	if err != nil {
+		logx.Errorf("build register value failed: %v", err)
+		return
+	}
+	pub, err := bootstrap.RegisterService(c.Bootstrap.Etcd, registerKey, registerValue)
+	if err != nil {
+		logx.Errorf("register service failed: %v", err)
+		return
+	}
+	defer pub.Stop()
 
 	ctx := svc.NewServiceContext(c)
 	handler.RegisterHandlers(server, ctx)

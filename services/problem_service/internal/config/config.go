@@ -6,6 +6,8 @@ package config
 import (
 	"time"
 
+	"fuzoj/pkg/bootstrap"
+
 	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/rest"
@@ -14,8 +16,9 @@ import (
 
 type Config struct {
 	rest.RestConf
-	Rpc   zrpc.RpcServerConf `json:"rpc"`
-	Mysql struct {
+	Bootstrap bootstrap.Config   `json:"bootstrap"`
+	Rpc       zrpc.RpcServerConf `json:"rpc"`
+	Mysql     struct {
 		DataSource string `json:"dataSource"`
 	} `json:"mysql"`
 	Cache   cache.CacheConf `json:"cache"`

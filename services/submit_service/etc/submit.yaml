@@ -1,6 +1,13 @@
 Name: submit
 Host: 0.0.0.0
 Port: 8086
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+  keys:
+    runtime: submit.rest.runtime
+    log: submit.log
 Mysql:
   DataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
 Cache:

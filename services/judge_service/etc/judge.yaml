@@ -1,6 +1,13 @@
 Name: judge
 Host: 0.0.0.0
 Port: 8888
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+  keys:
+    runtime: judge.rest.runtime
+    log: judge.log
 Mysql:
   DataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
 Cache:

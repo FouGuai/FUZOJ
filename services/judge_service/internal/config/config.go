@@ -6,6 +6,7 @@ package config
 import (
 	"time"
 
+	"fuzoj/pkg/bootstrap"
 	"fuzoj/services/judge_service/internal/sandbox/engine"
 	"fuzoj/services/judge_service/internal/sandbox/profile"
 
@@ -17,7 +18,8 @@ import (
 
 type Config struct {
 	rest.RestConf
-	Mysql struct {
+	Bootstrap bootstrap.Config `json:"bootstrap"`
+	Mysql     struct {
 		DataSource string `json:"dataSource"`
 	} `json:"mysql"`
 	Cache               cache.CacheConf  `json:"cache"`
