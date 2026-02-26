@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/zeromicro/go-zero/core/discov"
+	"github.com/zeromicro/go-zero/core/conf"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -43,7 +45,7 @@ func LoadJSON(ctx context.Context, etcdConf discov.EtcdConf, key string, out any
 		return fmt.Errorf("etcd key %s not found", key)
 	}
 
-	if err := json.Unmarshal(resp.Kvs[0].Value, out); err != nil {
+	if err := unmarshalConfig(resp.Kvs[0].Value, out); err != nil {
 		return fmt.Errorf("unmarshal etcd key %s failed: %w", key, err)
 	}
 	return nil
@@ -55,6 +57,33 @@ func LoadConfig(ctx context.Context, etcdConf discov.EtcdConf, key string, out a
 		return fmt.Errorf("config key is required")
 	}
 	return LoadJSON(ctx, etcdConf, key, out)
+}
+
+// PutJSON writes JSON value to etcd key.
+func PutJSON(ctx context.Context, etcdConf discov.EtcdConf, key string, value any) error {
+	if err := etcdConf.Validate(); err != nil {
+		return fmt.Errorf("invalid etcd config: %w", err)
+	}
+	if key == "" {
+		return fmt.Errorf("etcd key is required")
+	}
+	cli, err := newEtcdClient(etcdConf)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = cli.Close() }()
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal etcd key %s failed: %w", key, err)
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, defaultReqTimeout)
+	defer cancel()
+
+	if _, err := cli.Put(reqCtx, key, string(data)); err != nil {
+		return fmt.Errorf("put etcd key %s failed: %w", key, err)
+	}
+	return nil
 }
 
 // RegisterService registers value under key with lease keepalive.
@@ -108,6 +137,17 @@ func newEtcdClient(etcdConf discov.EtcdConf) (*clientv3.Client, error) {
 		return nil, fmt.Errorf("create etcd client failed: %w", err)
 	}
 	return cli, nil
+}
+
+func unmarshalConfig(data []byte, out any) error {
+	if out == nil {
+		return fmt.Errorf("output target is required")
+	}
+	value := reflect.ValueOf(out)
+	if value.Kind() == reflect.Pointer && value.Elem().Kind() == reflect.Struct {
+		return conf.LoadFromJsonBytes(data, out)
+	}
+	return json.Unmarshal(data, out)
 }
 
 func buildTLSConfig(etcdConf discov.EtcdConf) (*tls.Config, error) {

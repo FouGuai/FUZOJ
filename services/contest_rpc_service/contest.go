@@ -23,13 +23,40 @@ var configFile = flag.String("f", "etc/contest.yaml", "the config file")
 func main() {
 	flag.Parse()
 
-	var c config.Config
-	conf.MustLoad(*configFile, &c)
+	var bootCfg struct {
+		Bootstrap bootstrap.Config `json:"bootstrap"`
+	}
+	conf.MustLoad(*configFile, &bootCfg)
+
+	boot := bootCfg.Bootstrap
+	if boot.Keys.Config == "" {
+		logx.Error("bootstrap.keys.config is required")
+		return
+	}
+
+	var full config.Config
+	if err := bootstrap.LoadConfig(context.Background(), boot.Etcd, boot.Keys.Config, &full); err != nil {
+		logx.Errorf("load full config failed: %v", err)
+		return
+	}
+	full.Bootstrap = boot
+	c := full
 
 	runtime, err := bootstrap.LoadRpcRuntime(context.Background(), c.Bootstrap)
 	if err != nil {
 		logx.Errorf("load rpc runtime config failed: %v", err)
 		return
+	}
+	changed, err := bootstrap.AssignRandomRpcListenOn(&runtime)
+	if err != nil {
+		logx.Errorf("assign random rpc listenOn failed: %v", err)
+		return
+	}
+	if changed {
+		if err := bootstrap.PutJSON(context.Background(), c.Bootstrap.Etcd, c.Bootstrap.Keys.RpcRuntime, runtime); err != nil {
+			logx.Errorf("update rpc runtime config failed: %v", err)
+			return
+		}
 	}
 	if err := bootstrap.ApplyRpcRuntime(&c.RpcServerConf, runtime); err != nil {
 		logx.Errorf("apply rpc runtime config failed: %v", err)

@@ -16,7 +16,7 @@ import (
 
 type Config struct {
 	rest.RestConf
-	Bootstrap bootstrap.Config   `json:"bootstrap"`
+	Bootstrap bootstrap.Config   `json:"bootstrap,optional"`
 	Rpc       zrpc.RpcServerConf `json:"rpc"`
 	Mysql     struct {
 		DataSource string `json:"dataSource"`

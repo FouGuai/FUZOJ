@@ -13,6 +13,14 @@ except ImportError as exc:
     raise SystemExit("PyYAML is required. Please install it with: pip install -r requirements.txt") from exc
 
 
+def find_repo_root(start: Path) -> Path:
+    current = start.resolve()
+    for parent in [current] + list(current.parents):
+        if (parent / "go.mod").exists():
+            return parent
+    return current
+
+
 def load_manifest(path: Path) -> Dict:
     if not path.exists():
         raise SystemExit(f"manifest not found: {path}")
@@ -86,8 +94,25 @@ def main() -> None:
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
+    if not manifest_path.is_absolute():
+        candidates = []
+        candidates.append((Path.cwd() / manifest_path).resolve())
+        if manifest_path.parts and manifest_path.parts[0] == "scripts":
+            candidates.append((Path(__file__).resolve().parent / Path(*manifest_path.parts[1:])).resolve())
+        candidates.append((Path(__file__).resolve().parent / manifest_path).resolve())
+        for candidate in candidates:
+            if candidate.exists():
+                manifest_path = candidate
+                break
+        else:
+            manifest_path = candidates[-1]
     manifest = load_manifest(manifest_path)
-    root = (manifest_path.parent / manifest.get("rootDir", ".")).resolve()
+    root_base = find_repo_root(manifest_path.parent)
+    root_dir = Path(manifest.get("rootDir", "."))
+    if not root_dir.is_absolute():
+        root = (root_base / root_dir).resolve()
+    else:
+        root = root_dir.resolve()
     log_dir = root / manifest.get("logDir", "logs")
 
     only_set = {name.strip() for name in args.only.split(",") if name.strip()}

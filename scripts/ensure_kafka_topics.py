@@ -84,6 +84,13 @@ def main() -> int:
                 continue
             config_paths.append(path)
 
+    services_root = root / "services"
+    if services_root.exists():
+        for path in sorted(services_root.rglob("etc/*.yaml")):
+            if "dev.generated" in path.parts:
+                continue
+            config_paths.append(path)
+
     topics = []
     seen = set()
     for path in config_paths:

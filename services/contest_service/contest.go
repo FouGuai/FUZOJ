@@ -22,13 +22,40 @@ var configFile = flag.String("f", "etc/contest.yaml", "the config file")
 func main() {
 	flag.Parse()
 
-	var c config.Config
-	conf.MustLoad(*configFile, &c)
+	var bootCfg struct {
+		Bootstrap bootstrap.Config `json:"bootstrap"`
+	}
+	conf.MustLoad(*configFile, &bootCfg)
+
+	boot := bootCfg.Bootstrap
+	if boot.Keys.Config == "" {
+		logx.Error("bootstrap.keys.config is required")
+		return
+	}
+
+	var full config.Config
+	if err := bootstrap.LoadConfig(context.Background(), boot.Etcd, boot.Keys.Config, &full); err != nil {
+		logx.Errorf("load full config failed: %v", err)
+		return
+	}
+	full.Bootstrap = boot
+	c := full
 
 	runtime, err := bootstrap.LoadRestRuntime(context.Background(), c.Bootstrap)
 	if err != nil {
 		logx.Errorf("load runtime config failed: %v", err)
 		return
+	}
+	changed, err := bootstrap.AssignRandomRestPort(&runtime)
+	if err != nil {
+		logx.Errorf("assign random rest port failed: %v", err)
+		return
+	}
+	if changed {
+		if err := bootstrap.PutJSON(context.Background(), c.Bootstrap.Etcd, c.Bootstrap.Keys.Runtime, runtime); err != nil {
+			logx.Errorf("update runtime config failed: %v", err)
+			return
+		}
 	}
 	if err := bootstrap.ApplyRestRuntime(&c.RestConf, runtime); err != nil {
 		logx.Errorf("apply runtime config failed: %v", err)

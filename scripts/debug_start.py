@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 import subprocess
 import time
@@ -41,6 +42,21 @@ def run(
         input=input_data,
         cwd=str(cwd) if cwd else None,
     )
+
+
+def compose_up(base_cmd: List[str], env: Dict[str, str], pull_policy: str) -> None:
+    cmd = base_cmd + ["up", "-d"]
+    if pull_policy:
+        cmd += ["--pull", pull_policy]
+    result = run(cmd, env=env, check=False)
+    if result.returncode == 0:
+        return
+    if pull_policy != "never":
+        retry_cmd = base_cmd + ["up", "-d", "--pull", "never"]
+        retry_result = run(retry_cmd, env=env, check=False)
+        if retry_result.returncode == 0:
+            return
+    raise subprocess.CalledProcessError(result.returncode, cmd)
 
 
 def compose_base(manifest: Dict, root: Path) -> List[str]:
@@ -169,12 +185,45 @@ def ensure_minio_buckets(project: str, minio_cfg: Dict) -> None:
         run(cmd, check=False)
 
 
-def update_cli_config(root: Path, gateway_cfg: Path) -> None:
-    if not gateway_cfg.exists():
-        return
-    data = yaml.safe_load(gateway_cfg.read_text(encoding="utf-8")) or {}
-    host = data.get("Host") or data.get("host")
-    port = data.get("Port") or data.get("port")
+def init_etcd(root: Path) -> None:
+    script = root / "scripts/devtools/etcdinit/main.go"
+    if not script.exists():
+        raise SystemExit(f"etcd init script not found: {script}")
+    cmd = ["go", "run", str(script), "--config-dir", str(root / "configs/etcdinit")]
+    run(cmd, check=True)
+
+
+def read_etcd_runtime(base_cmd: List[str], env: Dict[str, str], key: str) -> Optional[Dict]:
+    cmd = base_cmd + ["exec", "-T", "etcd", "etcdctl", "get", key, "--print-value-only"]
+    result = run(cmd, env=env, capture=True, check=False)
+    if result.returncode != 0:
+        return None
+    raw = (result.stdout or b"").decode("utf-8", errors="ignore").strip()
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def update_cli_config(root: Path, base_cmd: List[str], env: Dict[str, str], gateway_cfg: Path) -> None:
+    host = None
+    port = None
+    runtime = read_etcd_runtime(base_cmd, env, "gateway.rest.runtime")
+    if isinstance(runtime, dict):
+        host = runtime.get("host") or runtime.get("Host")
+        port = runtime.get("port") or runtime.get("Port")
+    if not host or not port:
+        candidates = [gateway_cfg, root / "configs/etcdinit/gateway_service/etc/gateway.yaml"]
+        for path in candidates:
+            if not path.exists():
+                continue
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            host = data.get("Host") or data.get("host")
+            port = data.get("Port") or data.get("port")
+            if host and port:
+                break
     if not host or not port:
         return
     host_value = str(host)
@@ -247,12 +296,36 @@ def main() -> None:
     parser.add_argument("--no-build", action="store_true", help="Skip building binaries")
     parser.add_argument("--deps-only", action="store_true", help="Only start dependencies")
     parser.add_argument("--services-only", action="store_true", help="Only start services")
+    parser.add_argument("--no-etcd-init", action="store_true", help="Skip etcd config initialization")
     parser.add_argument("--only", default="", help="Comma-separated service list")
+    parser.add_argument(
+        "--pull",
+        default="missing",
+        choices=["always", "missing", "never"],
+        help="Docker compose pull policy",
+    )
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
+    if not manifest_path.is_absolute():
+        candidates = []
+        candidates.append((Path.cwd() / manifest_path).resolve())
+        if manifest_path.parts and manifest_path.parts[0] == "scripts":
+            candidates.append((Path(__file__).resolve().parent / Path(*manifest_path.parts[1:])).resolve())
+        candidates.append((Path(__file__).resolve().parent / manifest_path).resolve())
+        for candidate in candidates:
+            if candidate.exists():
+                manifest_path = candidate
+                break
+        else:
+            manifest_path = candidates[-1]
     manifest = load_manifest(manifest_path)
-    root = (manifest_path.parent / manifest.get("rootDir", ".")).resolve()
+    root_base = find_repo_root(manifest_path.parent)
+    root_dir = Path(manifest.get("rootDir", "."))
+    if not root_dir.is_absolute():
+        root = (root_base / root_dir).resolve()
+    else:
+        root = root_dir.resolve()
 
     log_dir = root / manifest.get("logDir", "logs")
     bin_dir = root / manifest.get("binDir", "logs/bin")
@@ -263,7 +336,7 @@ def main() -> None:
     env = compose_env(manifest)
 
     if not args.no_deps and not args.services_only:
-        run(base_cmd + ["up", "-d"], env=env)
+        compose_up(base_cmd, env, args.pull)
         wait_for_mysql(base_cmd, env)
         wait_for_redis(base_cmd, env)
         wait_for_kafka(base_cmd, env)
@@ -271,6 +344,9 @@ def main() -> None:
         wait_for_http(manifest["deps"]["elasticsearch"]["healthURL"], timeout_s=90)
         wait_for_http(manifest["deps"]["kibana"]["healthURL"], timeout_s=120)
         wait_for_http(manifest["deps"]["minio"]["healthURL"], timeout_s=60)
+
+        if not args.no_etcd_init:
+            init_etcd(root)
 
         init_mysql(base_cmd, env)
         for schema in manifest["deps"]["mysql"].get("schemas", []):
@@ -305,10 +381,18 @@ def main() -> None:
             gateway_config = root / svc["config"]
             break
     if gateway_config is not None:
-        update_cli_config(root, gateway_config)
+        update_cli_config(root, base_cmd, env, gateway_config)
 
     print("services started")
     print(f"logs: {log_dir}")
+
+
+def find_repo_root(start: Path) -> Path:
+    current = start.resolve()
+    for parent in [current] + list(current.parents):
+        if (parent / "go.mod").exists():
+            return parent
+    return current
 
 
 if __name__ == "__main__":

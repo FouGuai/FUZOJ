@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -73,9 +74,14 @@ func main() {
 	var configDir string
 	var dryRun bool
 	flag.StringVar(&only, "only", "", "Comma-separated service list")
-	flag.StringVar(&configDir, "config-dir", "services", "Service config root")
+	flag.StringVar(&configDir, "config-dir", "configs/etcdinit", "Service config root")
 	flag.BoolVar(&dryRun, "dry-run", false, "Print etcd writes without executing")
 	flag.Parse()
+
+	baseRoot := findRepoRoot()
+	if !filepath.IsAbs(configDir) {
+		configDir = filepath.Join(baseRoot, configDir)
+	}
 
 	serviceSpecs := []ServiceSpec{
 		{Name: "gateway", Path: "gateway_service/etc/gateway.yaml"},
@@ -83,6 +89,8 @@ func main() {
 		{Name: "problem", Path: "problem_service/etc/problem.yaml"},
 		{Name: "submit", Path: "submit_service/etc/submit.yaml"},
 		{Name: "judge", Path: "judge_service/etc/judge.yaml"},
+		{Name: "contest", Path: "contest_service/etc/contest.yaml"},
+		{Name: "contest.rpc", Path: "contest_rpc_service/etc/contest.yaml"},
 	}
 
 	onlySet := map[string]bool{}
@@ -125,16 +133,18 @@ func main() {
 			fail(err)
 		}
 
-		runtimePayload, err := buildRestRuntime(meta)
-		if err != nil {
-			fail(err)
-		}
-		if err := writer.putJSON(keys.Runtime, runtimePayload, dryRun); err != nil {
-			fail(err)
+		if meta.Host != "" && meta.Port >= 0 {
+			runtimePayload, err := buildRestRuntime(meta)
+			if err != nil {
+				fail(err)
+			}
+			if err := writer.putJSON(keys.Runtime, runtimePayload, dryRun); err != nil {
+				fail(err)
+			}
 		}
 
-		if meta.Rpc != nil && meta.Rpc.ListenOn != "" {
-			rpcPayload, err := buildRpcRuntime(meta)
+		if meta.Rpc != nil || raw["listenOn"] != nil {
+			rpcPayload, err := buildRpcRuntime(meta, raw)
 			if err != nil {
 				fail(err)
 			}
@@ -256,14 +266,18 @@ func defaultKeys(service string, provided BootstrapKeys) BootstrapKeys {
 
 func buildRestRuntime(meta ServiceMeta) (map[string]any, error) {
 	if meta.Name == "" || meta.Host == "" || meta.Port <= 0 {
-		return nil, fmt.Errorf("missing name/host/port in config for %s", meta.Name)
+		if meta.Name == "" || meta.Host == "" || meta.Port < 0 {
+			return nil, fmt.Errorf("missing name/host/port in config for %s", meta.Name)
+		}
 	}
 	runtime := map[string]any{
 		"name": meta.Name,
 		"host": meta.Host,
 		"port": meta.Port,
 	}
-	if timeout, ok := normalizeDuration(meta.Timeout); ok {
+	if timeout, ok, err := normalizeRestTimeout(meta.Timeout); err != nil {
+		return nil, err
+	} else if ok {
 		runtime["timeout"] = timeout
 	}
 	if len(meta.Middlewares) > 0 {
@@ -272,23 +286,56 @@ func buildRestRuntime(meta ServiceMeta) (map[string]any, error) {
 	return runtime, nil
 }
 
-func buildRpcRuntime(meta ServiceMeta) (map[string]any, error) {
-	if meta.Rpc == nil {
-		return nil, errors.New("rpc config missing")
+func buildRpcRuntime(meta ServiceMeta, raw map[string]any) (map[string]any, error) {
+	listenOn := ""
+	etcdHosts := []string{}
+	etcdKey := ""
+
+	if meta.Rpc != nil {
+		listenOn = meta.Rpc.ListenOn
+		etcdHosts = meta.Rpc.Etcd.Hosts
+		etcdKey = meta.Rpc.Etcd.Key
+	} else {
+		if v, ok := raw["listenOn"].(string); ok {
+			listenOn = v
+		}
+		if etcdRaw, ok := raw["etcd"].(map[string]any); ok {
+			etcdHosts = parseStringSlice(etcdRaw["hosts"])
+			if key, ok := etcdRaw["key"].(string); ok {
+				etcdKey = key
+			}
+		}
 	}
-	if meta.Rpc.ListenOn == "" {
+
+	if listenOn == "" {
 		return nil, errors.New("rpc listenOn is required")
 	}
-	if len(meta.Rpc.Etcd.Hosts) == 0 || meta.Rpc.Etcd.Key == "" {
+	if len(etcdHosts) == 0 || etcdKey == "" {
 		return nil, errors.New("rpc etcd hosts/key are required")
 	}
 	return map[string]any{
-		"listenOn": meta.Rpc.ListenOn,
+		"name": meta.Name,
+		"listenOn": listenOn,
 		"etcd": map[string]any{
-			"hosts": meta.Rpc.Etcd.Hosts,
-			"key":   meta.Rpc.Etcd.Key,
+			"hosts": etcdHosts,
+			"key":   etcdKey,
 		},
 	}, nil
+}
+
+func parseStringSlice(value any) []string {
+	out := []string{}
+	switch v := value.(type) {
+	case []string:
+		return v
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 func buildLogConfig(meta ServiceMeta, raw map[string]any) map[string]any {
@@ -329,6 +376,44 @@ func normalizeDuration(value any) (string, bool) {
 		return fmt.Sprintf("%gs", v), true
 	default:
 		return fmt.Sprintf("%v", v), true
+	}
+}
+
+func normalizeRestTimeout(value any) (int64, bool, error) {
+	switch v := value.(type) {
+	case nil:
+		return 0, false, nil
+	case int:
+		if v <= 0 {
+			return 0, false, nil
+		}
+		return int64(v), true, nil
+	case int64:
+		if v <= 0 {
+			return 0, false, nil
+		}
+		return v, true, nil
+	case float64:
+		if v <= 0 {
+			return 0, false, nil
+		}
+		return int64(v), true, nil
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return 0, false, nil
+		}
+		if dur, err := time.ParseDuration(v); err == nil {
+			return int64(dur / time.Millisecond), true, nil
+		}
+		if ms, err := strconv.ParseInt(v, 10, 64); err == nil {
+			if ms <= 0 {
+				return 0, false, nil
+			}
+			return ms, true, nil
+		}
+		return 0, false, fmt.Errorf("invalid rest timeout: %v", v)
+	default:
+		return 0, false, fmt.Errorf("invalid rest timeout type: %T", value)
 	}
 }
 
@@ -400,4 +485,22 @@ func buildTLSConfig(conf EtcdConf) (*tls.Config, error) {
 func fail(err error) {
 	fmt.Fprintln(os.Stderr, err.Error())
 	os.Exit(1)
+}
+
+func findRepoRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	current := filepath.Clean(cwd)
+	for {
+		if _, err := os.Stat(filepath.Join(current, "go.mod")); err == nil {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return cwd
+		}
+		current = parent
+	}
 }

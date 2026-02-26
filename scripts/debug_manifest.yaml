@@ -8,9 +8,8 @@ deps:
     rootPassword: "root"
     dsn: "user:password@tcp(127.0.0.1:3306)/fuzoj?parseTime=true&loc=Local"
     schemas:
-      - "internal/user/schema.sql"
-      - "internal/problem/schema.sql"
-      - "internal/submit/schema.sql"
+      - "services/user_service/schema.sql"
+      - "services/problem_service/internal/model/schema.goctl.sql"
   redis:
     addr: "127.0.0.1:6379"
   kafka:

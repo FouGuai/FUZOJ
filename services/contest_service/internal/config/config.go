@@ -15,7 +15,7 @@ import (
 
 type Config struct {
 	rest.RestConf
-	Bootstrap   bootstrap.Config  `json:"bootstrap"`
+	Bootstrap   bootstrap.Config  `json:"bootstrap,optional"`
 	Mysql       MysqlConfig       `json:"mysql"`
 	Cache       cache.CacheConf   `json:"cache"`
 	Redis       redis.RedisConf   `json:"redis"`

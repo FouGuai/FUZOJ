@@ -1,0 +1,220 @@
+Name: gateway
+Host: 0.0.0.0
+Port: 0
+Timeout: 0
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: gateway.config
+    runtime: gateway.rest.runtime
+    log: gateway.log
+Middlewares:
+  Trace: false
+  Log: false
+  Prometheus: false
+  MaxConns: false
+  Breaker: false
+  Shedding: false
+  Timeout: false
+  Recover: true
+  Metrics: false
+  MaxBytes: false
+  Gunzip: false
+
+logger:
+  level: "info"
+  format: "json"
+  outputPath: "stdout"
+  errorPath: "stderr"
+  service: "gateway"
+  env: "dev"
+  cluster: "default"
+
+auth:
+  jwtSecret: "tyylovezsrtyylovezsr"
+  jwtIssuer: "fuzoj"
+
+redis:
+  host: "127.0.0.1:6379"
+  type: "node"
+
+kafka:
+  brokers: ["127.0.0.1:9092"]
+  conns: 1
+  consumers: 2
+  processors: 2
+
+banEvent:
+  enabled: true
+  topic: "user.events"
+  consumerGroup: "fuzoj-gateway-bans"
+
+cache:
+  banLocalTTL: 30m
+  banLocalSize: 100000
+  tokenBlacklistCacheTTL: 2m
+
+rateLimit:
+  window: 1m
+  userMax: 200
+  ipMax: 500
+  routeMax: 1000
+
+proxy:
+  maxIdleConns: 2048
+  maxIdleConnsPerHost: 256
+  idleConnTimeout: 90s
+  responseHeaderTimeout: 5s
+  tlsHandshakeTimeout: 5s
+  dialTimeout: 3s
+
+cors:
+  enabled: true
+  allowedOrigins: ["*"]
+  allowedMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+  allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Trace-Id"]
+  exposedHeaders: ["X-Trace-Id", "X-Request-Id"]
+  allowCredentials: false
+  maxAge: 12h
+
+upstreams:
+  - name: "user"
+    http:
+      target: "127.0.0.1:8081"
+      timeout: 0
+    mappings:
+      - name: "user.register"
+        method: "POST"
+        path: "/api/v1/user/register"
+        auth:
+          mode: "public"
+      - name: "user.login"
+        method: "POST"
+        path: "/api/v1/user/login"
+        auth:
+          mode: "public"
+      - name: "user.refresh"
+        method: "POST"
+        path: "/api/v1/user/refresh-token"
+        auth:
+          mode: "public"
+      - name: "user.logout"
+        method: "POST"
+        path: "/api/v1/user/logout"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+
+  - name: "problem"
+    http:
+      target: "127.0.0.1:8083"
+      timeout: 0
+    mappings:
+      - name: "problem.public"
+        method: "GET"
+        path: "/api/v1/problems/*any"
+        auth:
+          mode: "public"
+      - name: "problem.manage"
+        method: "POST"
+        path: "/api/v1/problems/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage"
+        method: "PUT"
+        path: "/api/v1/problems/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage"
+        method: "DELETE"
+        path: "/api/v1/problems/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+
+  - name: "submit"
+    http:
+      target: "127.0.0.1:8086"
+      timeout: 0
+    mappings:
+      - name: "submit.create"
+        method: "POST"
+        path: "/api/v1/submissions"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "submit.get"
+        method: "GET"
+        path: "/api/v1/submissions/:id"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "submit.source"
+        method: "GET"
+        path: "/api/v1/submissions/:id/source"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "submit.batch"
+        method: "POST"
+        path: "/api/v1/submissions/batch_status"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+
+  - name: "judge"
+    http:
+      target: "127.0.0.1:8085"
+      timeout: 0
+    mappings:
+      - name: "judge.status"
+        method: "GET"
+        path: "/api/v1/judge/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+
+  - name: "contest"
+    http:
+      target: "127.0.0.1:0"
+      timeout: 0
+    mappings:
+      - name: "contest.public"
+        method: "GET"
+        path: "/api/v1/contests/*any"
+        auth:
+          mode: "public"
+      - name: "contest.manage"
+        method: "POST"
+        path: "/api/v1/contests/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "PUT"
+        path: "/api/v1/contests/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "DELETE"
+        path: "/api/v1/contests/*any"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+
+  - name: "minio"
+    http:
+      target: "127.0.0.1:9000"
+      timeout: 0
+    mappings:
+      - name: "objects.download"
+        method: "GET"
+        path: "/objects/*any"
+        auth:
+          mode: "public"

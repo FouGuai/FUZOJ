@@ -18,7 +18,7 @@ import (
 
 type Config struct {
 	rest.RestConf
-	Bootstrap bootstrap.Config `json:"bootstrap"`
+	Bootstrap bootstrap.Config `json:"bootstrap,optional"`
 	Mysql     struct {
 		DataSource string `json:"dataSource"`
 	} `json:"mysql"`

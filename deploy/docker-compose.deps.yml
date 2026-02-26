@@ -48,7 +48,7 @@ services:
       - fuzoj_kafka:/var/lib/kafka/data
 
   etcd:
-    image: bitnami/etcd:3.5
+    image: ${ETCD_IMAGE:-registry.k8s.io/etcd:3.6.6-0}
     environment:
       ALLOW_NONE_AUTHENTICATION: "yes"
       ETCD_ADVERTISE_CLIENT_URLS: "http://etcd:2379"

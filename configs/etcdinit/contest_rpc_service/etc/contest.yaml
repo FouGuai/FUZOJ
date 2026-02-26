@@ -1,0 +1,46 @@
+Name: contest.rpc
+ListenOn: 0.0.0.0:0
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: contest.rpc
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: contest.rpc.config
+    rpcRuntime: contest.rpc.runtime
+    log: contest.rpc.log
+Mysql:
+  dataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
+Cache:
+  - host: 127.0.0.1:6379
+    type: node
+Kafka:
+  brokers:
+    - 127.0.0.1:9092
+  clientID: contest-rpc-service
+  minBytes: 10240
+  maxBytes: 10485760
+  topics:
+    - judge.status.final
+    - contest.leaderboard.rebuild
+    - contest.hack.finished
+Contest:
+  idempotencyTTL: 10m
+  resultPersistAfter: 1h
+  maxParticipantsPerTeam: 3
+  defaultPageSize: 50
+  maxPageSize: 200
+Leaderboard:
+  hotCacheTTL: 3s
+  pageCacheTTL: 5s
+  emptyTTL: 5m
+  frozenCacheTTL: 10m
+  snapshotInterval: 5m
+Timeouts:
+  db: 3s
+  cache: 1s
+  mq: 3s

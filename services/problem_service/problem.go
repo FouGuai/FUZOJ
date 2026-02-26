@@ -26,10 +26,12 @@ var configFile = flag.String("f", "etc/problem.yaml", "the config file")
 func main() {
 	flag.Parse()
 
-	var c config.Config
-	conf.MustLoad(*configFile, &c)
+	var bootCfg struct {
+		Bootstrap bootstrap.Config `json:"bootstrap"`
+	}
+	conf.MustLoad(*configFile, &bootCfg)
 
-	boot := c.Bootstrap
+	boot := bootCfg.Bootstrap
 	if boot.Keys.Config == "" {
 		logx.Error("bootstrap.keys.config is required")
 		return
@@ -41,12 +43,23 @@ func main() {
 		return
 	}
 	full.Bootstrap = boot
-	c = full
+	c := full
 
 	restRuntime, err := bootstrap.LoadRestRuntime(context.Background(), c.Bootstrap)
 	if err != nil {
 		logx.Errorf("load rest runtime config failed: %v", err)
 		return
+	}
+	restChanged, err := bootstrap.AssignRandomRestPort(&restRuntime)
+	if err != nil {
+		logx.Errorf("assign random rest port failed: %v", err)
+		return
+	}
+	if restChanged {
+		if err := bootstrap.PutJSON(context.Background(), c.Bootstrap.Etcd, c.Bootstrap.Keys.Runtime, restRuntime); err != nil {
+			logx.Errorf("update rest runtime config failed: %v", err)
+			return
+		}
 	}
 	if err := bootstrap.ApplyRestRuntime(&c.RestConf, restRuntime); err != nil {
 		logx.Errorf("apply rest runtime config failed: %v", err)
@@ -56,6 +69,17 @@ func main() {
 	if err != nil {
 		logx.Errorf("load rpc runtime config failed: %v", err)
 		return
+	}
+	rpcChanged, err := bootstrap.AssignRandomRpcListenOn(&rpcRuntime)
+	if err != nil {
+		logx.Errorf("assign random rpc listenOn failed: %v", err)
+		return
+	}
+	if rpcChanged {
+		if err := bootstrap.PutJSON(context.Background(), c.Bootstrap.Etcd, c.Bootstrap.Keys.RpcRuntime, rpcRuntime); err != nil {
+			logx.Errorf("update rpc runtime config failed: %v", err)
+			return
+		}
 	}
 	if err := bootstrap.ApplyRpcRuntime(&c.Rpc, rpcRuntime); err != nil {
 		logx.Errorf("apply rpc runtime config failed: %v", err)

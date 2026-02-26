@@ -6,16 +6,14 @@ import (
 	"fuzoj/pkg/bootstrap"
 
 	"github.com/zeromicro/go-zero/core/stores/cache"
-	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/zrpc"
 )
 
 type Config struct {
 	zrpc.RpcServerConf
-	Bootstrap   bootstrap.Config  `json:"bootstrap"`
+	Bootstrap   bootstrap.Config  `json:"bootstrap,optional"`
 	Mysql       MysqlConfig       `json:"mysql"`
 	Cache       cache.CacheConf   `json:"cache"`
-	Redis       redis.RedisConf   `json:"redis"`
 	Kafka       KafkaConfig       `json:"kafka"`
 	Contest     ContestConfig     `json:"contest"`
 	Leaderboard LeaderboardConfig `json:"leaderboard"`

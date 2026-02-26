@@ -71,7 +71,7 @@ type CORSConfig struct {
 // AuthPolicy defines auth behavior for a route.
 type AuthPolicy struct {
 	Mode  string   `json:"mode"`  // public | protected
-	Roles []string `json:"roles"` // optional
+	Roles []string `json:"roles,optional"` // optional
 }
 
 // RouteRateLimit overrides per-route limits.
@@ -89,8 +89,8 @@ type RouteMapping struct {
 	RpcPath     string         `json:"rpcPath,optional"`
 	Name        string         `json:"name,optional"`
 	Auth        AuthPolicy     `json:"auth"`
-	RateLimit   RouteRateLimit `json:"rateLimit"`
-	Timeout     time.Duration  `json:"timeout"`
+	RateLimit   RouteRateLimit `json:"rateLimit,optional"`
+	Timeout     time.Duration  `json:"timeout,optional"`
 	StripPrefix string         `json:"stripPrefix,optional"`
 }
 
@@ -113,7 +113,7 @@ type Upstream struct {
 // Config holds the gateway configuration.
 type Config struct {
 	rest.RestConf
-	Bootstrap bootstrap.Config `json:"bootstrap"`
+	Bootstrap bootstrap.Config `json:"bootstrap,optional"`
 	Upstreams []Upstream       `json:"upstreams"`
 	Auth      AuthConfig       `json:"auth"`
 	Redis     redis.RedisConf  `json:"redis"`

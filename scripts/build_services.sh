@@ -114,12 +114,12 @@ generate_protos() {
 }
 
 generate_protos
-build_service "user-service" "./cmd/user-service"
-build_service "problem-service" "./cmd/problem-service"
-build_service "submit-service" "./cmd/submit-service"
-build_service "judge-service" "./cmd/judge-service"
+build_service "user-service" "./services/user_service"
+build_service "problem-service" "./services/problem_service"
+build_service "submit-service" "./services/submit_service"
+build_service "judge-service" "./services/judge_service"
 build_service "contest-service" "./services/contest_service"
 build_service "contest-rpc-service" "./services/contest_rpc_service"
-build_service "gateway" "./cmd/gateway"
+build_service "gateway" "./services/gateway_service"
 
 echo "binaries ready: $BIN_DIR"

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fuzoj/pkg/bootstrap"
+	pkgerrors "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/config"
@@ -32,10 +33,12 @@ var configFile = flag.String("f", "etc/gateway.yaml", "the config file")
 func main() {
 	flag.Parse()
 
-	var cfg config.Config
-	conf.MustLoad(*configFile, &cfg)
+	var bootCfg struct {
+		Bootstrap bootstrap.Config `json:"bootstrap"`
+	}
+	conf.MustLoad(*configFile, &bootCfg)
 
-	boot := cfg.Bootstrap
+	boot := bootCfg.Bootstrap
 	if boot.Keys.Config == "" {
 		fmt.Fprintln(os.Stderr, "bootstrap.keys.config is required")
 		return
@@ -47,12 +50,23 @@ func main() {
 		return
 	}
 	full.Bootstrap = boot
-	cfg = full
+	cfg := full
 
 	runtime, err := bootstrap.LoadRestRuntime(context.Background(), cfg.Bootstrap)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load runtime config failed: %v\n", err)
 		return
+	}
+	changed, err := bootstrap.AssignRandomRestPort(&runtime)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "assign random rest port failed: %v\n", err)
+		return
+	}
+	if changed {
+		if err := bootstrap.PutJSON(context.Background(), cfg.Bootstrap.Etcd, cfg.Bootstrap.Keys.Runtime, runtime); err != nil {
+			fmt.Fprintf(os.Stderr, "update runtime config failed: %v\n", err)
+			return
+		}
 	}
 	if err := bootstrap.ApplyRestRuntime(&cfg.RestConf, runtime); err != nil {
 		fmt.Fprintf(os.Stderr, "apply runtime config failed: %v\n", err)
@@ -265,9 +279,9 @@ func applyHTTPTransport(cfg config.ProxyConfig) {
 
 func setErrorHandler() {
 	httpx.SetErrorHandlerCtx(func(ctx context.Context, err error) (int, any) {
-		customErr := errors.GetError(err)
+		customErr := pkgerrors.GetError(err)
 		if customErr == nil {
-			customErr = errors.New(errors.ServiceUnavailable)
+			customErr = pkgerrors.New(pkgerrors.ServiceUnavailable)
 		}
 		logger.Error(ctx, "gateway upstream error", zap.Error(err))
 		resp := response.Response{

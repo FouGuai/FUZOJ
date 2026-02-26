@@ -16,12 +16,15 @@ Value：JSON，内容与服务 `etc/*.yaml` 对应（不包含 `bootstrap`）。
 Key：`{service}.rest.runtime`  
 Value：JSON，对应 `rest.RestConf` 的最小启动字段：  
 `name`、`host`、`port`、`timeout`、`middlewares`，以及可选 `registerKey`。  
-`registerKey` 默认是 `{service}.rest`。
+`timeout` 为毫秒整数（int64）。  
+`registerKey` 默认是 `{service}.rest`。  
+当 `port=0` 时，服务启动会自动分配随机端口并回写到该 runtime key。
 
 2) **运行时配置（RPC）**  
 Key：`{service}.rpc.runtime`  
 Value：JSON，对应 `zrpc.RpcServerConf` 的最小启动字段：  
-`listenOn` 与 `etcd`（含 `hosts`、`key`）。
+`name`、`listenOn` 与 `etcd`（含 `hosts`、`key`）。  
+当 `listenOn` 端口为 `0` 时，服务启动会自动分配随机端口并回写到该 runtime key。
 
 3) **日志配置**  
 Key：`{service}.log`  
@@ -154,12 +157,52 @@ Value：`host:port`
   "cacheConfig":{"rootDir":"/data/judge/cache","ttl":"30m","lockWait":"5s","maxEntries":256,"maxBytes":10737418240},
   "worker":{"poolSize":4,"timeout":"30s"},
   "source":{"bucket":"judge-sources","timeout":"10s"},
-  "problem":{"addr":"127.0.0.1:9001","timeout":"2s","metaTTL":"30s"},
+  "problemRpc":{"etcd":{"hosts":["127.0.0.1:2379"],"key":"problem.rpc"},"timeout":2000,"callTimeout":"2s","metaTTL":"30s"},
   "status":{"ttl":"30m","timeout":"2s","finalTopic":"judge.status.final"},
   "judge":{"workRoot":"/data/judge/work"},
   "sandbox":{"cgroupRoot":"/sys/fs/cgroup","seccompDir":"/etc/judge/seccomp","helperPath":"/usr/local/bin/judge-helper","stdoutStderrMaxBytes":1048576,
     "enableSeccomp":true,"enableCgroup":true,"enableNamespaces":true},
   "language":{"languages":[],"profiles":[]}
+}
+```
+
+### Contest Service
+必需字段：
+- `name` `host` `port`（RestConf）
+- `mysql` `cache` `redis` `kafka` `contest` `leaderboard` `timeouts`
+示例：
+```json
+{
+  "name":"contest",
+  "host":"0.0.0.0",
+  "port":8087,
+  "mysql":{"dataSource":"user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local"},
+  "cache":[{"host":"127.0.0.1:6379","type":"node"}],
+  "redis":{"host":"127.0.0.1:6379","type":"node"},
+  "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"contest-service","minBytes":10240,"maxBytes":10485760,
+    "topics":["judge.status.final","contest.leaderboard.rebuild","contest.hack.finished"]},
+  "contest":{"idempotencyTTL":"10m","resultPersistAfter":"1h","maxParticipantsPerTeam":3,"defaultPageSize":50,"maxPageSize":200},
+  "leaderboard":{"hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","frozenCacheTTL":"10m","snapshotInterval":"5m"},
+  "timeouts":{"db":"3s","cache":"1s","mq":"3s"}
+}
+```
+
+### Contest RPC Service
+必需字段：
+- `name` `listenOn`（RpcServerConf）
+- `mysql` `cache` `kafka` `contest` `leaderboard` `timeouts`
+示例：
+```json
+{
+  "name":"contest.rpc",
+  "listenOn":"0.0.0.0:9094",
+  "mysql":{"dataSource":"user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local"},
+  "cache":[{"host":"127.0.0.1:6379","type":"node"}],
+  "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"contest-rpc-service","minBytes":10240,"maxBytes":10485760,
+    "topics":["judge.status.final","contest.leaderboard.rebuild","contest.hack.finished"]},
+  "contest":{"idempotencyTTL":"10m","resultPersistAfter":"1h","maxParticipantsPerTeam":3,"defaultPageSize":50,"maxPageSize":200},
+  "leaderboard":{"hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","frozenCacheTTL":"10m","snapshotInterval":"5m"},
+  "timeouts":{"db":"3s","cache":"1s","mq":"3s"}
 }
 ```
 

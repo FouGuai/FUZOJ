@@ -1,9 +1,8 @@
 package svc
 
 import (
-	"context"
+	"time"
 
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/config"
 	"fuzoj/services/gateway_service/internal/discovery"
 	"fuzoj/services/gateway_service/internal/repository"
@@ -12,7 +11,6 @@ import (
 	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/queue"
 	"github.com/zeromicro/go-zero/core/stores/redis"
-	"go.uber.org/zap"
 )
 
 type ServiceContext struct {
@@ -38,7 +36,11 @@ func NewServiceContext(cfg config.Config) (*ServiceContext, error) {
 	blacklistRepo := repository.NewTokenBlacklistRepository(tokenLocal, redisClient, cfg.Cache.TokenBlacklistCacheTTL)
 
 	authService := service.NewAuthService(cfg.Auth.JWTSecret, cfg.Auth.JWTIssuer, blacklistRepo, banRepo)
-	rateService := service.NewRateLimitService(redisClient, cfg.Rate.Window, cfg.Redis.ReadTimeout)
+	redisTimeout := cfg.Redis.PingTimeout
+	if redisTimeout <= 0 {
+		redisTimeout = time.Second
+	}
+	rateService := service.NewRateLimitService(redisClient, cfg.Rate.Window, redisTimeout)
 
 	ctx := &ServiceContext{
 		Config:        cfg,
@@ -51,7 +53,6 @@ func NewServiceContext(cfg config.Config) (*ServiceContext, error) {
 
 	registry, err := discovery.NewRegistryManager(cfg.Bootstrap.Etcd)
 	if err != nil {
-		redisClient.Close()
 		return nil, err
 	}
 	ctx.Registry = registry
@@ -60,7 +61,6 @@ func NewServiceContext(cfg config.Config) (*ServiceContext, error) {
 		mqClient, mqErr := kq.NewQueue(cfg.BuildKqConf(), service.NewBanEventHandler(banRepo, cfg.Cache.BanLocalTTL))
 		if mqErr != nil {
 			registry.Close()
-			redisClient.Close()
 			return nil, mqErr
 		}
 		ctx.MQClient = mqClient
@@ -75,11 +75,6 @@ func (s *ServiceContext) Close() {
 	}
 	if s.Registry != nil {
 		s.Registry.Close()
-	}
-	if s.RedisClient != nil {
-		if err := s.RedisClient.Close(); err != nil {
-			logger.Error(context.Background(), "close redis failed", zap.Error(err))
-		}
 	}
 }
 
