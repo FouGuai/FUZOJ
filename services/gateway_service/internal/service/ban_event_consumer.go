@@ -6,10 +6,9 @@ import (
 	"errors"
 	"time"
 
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/repository"
 
-	"go.uber.org/zap"
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 type BanEvent struct {
@@ -37,7 +36,7 @@ func (h *BanEventHandler) Consume(ctx context.Context, _ string, value string) e
 	}
 	var event BanEvent
 	if err := json.Unmarshal([]byte(value), &event); err != nil {
-		logger.Warn(ctx, "parse ban event failed", zap.Error(err))
+		logx.WithContext(ctx).Errorf("parse ban event failed: %v", err)
 		return nil
 	}
 	if event.UserID == 0 {

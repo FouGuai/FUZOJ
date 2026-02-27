@@ -139,6 +139,7 @@ Value：`host:port`
 必需字段：
 - `name` `host` `port`（RestConf）
 - `mysql` `cache` `redis` `kafka` `minio` `cacheConfig` `worker` `source` `problem` `status` `judge` `sandbox` `language`
+注意：`minio.bucket` 必须与 Problem Service 上传数据包使用的 bucket 保持一致，否则 Judge 无法通过 data_pack_key 读取数据包。
 示例：
 ```json
 {

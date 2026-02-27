@@ -21,6 +21,7 @@ import (
 	"fuzoj/services/judge_service/internal/pmodel"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
@@ -211,14 +212,32 @@ func (c *DataPackCache) downloadDataPack(ctx context.Context, meta pmodel.Proble
 	if meta.DataPackKey == "" {
 		return appErr.ValidationError("data_pack_key", "required")
 	}
+	logx.WithContext(ctx).Infof(
+		"download data pack start bucket=%s key=%s dst=%s",
+		c.bucket,
+		meta.DataPackKey,
+		dstPath,
+	)
 	reader, err := c.storage.GetObject(ctx, c.bucket, meta.DataPackKey)
 	if err != nil {
+		logx.WithContext(ctx).Errorf(
+			"download data pack failed bucket=%s key=%s dst=%s err=%v",
+			c.bucket,
+			meta.DataPackKey,
+			dstPath,
+			err,
+		)
 		return appErr.Wrapf(err, appErr.CacheError, "download data pack failed")
 	}
 	defer reader.Close()
 
 	file, err := os.Create(dstPath)
 	if err != nil {
+		logx.WithContext(ctx).Errorf(
+			"create data pack file failed dst=%s err=%v",
+			dstPath,
+			err,
+		)
 		return appErr.Wrapf(err, appErr.CacheError, "create data pack file failed")
 	}
 	defer file.Close()
@@ -226,14 +245,31 @@ func (c *DataPackCache) downloadDataPack(ctx context.Context, meta pmodel.Proble
 	hasher := sha256.New()
 	tee := io.TeeReader(reader, hasher)
 	if _, err := io.Copy(file, tee); err != nil {
+		logx.WithContext(ctx).Errorf(
+			"write data pack file failed dst=%s err=%v",
+			dstPath,
+			err,
+		)
 		return appErr.Wrapf(err, appErr.CacheError, "write data pack file failed")
 	}
 	if meta.DataPackHash != "" {
 		actual := hex.EncodeToString(hasher.Sum(nil))
 		if !strings.EqualFold(actual, meta.DataPackHash) {
+			logx.WithContext(ctx).Errorf(
+				"data pack hash mismatch dst=%s expected=%s actual=%s",
+				dstPath,
+				meta.DataPackHash,
+				actual,
+			)
 			return appErr.New(appErr.CacheError).WithMessage("data pack hash mismatch")
 		}
 	}
+	logx.WithContext(ctx).Infof(
+		"download data pack success bucket=%s key=%s dst=%s",
+		c.bucket,
+		meta.DataPackKey,
+		dstPath,
+	)
 	return nil
 }
 
@@ -263,6 +299,9 @@ func extractDataPack(srcPath, dstDir string) error {
 			continue
 		}
 		cleanName := filepath.Clean(hdr.Name)
+		if cleanName == "." {
+			continue
+		}
 		if strings.HasPrefix(cleanName, "..") || filepath.IsAbs(cleanName) {
 			return appErr.New(appErr.CacheError).WithMessage("invalid tar entry path")
 		}

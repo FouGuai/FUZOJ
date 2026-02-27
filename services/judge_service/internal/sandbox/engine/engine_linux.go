@@ -17,11 +17,11 @@ import (
 	"time"
 
 	appErr "fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/judge_service/internal/sandbox/result"
 	"fuzoj/services/judge_service/internal/sandbox/security"
 	"fuzoj/services/judge_service/internal/sandbox/spec"
 
+	"github.com/zeromicro/go-zero/core/logx"
 	"go.uber.org/zap"
 )
 
@@ -55,6 +55,7 @@ func NewEngine(cfg Config, resolver ProfileResolver) (Engine, error) {
 }
 
 func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.RunResult, error) {
+	logger := logx.WithContext(ctx)
 	if err := validateRunSpec(runSpec); err != nil {
 		return result.RunResult{}, err
 	}
@@ -116,7 +117,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 
 	if e.cfg.EnableCgroup {
 		if err := addProcessToCgroup(cgroupPath, cmd.Process.Pid); err != nil {
-			logger.Warn(ctx, "add process to cgroup failed", zap.String("cgroup", cgroupPath), zap.Error(err))
+			logger.Info(ctx, "add process to cgroup failed", zap.String("cgroup", cgroupPath), zap.Error(err))
 		}
 	}
 
@@ -174,7 +175,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 
 	if waitErr != nil {
 		if helperStderr.Len() > 0 {
-			logger.Warn(ctx, "helper stderr", zap.String("stderr", helperStderr.String()))
+			logger.Info(ctx, "helper stderr", zap.String("stderr", helperStderr.String()))
 		}
 	}
 
@@ -209,7 +210,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 	}
 
 	if waitErr != nil && helperStderr.Len() > 0 {
-		logger.Warn(ctx, "sandbox helper failed", zap.String("stderr", helperStderr.String()))
+		logger.Info(ctx, "sandbox helper failed", zap.String("stderr", helperStderr.String()))
 	}
 
 	return runResult, nil
@@ -230,13 +231,14 @@ func exitCodeFromErr(err error, state *os.ProcessState) int {
 }
 
 func (e *linuxEngine) KillSubmission(ctx context.Context, submissionID string) error {
+	logger := logx.WithContext(ctx)
 	if submissionID == "" {
 		return appErr.ValidationError("submission_id", "required")
 	}
 	paths := e.snapshotCgroups(submissionID)
 	for _, cgroupPath := range paths {
 		if err := killCgroup(cgroupPath); err != nil {
-			logger.Warn(ctx, "kill cgroup failed", zap.String("cgroup", cgroupPath), zap.Error(err))
+			logger.Info(ctx, "kill cgroup failed", zap.String("cgroup", cgroupPath), zap.Error(err))
 		}
 	}
 	return nil

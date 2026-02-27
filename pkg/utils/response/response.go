@@ -2,10 +2,10 @@ package response
 
 import (
 	"fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zeromicro/go-zero/core/logx"
 	"go.uber.org/zap"
 )
 
@@ -44,14 +44,13 @@ func SuccessWithMessage(c *gin.Context, message string, data interface{}) {
 // It automatically extracts error code and message from the error
 func Error(c *gin.Context, err error) {
 	customErr := errors.GetError(err)
-
+	logger := logx.WithContext(c)
 	// Log the error with context
 	logger.Error(c.Request.Context(), "request error",
 		zap.Int("code", int(customErr.Code)),
 		zap.String("message", customErr.Error()),
 		zap.Any("details", customErr.Details),
 		zap.String("stack", customErr.Stack),
-		debugLocationField(),
 	)
 
 	resp := Response{
@@ -69,11 +68,10 @@ func ErrorWithCode(c *gin.Context, code errors.ErrorCode, message string) {
 	if message == "" {
 		message = code.Message()
 	}
-
+	logger := logx.WithContext(c)
 	logger.Error(c.Request.Context(), "request error",
 		zap.Int("code", int(code)),
 		zap.String("message", message),
-		debugLocationField(),
 	)
 
 	resp := Response{
@@ -88,13 +86,12 @@ func ErrorWithCode(c *gin.Context, code errors.ErrorCode, message string) {
 // ErrorWithDetails sends an error response with additional details
 func ErrorWithDetails(c *gin.Context, err error, details interface{}) {
 	customErr := errors.GetError(err)
-
+	logger := logx.WithContext(c)
 	logger.Error(c.Request.Context(), "request error",
 		zap.Int("code", int(customErr.Code)),
 		zap.String("message", customErr.Error()),
 		zap.Any("details", details),
 		zap.String("stack", customErr.Stack),
-		debugLocationField(),
 	)
 
 	resp := Response{
@@ -126,13 +123,6 @@ func Forbidden(c *gin.Context, message string) {
 		message = errors.Forbidden.Message()
 	}
 	ErrorWithCode(c, errors.Forbidden, message)
-}
-
-func debugLocationField() zap.Field {
-	if logger.IsDebug() {
-		return logger.CallerField(3)
-	}
-	return zap.Skip()
 }
 
 // NotFound sends a 404 not found error

@@ -9,13 +9,12 @@ import (
 	"time"
 
 	"fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/config"
 	"fuzoj/services/gateway_service/internal/discovery"
 
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest/httpc"
 	"github.com/zeromicro/go-zero/rest/httpx"
-	"go.uber.org/zap"
 )
 
 // NewHTTPForwarder builds a handler that forwards to targets selected by picker.
@@ -23,7 +22,7 @@ func NewHTTPForwarder(picker discovery.Picker, target config.HttpClientConf) htt
 	return func(w http.ResponseWriter, r *http.Request) {
 		targetAddr, err := picker.Pick()
 		if err != nil {
-			logger.Error(r.Context(), "no upstream targets available", zap.Error(err))
+			logx.WithContext(r.Context()).Errorf("no upstream targets available: %v", err)
 			httpx.ErrorCtx(r.Context(), w, errors.New(errors.ServiceUnavailable))
 			return
 		}
@@ -43,7 +42,7 @@ func NewHTTPForwarder(picker discovery.Picker, target config.HttpClientConf) htt
 
 		resp, err := httpc.DoRequest(req)
 		if err != nil {
-			logger.Error(r.Context(), "forward request failed", zap.Error(err))
+			logx.WithContext(r.Context()).Errorf("forward request failed: %v", err)
 			httpx.ErrorCtx(r.Context(), w, err)
 			return
 		}
@@ -57,7 +56,7 @@ func NewHTTPForwarder(picker discovery.Picker, target config.HttpClientConf) htt
 
 		w.WriteHeader(resp.StatusCode)
 		if _, err = io.Copy(w, resp.Body); err != nil {
-			logger.Error(r.Context(), "copy upstream response failed", zap.Error(err))
+			logx.WithContext(r.Context()).Errorf("copy upstream response failed: %v", err)
 		}
 	}
 }

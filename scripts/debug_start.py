@@ -267,9 +267,12 @@ def start_service(root: Path, log_dir: Path, bin_dir: Path, service: Dict) -> No
         raise SystemExit(f"binary not found: {bin_path}")
 
     log_path = log_dir / f"{name}.log"
+    cmd = [str(bin_path), "-f", str(config_path)]
+    if service.get("runAsRoot") and os.geteuid() != 0:
+        raise SystemExit(f"{name} requires root, please run debug_start.py with sudo")
     with log_path.open("ab") as log_file:
         proc = subprocess.Popen(
-            [str(bin_path), "-f", str(config_path)],
+            cmd,
             cwd=str(root),
             stdin=subprocess.DEVNULL,
             stdout=log_file,

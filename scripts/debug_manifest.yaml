@@ -43,6 +43,7 @@ services:
   - name: "judge-service"
     build: "./services/judge_service"
     config: "services/judge_service/etc/judge.yaml"
+    runAsRoot: true
   - name: "contest-service"
     build: "./services/contest_service"
     config: "services/contest_service/etc/contest.yaml"

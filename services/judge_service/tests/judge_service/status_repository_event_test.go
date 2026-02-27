@@ -57,14 +57,14 @@ func TestStatusRepositorySaveSkipsNonFinalStatus(t *testing.T) {
 	}
 }
 
-func TestStatusRepositorySaveFinalStatusRequiresPublisher(t *testing.T) {
+func TestStatusRepositorySaveFinalStatusWithoutPublisher(t *testing.T) {
 	t.Parallel()
 	repo := repository.NewStatusRepository(nil, nil, time.Minute, time.Minute, nil)
 	status := pmodel.JudgeStatusResponse{
 		SubmissionID: "sub-3",
 		Status:       result.StatusFinished,
 	}
-	if err := repo.Save(context.Background(), status); err == nil {
-		t.Fatalf("expected error when publisher is nil")
+	if err := repo.Save(context.Background(), status); err != nil {
+		t.Fatalf("save final status without publisher failed: %v", err)
 	}
 }

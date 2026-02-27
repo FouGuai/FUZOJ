@@ -4,10 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"fuzoj/pkg/utils/logger"
-
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest/httpx"
-	"go.uber.org/zap"
 )
 
 // RequestLogger logs request summaries after handling.
@@ -23,14 +21,13 @@ func RequestLogger() func(http.HandlerFunc) http.HandlerFunc {
 				path = routePath
 			}
 
-			logger.Info(
-				r.Context(),
-				"request completed",
-				zap.String("method", r.Method),
-				zap.String("path", path),
-				zap.Int("status", recorder.status),
-				zap.Duration("latency", time.Since(start)),
-				zap.String("client_ip", httpx.GetRemoteAddr(r)),
+			logx.WithContext(r.Context()).Infof(
+				"request completed method=%s path=%s status=%d latency=%s client_ip=%s",
+				r.Method,
+				path,
+				recorder.status,
+				time.Since(start),
+				httpx.GetRemoteAddr(r),
 			)
 		}
 	}

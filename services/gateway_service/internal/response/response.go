@@ -6,9 +6,8 @@ import (
 
 	"fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
-	"fuzoj/pkg/utils/logger"
 
-	"go.uber.org/zap"
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 // Response represents a standard API response.
@@ -26,13 +25,12 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	customErr := errors.GetError(err)
-
-	logger.Error(r.Context(), "request error",
-		zap.Int("code", int(customErr.Code)),
-		zap.String("message", customErr.Error()),
-		zap.Any("details", customErr.Details),
-		zap.String("stack", customErr.Stack),
-		debugLocationField(),
+	logx.WithContext(r.Context()).Errorf(
+		"request error code=%d message=%s details=%v stack=%s",
+		int(customErr.Code),
+		customErr.Error(),
+		customErr.Details,
+		customErr.Stack,
 	)
 
 	resp := Response{
@@ -49,10 +47,10 @@ func WriteErrorCode(w http.ResponseWriter, r *http.Request, code errors.ErrorCod
 	if message == "" {
 		message = code.Message()
 	}
-	logger.Error(r.Context(), "request error",
-		zap.Int("code", int(code)),
-		zap.String("message", message),
-		debugLocationField(),
+	logx.WithContext(r.Context()).Errorf(
+		"request error code=%d message=%s",
+		int(code),
+		message,
 	)
 
 	resp := Response{
@@ -77,11 +75,4 @@ func writeJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func debugLocationField() zap.Field {
-	if logger.IsDebug() {
-		return logger.CallerField(3)
-	}
-	return zap.Skip()
 }

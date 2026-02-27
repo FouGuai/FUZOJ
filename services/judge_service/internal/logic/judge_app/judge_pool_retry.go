@@ -6,9 +6,9 @@ import (
 	"time"
 
 	appErr "fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/judge_service/internal/pmodel"
 
+	"github.com/zeromicro/go-zero/core/logx"
 	"go.uber.org/zap"
 )
 
@@ -80,6 +80,7 @@ func ComputePoolBackoff(retryCount int, base, max time.Duration) time.Duration {
 
 // RequeueForPoolFull republishes a message when worker pool is full.
 func RequeueForPoolFull(ctx context.Context, retryPusher, deadPusher MessagePusher, retryTopic, deadLetter string, maxRetry int, baseDelay, maxDelay time.Duration, payload pmodel.JudgeMessage) error {
+	logger := logx.WithContext(ctx)
 	if retryPusher == nil || retryTopic == "" {
 		return appErr.New(appErr.ServiceUnavailable).WithMessage("retry queue is not configured")
 	}
@@ -89,7 +90,7 @@ func RequeueForPoolFull(ctx context.Context, retryPusher, deadPusher MessagePush
 	}
 	if maxRetry > 0 && retryCount >= maxRetry {
 		if deadLetter == "" || deadPusher == nil {
-			logger.Warn(ctx, "worker pool retry exhausted without dead letter", zap.Int("retry_count", retryCount), zap.String("message_id", payload.SubmissionID))
+			logger.Info(ctx, "worker pool retry exhausted without dead letter", zap.Int("retry_count", retryCount), zap.String("message_id", payload.SubmissionID))
 			return appErr.New(appErr.JudgeQueueFull).WithMessage("worker pool is full")
 		}
 		payload.PoolRetry = retryCount
@@ -97,7 +98,7 @@ func RequeueForPoolFull(ctx context.Context, retryPusher, deadPusher MessagePush
 		if err != nil {
 			return appErr.Wrapf(err, appErr.InvalidParams, "encode retry message failed")
 		}
-		logger.Warn(ctx, "worker pool retry exhausted, sending to dead letter", zap.Int("retry_count", retryCount), zap.String("message_id", payload.SubmissionID), zap.String("topic", deadLetter))
+		logger.Info(ctx, "worker pool retry exhausted, sending to dead letter", zap.Int("retry_count", retryCount), zap.String("message_id", payload.SubmissionID), zap.String("topic", deadLetter))
 		return deadPusher.PushWithKey(ctx, payload.SubmissionID, string(raw))
 	}
 	delay := ComputePoolBackoff(retryCount, baseDelay, maxDelay)
@@ -106,7 +107,7 @@ func RequeueForPoolFull(ctx context.Context, retryPusher, deadPusher MessagePush
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
-			logger.Warn(ctx, "worker pool retry canceled during backoff", zap.Int("retry_count", retryCount), zap.String("message_id", payload.SubmissionID), zap.Duration("delay", delay))
+			logger.Info(ctx, "worker pool retry canceled during backoff", zap.Int("retry_count", retryCount), zap.String("message_id", payload.SubmissionID), zap.Duration("delay", delay))
 			return ctx.Err()
 		case <-timer.C:
 		}

@@ -1,4 +1,4 @@
-.PHONY: start down connect build status test
+.PHONY: start down connect build status test killall
 
 start:
 	@$(MAKE) down
@@ -9,6 +9,9 @@ start:
 
 down:
 	@python3 ../scripts/debug_stop.py
+
+killall:
+	@bash ./killall.sh
 
 build:
 	@../scripts/build_services.sh

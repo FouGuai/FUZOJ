@@ -14,7 +14,6 @@ import (
 	"fuzoj/pkg/bootstrap"
 	pkgerrors "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/config"
 	"fuzoj/services/gateway_service/internal/discovery"
 	"fuzoj/services/gateway_service/internal/middleware"
@@ -23,9 +22,9 @@ import (
 	"fuzoj/services/gateway_service/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest"
 	"github.com/zeromicro/go-zero/rest/httpx"
-	"go.uber.org/zap"
 )
 
 var configFile = flag.String("f", "etc/gateway.yaml", "the config file")
@@ -73,21 +72,15 @@ func main() {
 		return
 	}
 
-	var logCfg logger.Config
+	var logCfg logx.LogConf
 	if err := bootstrap.LoadJSON(context.Background(), cfg.Bootstrap.Etcd, cfg.Bootstrap.Keys.Log, &logCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "load log config failed: %v\n", err)
 		return
 	}
-	cfg.Logger = logCfg
-
-	if err := logger.Init(cfg.Logger); err != nil {
-		fmt.Fprintf(os.Stderr, "init logger failed: %v\n", err)
-		return
-	}
-	defer func() { _ = logger.Sync() }()
+	logx.MustSetup(logCfg)
 
 	if err := cfg.Normalize(); err != nil {
-		logger.Error(context.Background(), "load config failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("load config failed: %v", err)
 		return
 	}
 
@@ -96,19 +89,19 @@ func main() {
 
 	ctx, err := svc.NewServiceContext(cfg)
 	if err != nil {
-		logger.Error(context.Background(), "init service context failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("init service context failed: %v", err)
 		return
 	}
 	defer ctx.Close()
 
 	if cfg.BanEvent.Enabled && ctx.MQClient != nil {
-		logger.Info(context.Background(), "start ban event consumer")
+		logx.WithContext(context.Background()).Info("start ban event consumer")
 		go ctx.MQClient.Start()
 	}
 
 	routes, matcher, err := buildGatewayRoutes(cfg, ctx.Registry)
 	if err != nil {
-		logger.Error(context.Background(), "build gateway config failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("build gateway config failed: %v", err)
 		return
 	}
 
@@ -138,20 +131,20 @@ func main() {
 		},
 	})
 
-	logger.Info(context.Background(), "gateway http server started", zap.String("addr", cfg.Host+":"+intToString(cfg.Port)))
+	logx.WithContext(context.Background()).Infof("gateway http server started addr=%s", cfg.Host+":"+intToString(cfg.Port))
 	registerKey, err := bootstrap.RestRegisterKey(runtime)
 	if err != nil {
-		logger.Error(context.Background(), "build register key failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("build register key failed: %v", err)
 		return
 	}
 	registerValue, err := bootstrap.RestRegisterValue(runtime)
 	if err != nil {
-		logger.Error(context.Background(), "build register value failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("build register value failed: %v", err)
 		return
 	}
 	pub, err := bootstrap.RegisterService(cfg.Bootstrap.Etcd, registerKey, registerValue)
 	if err != nil {
-		logger.Error(context.Background(), "register service failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("register service failed: %v", err)
 		return
 	}
 	defer pub.Stop()
@@ -283,7 +276,7 @@ func setErrorHandler() {
 		if customErr == nil {
 			customErr = pkgerrors.New(pkgerrors.ServiceUnavailable)
 		}
-		logger.Error(ctx, "gateway upstream error", zap.Error(err))
+		logx.WithContext(ctx).Errorf("gateway upstream error: %v", err)
 		resp := response.Response{
 			Code:    customErr.Code,
 			Message: customErr.Error(),

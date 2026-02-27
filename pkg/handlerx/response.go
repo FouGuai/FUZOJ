@@ -7,8 +7,8 @@ import (
 
 	pkgerrors "fuzoj/pkg/errors"
 	"fuzoj/pkg/utils/contextkey"
-	"fuzoj/pkg/utils/logger"
 
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest/httpx"
 	"go.uber.org/zap"
 )
@@ -22,13 +22,12 @@ type errorResponse struct {
 
 func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	customErr := pkgerrors.GetError(err)
-
+	logger := logx.WithContext(r.Context())
 	logger.Error(r.Context(), "request error",
 		zap.Int("code", int(customErr.Code)),
 		zap.String("message", customErr.Error()),
 		zap.Any("details", customErr.Details),
 		zap.String("stack", customErr.Stack),
-		debugLocationField(),
 	)
 
 	resp := errorResponse{
@@ -64,11 +63,4 @@ func traceIDFromContext(ctx context.Context) string {
 		return fmt.Sprint(traceID)
 	}
 	return ""
-}
-
-func debugLocationField() zap.Field {
-	if logger.IsDebug() {
-		return logger.CallerField(3)
-	}
-	return zap.Skip()
 }

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"fuzoj/pkg/utils/contextkey"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/gateway_service/internal/config"
 	"fuzoj/services/gateway_service/internal/discovery"
 	"fuzoj/services/gateway_service/internal/middleware"
@@ -20,43 +19,39 @@ import (
 	"fuzoj/services/gateway_service/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest"
 	"github.com/zeromicro/go-zero/rest/httpx"
-	"go.uber.org/zap"
 )
 
 func Run(configPath string) {
 	var cfg config.Config
 	conf.MustLoad(configPath, &cfg)
 	if err := cfg.Normalize(); err != nil {
-		logger.Error(context.Background(), "load config failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("load config failed: %v", err)
 		return
 	}
 
-	if err := logger.Init(cfg.Logger); err != nil {
-		logger.Error(context.Background(), "init logger failed", zap.Error(err))
-		return
-	}
-	defer func() { _ = logger.Sync() }()
+	logx.MustSetup(cfg.Logger)
 
 	applyHTTPTransport(cfg.Proxy)
 	setErrorHandler()
 
 	ctx, err := svc.NewServiceContext(cfg)
 	if err != nil {
-		logger.Error(context.Background(), "init service context failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("init service context failed: %v", err)
 		return
 	}
 	defer ctx.Close()
 
 	if cfg.BanEvent.Enabled && ctx.MQClient != nil {
-		logger.Info(context.Background(), "start ban event consumer")
+		logx.WithContext(context.Background()).Info("start ban event consumer")
 		go ctx.MQClient.Start()
 	}
 
 	routes, matcher, err := buildGatewayRoutes(cfg, ctx.Registry)
 	if err != nil {
-		logger.Error(context.Background(), "build gateway config failed", zap.Error(err))
+		logx.WithContext(context.Background()).Errorf("build gateway config failed: %v", err)
 		return
 	}
 
@@ -86,7 +81,7 @@ func Run(configPath string) {
 		},
 	})
 
-	logger.Info(context.Background(), "gateway http server started", zap.String("addr", cfg.Host+":"+strconv.Itoa(cfg.Port)))
+	logx.WithContext(context.Background()).Infof("gateway http server started addr=%s", cfg.Host+":"+strconv.Itoa(cfg.Port))
 	server.Start()
 }
 
@@ -215,7 +210,7 @@ func setErrorHandler() {
 		if customErr == nil {
 			customErr = pkgerrors.New(pkgerrors.ServiceUnavailable)
 		}
-		logger.Error(ctx, "gateway upstream error", zap.Error(err))
+		logx.WithContext(ctx).Errorf("gateway upstream error: %v", err)
 		resp := response.Response{
 			Code:    customErr.Code,
 			Message: customErr.Error(),

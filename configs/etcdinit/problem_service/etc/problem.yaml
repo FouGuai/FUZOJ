@@ -37,7 +37,7 @@ MinIO:
   AccessKey: minioadmin
   SecretKey: minioadmin
   UseSSL: false
-  Bucket: problem-data
+  Bucket: fuzoj
   PresignTTL: 15m
 Upload:
   KeyPrefix: problems

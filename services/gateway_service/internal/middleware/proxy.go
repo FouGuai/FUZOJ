@@ -3,13 +3,12 @@ package middleware
 import (
 	"context"
 	"fmt"
-	"fuzoj/pkg/utils/logger"
-	"go.uber.org/zap"
 	"net/http"
 	"strings"
 	"time"
 
 	"fuzoj/pkg/utils/contextkey"
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
@@ -58,7 +57,11 @@ func injectHeaders(r *http.Request, routeName string) {
 	if routeName != "" {
 		r.Header.Set("X-Route-Name", routeName)
 	}
-	logger.Info(ctx, "proxy request headers", zap.String("route", routeName), zap.String("idempotency_key", r.Header.Get("Idempotency-Key")))
+	logx.WithContext(ctx).Infof(
+		"proxy request headers route=%s idempotency_key=%s",
+		routeName,
+		r.Header.Get("Idempotency-Key"),
+	)
 	if realIP := r.Header.Get("X-Real-IP"); realIP == "" {
 		r.Header.Set("X-Real-IP", httpx.GetRemoteAddr(r))
 	}

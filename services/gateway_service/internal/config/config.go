@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"fuzoj/pkg/bootstrap"
-	"fuzoj/pkg/utils/logger"
 
 	"github.com/zeromicro/go-queue/kq"
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/rest"
 )
@@ -70,7 +70,7 @@ type CORSConfig struct {
 
 // AuthPolicy defines auth behavior for a route.
 type AuthPolicy struct {
-	Mode  string   `json:"mode"`  // public | protected
+	Mode  string   `json:"mode"`           // public | protected
 	Roles []string `json:"roles,optional"` // optional
 }
 
@@ -123,7 +123,7 @@ type Config struct {
 	Rate      RateLimitConfig  `json:"rateLimit"`
 	Proxy     ProxyConfig      `json:"proxy"`
 	CORS      CORSConfig       `json:"cors"`
-	Logger    logger.Config    `json:"logger"`
+	Logger    logx.LogConf     `json:"logger"`
 }
 
 // KafkaConfig holds Kafka client settings for kq.

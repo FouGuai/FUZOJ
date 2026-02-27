@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	pkgerrors "fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 
+	"github.com/zeromicro/go-zero/core/logx"
 	"go.uber.org/zap"
 )
 
@@ -60,8 +60,9 @@ func (s *authApp) clearLoginFailure(ctx context.Context, username, ip string) {
 
 func (s *authApp) getFailCount(ctx context.Context, key string) int {
 	value, err := s.loginFailRedis.GetCtx(ctx, key)
+	logger := logx.WithContext(ctx)
 	if err != nil {
-		logger.Warn(ctx, "get login fail counter failed", zap.String("key", key), zap.Error(err))
+		logger.Info(ctx, "get login fail counter failed", zap.String("key", key), zap.Error(err))
 		return 0
 	}
 	if value == "" {
@@ -70,7 +71,7 @@ func (s *authApp) getFailCount(ctx context.Context, key string) int {
 
 	count, err := strconv.Atoi(value)
 	if err != nil {
-		logger.Warn(ctx, "parse login fail counter failed", zap.String("key", key), zap.Error(err))
+		logger.Info(ctx, "parse login fail counter failed", zap.String("key", key), zap.Error(err))
 		return 0
 	}
 	return count
@@ -78,8 +79,9 @@ func (s *authApp) getFailCount(ctx context.Context, key string) int {
 
 func (s *authApp) incrementFailKey(ctx context.Context, key string) {
 	count, err := s.loginFailRedis.IncrCtx(ctx, key)
+	logger := logx.WithContext(ctx)
 	if err != nil {
-		logger.Warn(ctx, "increment login fail counter failed", zap.String("key", key), zap.Error(err))
+		logger.Info(ctx, "increment login fail counter failed", zap.String("key", key), zap.Error(err))
 		return
 	}
 
@@ -87,7 +89,7 @@ func (s *authApp) incrementFailKey(ctx context.Context, key string) {
 		ttlSeconds := int(s.config.LoginFailTTL.Seconds())
 		if ttlSeconds > 0 {
 			if err := s.loginFailRedis.ExpireCtx(ctx, key, ttlSeconds); err != nil {
-				logger.Warn(ctx, "set login fail counter ttl failed", zap.String("key", key), zap.Error(err))
+				logger.Info(ctx, "set login fail counter ttl failed", zap.String("key", key), zap.Error(err))
 			}
 		}
 	}

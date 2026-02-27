@@ -12,6 +12,8 @@ import (
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/judge_service/internal/pmodel"
 	"fuzoj/services/judge_service/internal/sandbox"
+
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 func (s *JudgeApp) downloadSource(ctx context.Context, payload pmodel.JudgeMessage) (string, error) {
@@ -28,6 +30,14 @@ func (s *JudgeApp) downloadSource(ctx context.Context, payload pmodel.JudgeMessa
 	}
 	reader, err := s.storage.GetObject(ctxStorage, s.sourceBucket, payload.SourceKey)
 	if err != nil {
+		logx.WithContext(ctxStorage).Errorf(
+			"download source failed: %v submission_id=%s bucket=%s key=%s timeout=%s",
+			err,
+			payload.SubmissionID,
+			s.sourceBucket,
+			payload.SourceKey,
+			s.storageTimeout,
+		)
 		return "", appErr.Wrapf(err, appErr.JudgeSystemError, "download source failed")
 	}
 	defer reader.Close()
