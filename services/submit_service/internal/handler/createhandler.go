@@ -5,6 +5,7 @@ package handler
 
 import (
 	"context"
+	"fuzoj/pkg/handlerx"
 	"net/http"
 
 	"fuzoj/pkg/utils/contextkey"
@@ -18,7 +19,7 @@ func CreateHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req types.CreateSubmissionRequest
 		if err := httpx.Parse(r, &req); err != nil {
-			writeError(w, r, badRequestError())
+			handlerx.WriteError(w, r, handlerx.BadRequestError())
 			return
 		}
 
@@ -26,7 +27,7 @@ func CreateHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		l := logic.NewCreateLogic(ctx, svcCtx)
 		resp, err := l.Create(&req)
 		if err != nil {
-			writeError(w, r, err)
+			handlerx.WriteError(w, r, err)
 		} else {
 			httpx.OkJsonCtx(r.Context(), w, resp)
 		}

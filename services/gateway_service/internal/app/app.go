@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	pkgerrors "fuzoj/pkg/errors"
 	"net"
 	"net/http"
 	"strconv"
@@ -210,9 +211,9 @@ func applyHTTPTransport(cfg config.ProxyConfig) {
 
 func setErrorHandler() {
 	httpx.SetErrorHandlerCtx(func(ctx context.Context, err error) (int, any) {
-		customErr := errors.GetError(err)
+		customErr := pkgerrors.GetError(err)
 		if customErr == nil {
-			customErr = errors.New(errors.ServiceUnavailable)
+			customErr = pkgerrors.New(pkgerrors.ServiceUnavailable)
 		}
 		logger.Error(ctx, "gateway upstream error", zap.Error(err))
 		resp := response.Response{

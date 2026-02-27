@@ -35,6 +35,8 @@ import (
 
 var configFile = flag.String("f", "etc/judge.yaml", "the config file")
 
+const consumerRetryDelay = 3 * time.Second
+
 func main() {
 	flag.Parse()
 
@@ -189,35 +191,47 @@ func main() {
 	problemClient := problemclient.NewClient(problemv1.NewProblemServiceClient(rpcClient.Conn()))
 	ctx.ProblemClient = problemClient
 
-	consumer := logic.NewJudgeConsumerLogic(context.Background(), ctx)
-	confs, err := weighted_kq.BuildWeightedKqConfs(weighted_kq.WeightedKqOptions{
-		Brokers:         c.Kafka.Brokers,
-		Group:           c.Kafka.ConsumerGroup,
-		Topics:          c.Kafka.Topics,
-		TopicWeights:    c.Kafka.TopicWeights,
-		ConsumersTotal:  c.Kafka.PrefetchCount,
-		ProcessorsTotal: c.Kafka.Concurrency,
-		MinBytes:        c.Kafka.MinBytes,
-		MaxBytes:        c.Kafka.MaxBytes,
-		ServiceName:     c.Name,
-		RetryTopic:      c.Kafka.RetryTopic,
-		AutoAddRetry:    true,
-	})
-	if err != nil {
-		logx.Errorf("build weighted kq configs failed: %v", err)
-		return
-	}
-	queueGroup, err := weighted_kq.NewWeightedKqQueues(confs, consumer)
-	if err != nil {
-		logx.Errorf("init kq consumers failed: %v", err)
-		return
-	}
-	go queueGroup.Start()
-	defer queueGroup.Stop()
+	go startConsumerLoop(ctx, &c)
 	handler.RegisterHandlers(server, ctx)
 
 	logx.Infof("starting server at %s:%d...", c.Host, c.Port)
 	server.Start()
+}
+
+func startConsumerLoop(ctx *svc.ServiceContext, c *config.Config) {
+	for {
+		consumer := logic.NewJudgeConsumerLogic(context.Background(), ctx)
+		confs, err := weighted_kq.BuildWeightedKqConfs(weighted_kq.WeightedKqOptions{
+			Brokers:         c.Kafka.Brokers,
+			Group:           c.Kafka.ConsumerGroup,
+			Topics:          c.Kafka.Topics,
+			TopicWeights:    c.Kafka.TopicWeights,
+			ConsumersTotal:  c.Kafka.PrefetchCount,
+			ProcessorsTotal: c.Kafka.Concurrency,
+			MinBytes:        c.Kafka.MinBytes,
+			MaxBytes:        c.Kafka.MaxBytes,
+			ServiceName:     c.Name,
+			RetryTopic:      c.Kafka.RetryTopic,
+			AutoAddRetry:    true,
+		})
+		if err != nil {
+			logx.Errorf("build weighted kq configs failed: %v", err)
+			time.Sleep(consumerRetryDelay)
+			continue
+		}
+		logx.Infof("judge consumer config topics=%v group=%s brokers=%v", c.Kafka.Topics, c.Kafka.ConsumerGroup, c.Kafka.Brokers)
+		queueGroup, err := weighted_kq.NewWeightedKqQueues(confs, consumer)
+		if err != nil {
+			logx.Errorf("init kq consumers failed: %v", err)
+			time.Sleep(consumerRetryDelay)
+			continue
+		}
+		logx.Infof("judge consumer group started")
+		queueGroup.Start()
+		queueGroup.Stop()
+		logx.Infof("judge consumer group stopped, restarting in %s", consumerRetryDelay)
+		time.Sleep(consumerRetryDelay)
+	}
 }
 
 func validateConfig(ctx *svc.ServiceContext, c *config.Config) error {

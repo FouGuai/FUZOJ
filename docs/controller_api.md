@@ -59,8 +59,8 @@
     - `expected_sha256`（string）
     - `content_type`（string）
     - `created_by`（int64）
-    - `client_type`（string，保留字段）
-    - `upload_strategy`（string，保留字段）
+    - `client_type`（string，必填，保留字段）
+    - `upload_strategy`（string，必填，保留字段）
   - 响应体：`PrepareUploadResponse`
     - `upload_id`（int64）
     - `problem_id`（int64）
@@ -148,9 +148,9 @@
     - `user_id`（int64，必填）
     - `language_id`（string，必填）
     - `source_code`（string，必填）
-    - `contest_id`（string，可选）
-    - `scene`（string，可选）
-    - `extra_compile_flags`（[]string，可选）
+    - `contest_id`（string，必填，可为空字符串）
+    - `scene`（string，必填）
+    - `extra_compile_flags`（[]string，必填，可为空数组）
   - 响应体：`SubmitResponse`
     - `submission_id`（string）
     - `status`（string）

@@ -13,7 +13,6 @@ import (
 
 	"fuzoj/internal/common/storage"
 	appErr "fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/submit_service/internal/domain"
 	"fuzoj/services/submit_service/internal/repository"
 	"fuzoj/services/submit_service/internal/svc"
@@ -21,7 +20,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
-	"go.uber.org/zap"
 )
 
 const (
@@ -319,7 +317,7 @@ func (a *SubmitApp) finalizeIdempotency(ctx context.Context, key, submissionID s
 	ctxCache := withTimeout(ctx, a.timeouts.Cache)
 	defer ctxCache.cancel()
 	if err := a.redis.SetexCtx(ctxCache.ctx, cacheKey, submissionID, ttlSeconds(ttl)); err != nil {
-		logger.Warn(ctx, "update idempotency key failed", zap.Error(err))
+		logx.WithContext(ctx).Errorf("update idempotency key failed: %v", err)
 	}
 }
 
@@ -331,7 +329,7 @@ func (a *SubmitApp) releaseIdempotency(ctx context.Context, key string, acquired
 	ctxCache := withTimeout(ctx, a.timeouts.Cache)
 	defer ctxCache.cancel()
 	if _, err := a.redis.DelCtx(ctxCache.ctx, cacheKey); err != nil {
-		logger.Warn(ctx, "release idempotency key failed", zap.Error(err))
+		logx.WithContext(ctx).Errorf("release idempotency key failed: %v", err)
 	}
 }
 
@@ -425,19 +423,25 @@ func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.S
 	ctxMQ := withTimeout(ctx, a.timeouts.MQ)
 	defer ctxMQ.cancel()
 	if err := pusher.PushWithKey(ctxMQ.ctx, submission.SubmissionID, string(body)); err != nil {
-		logx.WithContext(ctxMQ.ctx).Errorf("publish judge message failed: %v", err)
-		logger.Error(
-			ctxMQ.ctx,
-			"publish judge message failed",
-			zap.Error(err),
-			zap.String("topic", topic),
-			zap.String("submission_id", submission.SubmissionID),
-			zap.Int64("problem_id", submission.ProblemID),
-			zap.Int64("user_id", submission.UserID),
-			zap.String("scene", submission.Scene),
+		logx.WithContext(ctxMQ.ctx).Errorf(
+			"publish judge message failed: %v topic=%s submission_id=%s problem_id=%d user_id=%d scene=%s",
+			err,
+			topic,
+			submission.SubmissionID,
+			submission.ProblemID,
+			submission.UserID,
+			submission.Scene,
 		)
 		return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "publish judge message failed")
 	}
+	logx.WithContext(ctxMQ.ctx).Infof(
+		"publish judge message ok topic=%s submission_id=%s problem_id=%d user_id=%d scene=%s",
+		topic,
+		submission.SubmissionID,
+		submission.ProblemID,
+		submission.UserID,
+		submission.Scene,
+	)
 	return nil
 }
 

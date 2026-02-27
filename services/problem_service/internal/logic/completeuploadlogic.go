@@ -28,6 +28,7 @@ func NewCompleteUploadLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Co
 }
 
 func (l *CompleteUploadLogic) CompleteUpload(req *types.CompleteUploadRequest) (resp *types.CompleteUploadResponse, err error) {
+	l.Logger.Infof("complete upload request received problem_id=%d upload_id=%d parts=%d", req.Id, req.UploadId, len(req.Parts))
 	problemApp := problem_app.NewProblemAppFromContext(l.svcCtx)
 	parts := make([]problem_app.CompletedPartInput, 0, len(req.Parts))
 	for _, part := range req.Parts {
@@ -46,7 +47,9 @@ func (l *CompleteUploadLogic) CompleteUpload(req *types.CompleteUploadRequest) (
 		DataPackHash:    req.DataPackHash,
 	})
 	if err != nil {
+		l.Logger.Errorf("complete upload failed problem_id=%d upload_id=%d err=%v", req.Id, req.UploadId, err)
 		return nil, err
 	}
+	l.Logger.Infof("complete upload succeeded problem_id=%d upload_id=%d version=%d", req.Id, req.UploadId, output.Version)
 	return buildCompleteUploadResponse(l.ctx, output), nil
 }

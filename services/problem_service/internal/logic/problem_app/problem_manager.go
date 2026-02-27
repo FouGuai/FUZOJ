@@ -12,11 +12,10 @@ import (
 	"fuzoj/internal/common/db"
 	"fuzoj/internal/common/storage"
 	pkgerrors "fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/problem_service/internal/repository"
 
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
-	"go.uber.org/zap"
 )
 
 const (
@@ -154,7 +153,7 @@ func (m *problemApp) GetLatestMeta(ctx context.Context, problemID int64) (reposi
 		if err == repository.ErrProblemNotFound {
 			return repository.ProblemLatestMeta{}, pkgerrors.New(pkgerrors.ProblemNotFound)
 		}
-		logger.Error(ctx, "get latest meta failed", zap.Int64("problem_id", problemID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("get latest meta failed problem_id=%d err=%v", problemID, err)
 		return repository.ProblemLatestMeta{}, pkgerrors.Wrap(fmt.Errorf("get latest meta failed: %w", err), pkgerrors.DatabaseError)
 	}
 	return meta, nil
@@ -171,7 +170,7 @@ func (m *problemApp) CreateProblem(ctx context.Context, input CreateInput) (int6
 	}
 	id, err := m.repo.Create(ctx, nil, problem)
 	if err != nil {
-		logger.Error(ctx, "create problem failed", zap.Error(err))
+		logx.WithContext(ctx).Errorf("create problem failed err=%v", err)
 		return 0, pkgerrors.Wrap(fmt.Errorf("create problem failed: %w", err), pkgerrors.ProblemCreateFailed)
 	}
 	return id, nil
@@ -185,7 +184,7 @@ func (m *problemApp) DeleteProblem(ctx context.Context, problemID int64) error {
 		if err == repository.ErrProblemNotFound {
 			return pkgerrors.New(pkgerrors.ProblemNotFound)
 		}
-		logger.Error(ctx, "delete problem failed", zap.Int64("problem_id", problemID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("delete problem failed problem_id=%d err=%v", problemID, err)
 		return pkgerrors.Wrap(fmt.Errorf("delete problem failed: %w", err), pkgerrors.ProblemDeleteFailed)
 	}
 	_ = m.repo.InvalidateLatestMetaCache(ctx, problemID)
@@ -194,7 +193,7 @@ func (m *problemApp) DeleteProblem(ctx context.Context, problemID int64) error {
 	}
 	if m.cleanupPublisher != nil {
 		if err := m.cleanupPublisher.PublishProblemDeleted(ctx, problemID); err != nil {
-			logger.Warn(ctx, "publish cleanup event failed", zap.Int64("problem_id", problemID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("publish cleanup event failed problem_id=%d err=%v", problemID, err)
 		}
 	}
 	return nil
@@ -207,7 +206,7 @@ func (m *problemApp) PrepareDataPackUpload(ctx context.Context, input PrepareUpl
 	if m.repo != nil {
 		exists, err := m.repo.Exists(ctx, nil, input.ProblemID)
 		if err != nil {
-			logger.Error(ctx, "check problem exists failed", zap.Int64("problem_id", input.ProblemID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("check problem exists failed problem_id=%d err=%v", input.ProblemID, err)
 			return PrepareUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("check problem exists failed: %w", err), pkgerrors.DatabaseError)
 		}
 		if !exists {
@@ -251,7 +250,7 @@ func (m *problemApp) PrepareDataPackUpload(ctx context.Context, input PrepareUpl
 			ExpiresAt:         existing.ExpiresAt,
 		}, nil
 	} else if !errors.Is(err, repository.ErrUploadNotFound) {
-		logger.Error(ctx, "get upload session failed", zap.Int64("problem_id", input.ProblemID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("get upload session failed problem_id=%d err=%v", input.ProblemID, err)
 		return PrepareUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("get upload session failed: %w", err), pkgerrors.DatabaseError)
 	}
 
@@ -294,11 +293,11 @@ func (m *problemApp) PrepareDataPackUpload(ctx context.Context, input PrepareUpl
 			if err2 == nil {
 				created = ex
 			} else {
-				logger.Error(ctx, "retry get upload session failed", zap.Int64("problem_id", input.ProblemID), zap.Error(err2))
+				logx.WithContext(ctx).Errorf("retry get upload session failed problem_id=%d err=%v", input.ProblemID, err2)
 				return PrepareUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("retry get upload session failed: %w", err2), pkgerrors.DatabaseError)
 			}
 		} else {
-			logger.Error(ctx, "create upload session failed", zap.Int64("problem_id", input.ProblemID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("create upload session failed problem_id=%d err=%v", input.ProblemID, err)
 			return PrepareUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("create upload session failed: %w", err), pkgerrors.DatabaseError)
 		}
 	}
@@ -318,7 +317,7 @@ func (m *problemApp) SignUploadParts(ctx context.Context, input SignPartsInput) 
 		if errors.Is(err, repository.ErrUploadNotFound) {
 			return SignPartsOutput{}, pkgerrors.New(pkgerrors.ProblemUploadNotFound)
 		}
-		logger.Error(ctx, "get upload session failed", zap.Int64("upload_id", input.UploadSessionID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("get upload session failed upload_id=%d err=%v", input.UploadSessionID, err)
 		return SignPartsOutput{}, pkgerrors.Wrap(fmt.Errorf("get upload session failed: %w", err), pkgerrors.DatabaseError)
 	}
 	if session.ProblemID != input.ProblemID {
@@ -342,7 +341,7 @@ func (m *problemApp) SignUploadParts(ctx context.Context, input SignPartsInput) 
 		}
 		u, err := m.storage.PresignUploadPart(ctx, session.Bucket, session.ObjectKey, session.UploadID, n, m.presignTTL, session.ContentType)
 		if err != nil {
-			logger.Error(ctx, "presign upload part failed", zap.Int("part_number", n), zap.Error(err))
+			logx.WithContext(ctx).Errorf("presign upload part failed part_number=%d err=%v", n, err)
 			return SignPartsOutput{}, pkgerrors.Wrap(fmt.Errorf("presign upload part failed: %w", err), pkgerrors.ProblemUploadObjectStorageFailed)
 		}
 		urls[n] = u
@@ -372,7 +371,7 @@ func (m *problemApp) CompleteDataPackUpload(ctx context.Context, input CompleteU
 		if errors.Is(err, repository.ErrUploadNotFound) {
 			return CompleteUploadOutput{}, pkgerrors.New(pkgerrors.ProblemUploadNotFound)
 		}
-		logger.Error(ctx, "get upload session failed", zap.Int64("upload_id", input.UploadSessionID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("get upload session failed upload_id=%d err=%v", input.UploadSessionID, err)
 		return CompleteUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("get upload session failed: %w", err), pkgerrors.DatabaseError)
 	}
 	if session.ProblemID != input.ProblemID {
@@ -381,7 +380,7 @@ func (m *problemApp) CompleteDataPackUpload(ctx context.Context, input CompleteU
 	if session.State == repository.UploadStateCompleted {
 		meta, err := m.uploadRepo.GetProblemVersionMeta(ctx, nil, session.ProblemID, session.Version)
 		if err != nil {
-			logger.Error(ctx, "load version meta failed", zap.Int64("problem_id", session.ProblemID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("load version meta failed problem_id=%d err=%v", session.ProblemID, err)
 			return CompleteUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("load version meta failed: %w", err), pkgerrors.DatabaseError)
 		}
 		return CompleteUploadOutput{
@@ -418,13 +417,13 @@ func (m *problemApp) CompleteDataPackUpload(ctx context.Context, input CompleteU
 	}
 
 	if _, err := m.storage.CompleteMultipartUpload(ctx, session.Bucket, session.ObjectKey, session.UploadID, parts); err != nil {
-		logger.Error(ctx, "complete multipart upload failed", zap.Int64("upload_id", session.ID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("complete multipart upload failed upload_id=%d err=%v", session.ID, err)
 		return CompleteUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("complete multipart upload failed: %w", err), pkgerrors.ProblemUploadObjectStorageFailed)
 	}
 
 	stat, err := m.storage.StatObject(ctx, session.Bucket, session.ObjectKey)
 	if err != nil {
-		logger.Error(ctx, "stat object failed", zap.String("object_key", session.ObjectKey), zap.Error(err))
+		logx.WithContext(ctx).Errorf("stat object failed object_key=%s err=%v", session.ObjectKey, err)
 		return CompleteUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("stat object failed: %w", err), pkgerrors.ProblemUploadObjectStorageFailed)
 	}
 	if session.ExpectedSizeBytes > 0 && stat.SizeBytes != session.ExpectedSizeBytes {
@@ -450,7 +449,7 @@ func (m *problemApp) CompleteDataPackUpload(ctx context.Context, input CompleteU
 		}
 		return nil
 	}); err != nil {
-		logger.Error(ctx, "complete upload persist failed", zap.Int64("upload_id", session.ID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("complete upload persist failed upload_id=%d err=%v", session.ID, err)
 		return CompleteUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("complete upload persist failed: %w", err), pkgerrors.DatabaseError)
 	}
 
@@ -475,7 +474,7 @@ func (m *problemApp) AbortDataPackUpload(ctx context.Context, input AbortUploadI
 		if errors.Is(err, repository.ErrUploadNotFound) {
 			return pkgerrors.New(pkgerrors.ProblemUploadNotFound)
 		}
-		logger.Error(ctx, "get upload session failed", zap.Int64("upload_id", input.UploadSessionID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("get upload session failed upload_id=%d err=%v", input.UploadSessionID, err)
 		return pkgerrors.Wrap(fmt.Errorf("get upload session failed: %w", err), pkgerrors.DatabaseError)
 	}
 	if session.ProblemID != input.ProblemID {
@@ -486,12 +485,12 @@ func (m *problemApp) AbortDataPackUpload(ctx context.Context, input AbortUploadI
 	}
 	if session.UploadID != "" {
 		if err := m.storage.AbortMultipartUpload(ctx, session.Bucket, session.ObjectKey, session.UploadID); err != nil {
-			logger.Error(ctx, "abort multipart upload failed", zap.Int64("upload_id", session.ID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("abort multipart upload failed upload_id=%d err=%v", session.ID, err)
 			return pkgerrors.Wrap(fmt.Errorf("abort multipart upload failed: %w", err), pkgerrors.ProblemUploadObjectStorageFailed)
 		}
 	}
 	if err := m.uploadRepo.MarkUploadAborted(ctx, nil, session.ID); err != nil {
-		logger.Error(ctx, "mark upload aborted failed", zap.Int64("upload_id", session.ID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("mark upload aborted failed upload_id=%d err=%v", session.ID, err)
 		return pkgerrors.Wrap(fmt.Errorf("mark upload aborted failed: %w", err), pkgerrors.DatabaseError)
 	}
 	return nil
@@ -504,7 +503,7 @@ func (m *problemApp) PublishVersion(ctx context.Context, input PublishInput) err
 	if m.statementRepo != nil {
 		exists, err := m.statementRepo.ExistsByVersion(ctx, nil, input.ProblemID, input.Version)
 		if err != nil {
-			logger.Error(ctx, "check statement exists failed", zap.Int64("problem_id", input.ProblemID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("check statement exists failed problem_id=%d err=%v", input.ProblemID, err)
 			return pkgerrors.Wrap(fmt.Errorf("check statement exists failed: %w", err), pkgerrors.DatabaseError)
 		}
 		if !exists {
@@ -518,7 +517,7 @@ func (m *problemApp) PublishVersion(ctx context.Context, input PublishInput) err
 		if errors.Is(err, repository.ErrProblemVersionNotReady) {
 			return pkgerrors.New(pkgerrors.ProblemVersionNotReadyToPublish)
 		}
-		logger.Error(ctx, "publish version failed", zap.Int64("problem_id", input.ProblemID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("publish version failed problem_id=%d err=%v", input.ProblemID, err)
 		return pkgerrors.Wrap(fmt.Errorf("publish version failed: %w", err), pkgerrors.DatabaseError)
 	}
 	_ = m.repo.InvalidateLatestMetaCache(ctx, input.ProblemID)
@@ -540,7 +539,7 @@ func (m *problemApp) GetLatestStatement(ctx context.Context, problemID int64) (r
 		if errors.Is(err, repository.ErrProblemStatementNotFound) {
 			return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.ProblemStatementNotFound)
 		}
-		logger.Error(ctx, "get latest statement failed", zap.Int64("problem_id", problemID), zap.Error(err))
+		logx.WithContext(ctx).Errorf("get latest statement failed problem_id=%d err=%v", problemID, err)
 		return repository.ProblemStatement{}, pkgerrors.Wrap(fmt.Errorf("get latest statement failed: %w", err), pkgerrors.DatabaseError)
 	}
 	return statement, nil
@@ -558,7 +557,7 @@ func (m *problemApp) GetStatementByVersion(ctx context.Context, problemID int64,
 		if errors.Is(err, repository.ErrProblemStatementNotFound) {
 			return repository.ProblemStatement{}, pkgerrors.New(pkgerrors.ProblemStatementNotFound)
 		}
-		logger.Error(ctx, "get statement by version failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		logx.WithContext(ctx).Errorf("get statement by version failed problem_id=%d version=%d err=%v", problemID, version, err)
 		return repository.ProblemStatement{}, pkgerrors.Wrap(fmt.Errorf("get statement by version failed: %w", err), pkgerrors.DatabaseError)
 	}
 	return statement, nil
@@ -579,7 +578,7 @@ func (m *problemApp) UpdateStatement(ctx context.Context, problemID int64, versi
 		if errors.Is(err, repository.ErrProblemVersionNotFound) {
 			return pkgerrors.New(pkgerrors.ProblemNotFound)
 		}
-		logger.Error(ctx, "load version meta failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		logx.WithContext(ctx).Errorf("load version meta failed problem_id=%d version=%d err=%v", problemID, version, err)
 		return pkgerrors.Wrap(fmt.Errorf("load version meta failed: %w", err), pkgerrors.DatabaseError)
 	}
 	if meta.State != repository.ProblemVersionStateDraft {
@@ -590,7 +589,7 @@ func (m *problemApp) UpdateStatement(ctx context.Context, problemID int64, versi
 		if errors.Is(err, repository.ErrProblemVersionNotFound) {
 			return pkgerrors.New(pkgerrors.ProblemNotFound)
 		}
-		logger.Error(ctx, "load version id failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		logx.WithContext(ctx).Errorf("load version id failed problem_id=%d version=%d err=%v", problemID, version, err)
 		return pkgerrors.Wrap(fmt.Errorf("load version id failed: %w", err), pkgerrors.DatabaseError)
 	}
 	hashBytes := sha256.Sum256([]byte(statementMd))
@@ -601,7 +600,7 @@ func (m *problemApp) UpdateStatement(ctx context.Context, problemID int64, versi
 		StatementMd:   statementMd,
 		StatementHash: statementHash,
 	}, versionID); err != nil {
-		logger.Error(ctx, "update statement failed", zap.Int64("problem_id", problemID), zap.Int32("version", version), zap.Error(err))
+		logx.WithContext(ctx).Errorf("update statement failed problem_id=%d version=%d err=%v", problemID, version, err)
 		return pkgerrors.Wrap(fmt.Errorf("update statement failed: %w", err), pkgerrors.ProblemStatementUpdateFailed)
 	}
 	_ = m.statementRepo.InvalidateVersionCache(ctx, problemID, version)
@@ -624,13 +623,13 @@ func (m *problemApp) ensureMultipartUpload(ctx context.Context, session reposito
 	if session.UploadID == "" {
 		uploadID, err := m.storage.CreateMultipartUpload(ctx, session.Bucket, session.ObjectKey, contentType)
 		if err != nil {
-			logger.Error(ctx, "create multipart upload failed", zap.Int64("upload_id", session.ID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("create multipart upload failed upload_id=%d err=%v", session.ID, err)
 			return PrepareUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("create multipart upload failed: %w", err), pkgerrors.ProblemUploadObjectStorageFailed)
 		}
 		updated, err := m.uploadRepo.UpdateUploadIDIfEmpty(ctx, nil, session.ID, uploadID)
 		if err != nil {
 			_ = m.storage.AbortMultipartUpload(ctx, session.Bucket, session.ObjectKey, uploadID)
-			logger.Error(ctx, "persist upload id failed", zap.Int64("upload_id", session.ID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("persist upload id failed upload_id=%d err=%v", session.ID, err)
 			return PrepareUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("persist upload id failed: %w", err), pkgerrors.DatabaseError)
 		}
 		if !updated {
@@ -638,7 +637,7 @@ func (m *problemApp) ensureMultipartUpload(ctx context.Context, session reposito
 		}
 		latest, err := m.uploadRepo.GetUploadSessionByID(ctx, nil, session.ID)
 		if err != nil {
-			logger.Error(ctx, "reload upload session failed", zap.Int64("upload_id", session.ID), zap.Error(err))
+			logx.WithContext(ctx).Errorf("reload upload session failed upload_id=%d err=%v", session.ID, err)
 			return PrepareUploadOutput{}, pkgerrors.Wrap(fmt.Errorf("reload upload session failed: %w", err), pkgerrors.DatabaseError)
 		}
 		session = latest

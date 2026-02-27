@@ -4,6 +4,7 @@
 package handler
 
 import (
+	"fuzoj/pkg/handlerx"
 	"net/http"
 
 	"fuzoj/services/submit_service/internal/logic"
@@ -16,14 +17,14 @@ func GetSourceHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req types.GetSourceRequest
 		if err := httpx.Parse(r, &req); err != nil {
-			writeError(w, r, badRequestError())
+			handlerx.WriteError(w, r, handlerx.BadRequestError())
 			return
 		}
 
 		l := logic.NewGetSourceLogic(r.Context(), svcCtx)
 		resp, err := l.GetSource(&req)
 		if err != nil {
-			writeError(w, r, err)
+			handlerx.WriteError(w, r, err)
 		} else {
 			httpx.OkJsonCtx(r.Context(), w, resp)
 		}

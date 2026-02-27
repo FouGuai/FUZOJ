@@ -113,26 +113,66 @@ upstreams:
       target: "127.0.0.1:8083"
       timeout: 0
     mappings:
-      - name: "problem.public"
+      - name: "problem.public.latest"
         method: "GET"
-        path: "/api/v1/problems/*any"
+        path: "/api/v1/problems/:id/latest"
         auth:
           mode: "public"
-      - name: "problem.manage"
+      - name: "problem.public.statement"
+        method: "GET"
+        path: "/api/v1/problems/:id/statement"
+        auth:
+          mode: "public"
+      - name: "problem.public.statement-version"
+        method: "GET"
+        path: "/api/v1/problems/:id/versions/:version/statement"
+        auth:
+          mode: "public"
+      - name: "problem.manage.create"
         method: "POST"
-        path: "/api/v1/problems/*any"
+        path: "/api/v1/problems"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
-      - name: "problem.manage"
-        method: "PUT"
-        path: "/api/v1/problems/*any"
-        auth:
-          mode: "protected"
-          roles: ["user", "problem_setter", "admin", "super_admin"]
-      - name: "problem.manage"
+      - name: "problem.manage.delete"
         method: "DELETE"
-        path: "/api/v1/problems/*any"
+        path: "/api/v1/problems/:id"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage.statement-update"
+        method: "PUT"
+        path: "/api/v1/problems/:id/versions/:version/statement"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage.upload-prepare"
+        method: "POST"
+        path: "/api/v1/problems/:id/data-pack/uploads:prepare"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage.upload-sign"
+        method: "POST"
+        path: "/api/v1/problems/:id/data-pack/uploads/:upload_id/sign"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage.upload-complete"
+        method: "POST"
+        path: "/api/v1/problems/:id/data-pack/uploads/:upload_id/complete"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage.upload-abort"
+        method: "POST"
+        path: "/api/v1/problems/:id/data-pack/uploads/:upload_id/abort"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "problem.manage.publish"
+        method: "POST"
+        path: "/api/v1/problems/:id/versions/:version/publish"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]

@@ -6,9 +6,9 @@ import (
 	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/pkg/utils/logger"
 	"fuzoj/pkg/utils/response"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zeromicro/go-zero/core/logx"
 	"go.uber.org/zap"
 )
 
@@ -149,7 +149,7 @@ func LoggerExamples(ctx context.Context) {
 
 	// Formatted logging
 	logger.Infof(ctx, "user %s submitted problem %d", "alice", 100)
-	logger.Errorf(ctx, "failed to connect to redis: %v", "connection refused")
+	logx.Errorf(ctx, "failed to connect to redis: %v", "connection refused")
 }
 
 // ==================== Example 4: Repository Layer ====================

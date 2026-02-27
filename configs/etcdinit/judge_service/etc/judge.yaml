@@ -35,11 +35,15 @@ Kafka:
   RequiredAcks: 1
   Compression: "none"
   Topics:
-    - judge.task.high
-    - judge.task.normal
+    - judge.level0
+    - judge.level1
+    - judge.level2
+    - judge.level3
   TopicWeights:
-    judge.task.high: 8
-    judge.task.normal: 4
+    judge.level0: 8
+    judge.level1: 4
+    judge.level2: 2
+    judge.level3: 1
   ConsumerGroup: judge-service
   PrefetchCount: 10
   Concurrency: 4

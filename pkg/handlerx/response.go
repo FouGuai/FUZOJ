@@ -1,4 +1,4 @@
-package handler
+package handlerx
 
 import (
 	"context"
@@ -20,7 +20,7 @@ type errorResponse struct {
 	TraceId string            `json:"trace_id,omitempty"`
 }
 
-func writeError(w http.ResponseWriter, r *http.Request, err error) {
+func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	customErr := pkgerrors.GetError(err)
 
 	logger.Error(r.Context(), "request error",
@@ -41,7 +41,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	httpx.WriteJsonCtx(r.Context(), w, customErr.Code.HTTPStatus(), resp)
 }
 
-func badRequestError() error {
+func BadRequestError() error {
 	return pkgerrors.BadRequest("Invalid request parameters")
 }
 

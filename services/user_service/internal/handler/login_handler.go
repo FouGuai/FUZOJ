@@ -4,6 +4,7 @@
 package handler
 
 import (
+	"fuzoj/pkg/handlerx"
 	"net/http"
 
 	"fuzoj/services/user_service/internal/logic"
@@ -17,11 +18,11 @@ func LoginHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req types.LoginRequest
 		if err := httpx.Parse(r, &req); err != nil {
-			writeError(w, r, badRequestError())
+			handlerx.WriteError(w, r, handlerx.BadRequestError())
 			return
 		}
 		if req.Username == "" || req.Password == "" {
-			writeError(w, r, badRequestError())
+			handlerx.WriteError(w, r, handlerx.BadRequestError())
 			return
 		}
 		req.IP = httpx.GetRemoteAddr(r)
@@ -30,7 +31,7 @@ func LoginHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		l := logic.NewLoginLogic(r.Context(), svcCtx)
 		resp, err := l.Login(&req)
 		if err != nil {
-			writeError(w, r, err)
+			handlerx.WriteError(w, r, err)
 		} else {
 			httpx.OkJsonCtx(r.Context(), w, resp)
 		}

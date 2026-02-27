@@ -34,42 +34,64 @@ def append_topic(topics, seen, value):
         return
 
 
+def pick_cfg(cfg, *keys):
+    if not isinstance(cfg, dict):
+        return {}
+    for key in keys:
+        if key in cfg and isinstance(cfg[key], dict):
+            return cfg[key]
+    return {}
+
+
 def collect_topics(cfg):
     topics = []
     seen = set()
 
-    direct_topics = cfg.get("topics", {}) if isinstance(cfg, dict) else {}
+    direct_topics = {}
+    if isinstance(cfg, dict):
+        direct_topics = cfg.get("topics", cfg.get("Topics", {}))
     if isinstance(direct_topics, dict):
         for value in direct_topics.values():
             append_topic(topics, seen, value)
     else:
         append_topic(topics, seen, direct_topics)
 
-    kafka_cfg = cfg.get("kafka", {}) if isinstance(cfg, dict) else {}
-    if isinstance(kafka_cfg, dict):
+    kafka_cfg = pick_cfg(cfg, "kafka", "Kafka")
+    if kafka_cfg:
         append_topic(topics, seen, kafka_cfg.get("topics"))
+        append_topic(topics, seen, kafka_cfg.get("Topics"))
         append_topic(topics, seen, kafka_cfg.get("topic"))
+        append_topic(topics, seen, kafka_cfg.get("Topic"))
         append_topic(topics, seen, kafka_cfg.get("retryTopic"))
+        append_topic(topics, seen, kafka_cfg.get("RetryTopic"))
         append_topic(topics, seen, kafka_cfg.get("deadLetterTopic"))
+        append_topic(topics, seen, kafka_cfg.get("DeadLetterTopic"))
 
-    status_cfg = cfg.get("status", {}) if isinstance(cfg, dict) else {}
-    if isinstance(status_cfg, dict):
+    status_cfg = pick_cfg(cfg, "status", "Status")
+    if status_cfg:
         append_topic(topics, seen, status_cfg.get("finalTopic"))
+        append_topic(topics, seen, status_cfg.get("FinalTopic"))
 
-    submit_cfg = cfg.get("submit", {}) if isinstance(cfg, dict) else {}
-    if isinstance(submit_cfg, dict):
+    submit_cfg = pick_cfg(cfg, "submit", "Submit")
+    if submit_cfg:
         append_topic(topics, seen, submit_cfg.get("statusFinalTopic"))
+        append_topic(topics, seen, submit_cfg.get("StatusFinalTopic"))
         status_consumer = submit_cfg.get("statusFinalConsumer", {})
+        if not status_consumer:
+            status_consumer = submit_cfg.get("StatusFinalConsumer", {})
         if isinstance(status_consumer, dict):
             append_topic(topics, seen, status_consumer.get("deadLetterTopic"))
+            append_topic(topics, seen, status_consumer.get("DeadLetterTopic"))
 
-    cleanup_cfg = cfg.get("cleanup", {}) if isinstance(cfg, dict) else {}
-    if isinstance(cleanup_cfg, dict):
+    cleanup_cfg = pick_cfg(cfg, "cleanup", "Cleanup")
+    if cleanup_cfg:
         append_topic(topics, seen, cleanup_cfg.get("topic"))
+        append_topic(topics, seen, cleanup_cfg.get("Topic"))
 
-    ban_event_cfg = cfg.get("banEvent", {}) if isinstance(cfg, dict) else {}
-    if isinstance(ban_event_cfg, dict):
+    ban_event_cfg = pick_cfg(cfg, "banEvent", "BanEvent")
+    if ban_event_cfg:
         append_topic(topics, seen, ban_event_cfg.get("topic"))
+        append_topic(topics, seen, ban_event_cfg.get("Topic"))
 
     return topics
 

@@ -181,11 +181,8 @@ func (r *StatusRepository) Save(ctx context.Context, status pmodel.JudgeStatusRe
 	if isFinalStatus(status.Status) {
 		if r.publisher == nil {
 			logger.Error("status publisher is not configured")
-			return appErr.New(appErr.ServiceUnavailable).WithMessage("status publisher is not configured")
-		}
-		if err := r.publisher.PublishFinalStatus(ctx, status); err != nil {
+		} else if err := r.publisher.PublishFinalStatus(ctx, status); err != nil {
 			logger.Errorf("publish final status failed: %v", err)
-			return err
 		}
 	}
 	if r.cache != nil {

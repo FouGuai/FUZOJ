@@ -6,12 +6,11 @@ import (
 	"time"
 
 	appErr "fuzoj/pkg/errors"
-	"fuzoj/pkg/utils/logger"
 	"fuzoj/services/judge_service/internal/pmodel"
 	"fuzoj/services/judge_service/internal/sandbox"
 	"fuzoj/services/judge_service/internal/sandbox/result"
 
-	"go.uber.org/zap"
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 func (s *JudgeApp) persistStatus(ctx context.Context, status pmodel.JudgeStatusResponse) error {
@@ -40,7 +39,7 @@ func (s *JudgeApp) ReportStatus(ctx context.Context, update sandbox.StatusUpdate
 		},
 	}
 	if err := s.persistStatus(ctx, status); err != nil {
-		logger.Warn(ctx, "update intermediate status failed", zap.Error(err))
+		logx.WithContext(ctx).Errorf("update intermediate status failed: %v", err)
 		return err
 	}
 	return nil
@@ -59,7 +58,7 @@ func (s *JudgeApp) handleFailure(ctx context.Context, submissionID string, err e
 		},
 	}
 	if saveErr := s.persistStatus(ctx, failed); saveErr != nil {
-		logger.Warn(ctx, "update failure status failed", zap.Error(saveErr))
+		logx.WithContext(ctx).Errorf("update failure status failed: %v", saveErr)
 	}
 	if code == appErr.InvalidParams || code == appErr.ProblemNotFound || code == appErr.LanguageNotSupported {
 		return nil
