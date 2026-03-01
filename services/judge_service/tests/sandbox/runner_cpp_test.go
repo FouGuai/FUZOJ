@@ -24,10 +24,14 @@ type fakeEngine struct {
 	runResults []result.RunResult
 	runErrs    []error
 	runSpecs   []spec.RunSpec
+	runFn      func(runSpec spec.RunSpec)
 }
 
 func (f *fakeEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.RunResult, error) {
 	f.runSpecs = append(f.runSpecs, runSpec)
+	if f.runFn != nil {
+		f.runFn(runSpec)
+	}
 	idx := len(f.runSpecs) - 1
 	if idx < len(f.runResults) {
 		if idx < len(f.runErrs) && f.runErrs[idx] != nil {
@@ -103,6 +107,101 @@ func TestCppCompileBuildsRunSpec(t *testing.T) {
 	targetSource := filepath.Join(workDir, "main.cpp")
 	if _, err := os.Stat(targetSource); err != nil {
 		t.Fatalf("expected source to be copied: %v", err)
+	}
+}
+
+func TestCppCompileReadsLogContent(t *testing.T) {
+	workDir := t.TempDir()
+	sourcePath := filepath.Join(workDir, "src.cpp")
+	if err := os.WriteFile(sourcePath, []byte("int main() {return 0;}"), 0644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	expectedLog := "compile failed: missing semicolon\n"
+
+	lang := profile.LanguageSpec{
+		ID:               "cpp",
+		SourceFile:       "main.cpp",
+		BinaryFile:       "main",
+		CompileEnabled:   true,
+		CompileCmdTpl:    "g++ -O2 -o {bin} {src}",
+		RunCmdTpl:        "{bin}",
+		TimeMultiplier:   1,
+		MemoryMultiplier: 1,
+	}
+	prof := profile.TaskProfile{TaskType: profile.TaskTypeCompile}
+	engine := &fakeEngine{
+		runResults: []result.RunResult{{ExitCode: 1, Stderr: "stderr fallback"}},
+		runFn: func(_ spec.RunSpec) {
+			hostLogPath := filepath.Join(workDir, "compile.log")
+			_ = os.WriteFile(hostLogPath, []byte(expectedLog), 0644)
+		},
+	}
+	r := runner.NewRunner(engine)
+
+	req := runner.CompileRequest{
+		SubmissionID:      "sub-log",
+		Language:          lang,
+		Profile:           prof,
+		WorkDir:           workDir,
+		SourcePath:        sourcePath,
+		ExtraCompileFlags: nil,
+		Limits:            spec.ResourceLimit{CPUTimeMs: 1000, MemoryMB: 256},
+	}
+	res, err := r.Compile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("compile returned unexpected error: %v", err)
+	}
+	if res.Log != expectedLog {
+		t.Fatalf("unexpected compile log: %q", res.Log)
+	}
+	if res.Error != expectedLog {
+		t.Fatalf("unexpected compile error: %q", res.Error)
+	}
+}
+
+func TestCppCompileLogTruncated(t *testing.T) {
+	workDir := t.TempDir()
+	sourcePath := filepath.Join(workDir, "src.cpp")
+	if err := os.WriteFile(sourcePath, []byte("int main() {return 0;}"), 0644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	longLog := strings.Repeat("x", 80*1024)
+
+	lang := profile.LanguageSpec{
+		ID:             "cpp",
+		SourceFile:     "main.cpp",
+		BinaryFile:     "main",
+		CompileEnabled: true,
+		CompileCmdTpl:  "g++ -O2 -o {bin} {src}",
+		RunCmdTpl:      "{bin}",
+	}
+	prof := profile.TaskProfile{TaskType: profile.TaskTypeCompile}
+	engine := &fakeEngine{
+		runResults: []result.RunResult{{ExitCode: 1}},
+		runFn: func(_ spec.RunSpec) {
+			hostLogPath := filepath.Join(workDir, "compile.log")
+			_ = os.WriteFile(hostLogPath, []byte(longLog), 0644)
+		},
+	}
+	r := runner.NewRunner(engine)
+
+	req := runner.CompileRequest{
+		SubmissionID: "sub-log-limit",
+		Language:     lang,
+		Profile:      prof,
+		WorkDir:      workDir,
+		SourcePath:   sourcePath,
+		Limits:       spec.ResourceLimit{CPUTimeMs: 1000, MemoryMB: 256},
+	}
+	res, err := r.Compile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("compile returned unexpected error: %v", err)
+	}
+	if len(res.Log) != 64*1024 {
+		t.Fatalf("unexpected compile log size: %d", len(res.Log))
+	}
+	if res.Error != res.Log {
+		t.Fatalf("compile error should match truncated log")
 	}
 }
 
@@ -372,7 +471,7 @@ int main(){
 	if !compileRes.OK {
 		logPath := filepath.Join(workDir, "compile.log")
 		data, _ := os.ReadFile(logPath)
-		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, log:%s", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.LogPath)
+		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, compile_log=%q", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.Log)
 	}
 
 	runReq := runner.RunRequest{
@@ -485,7 +584,7 @@ int main(){
 	if !compileRes.OK {
 		logPath := filepath.Join(workDir, "compile.log")
 		data, _ := os.ReadFile(logPath)
-		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, log:%s", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.LogPath)
+		t.Fatalf("compile not ok: %s log=%q, exit code %d, time:%d, compile_log=%q", compileRes.Error, string(data), compileRes.ExitCode, compileRes.TimeMs, compileRes.Log)
 	}
 
 	runReq := runner.RunRequest{

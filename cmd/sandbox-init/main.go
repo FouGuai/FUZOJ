@@ -263,7 +263,11 @@ func applySeccomp(profilePath string) error {
 			return err
 		}
 		for _, name := range rule.Names {
-			if err := filter.AddRuleExact(name, action); err != nil {
+			syscallID, err := seccomp.GetSyscallFromName(name)
+			if err != nil {
+				return fmt.Errorf("resolve seccomp syscall %s: %w", name, err)
+			}
+			if err := filter.AddRuleExact(syscallID, action); err != nil {
 				return fmt.Errorf("add seccomp rule: %w", err)
 			}
 		}

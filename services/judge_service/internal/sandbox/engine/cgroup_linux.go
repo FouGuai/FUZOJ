@@ -13,14 +13,26 @@ import (
 
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/judge_service/internal/sandbox/spec"
+
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 func createRunCgroup(root, submissionID, testID string) (string, func(), error) {
 	if root == "" {
 		return "", func() {}, appErr.ValidationError("cgroup_root", "required")
 	}
+	if err := enableSubtreeControllers(root, []string{"cpu", "memory", "pids"}); err != nil {
+		return "", func() {}, appErr.Wrapf(err, appErr.JudgeSystemError, "enable root cgroup controllers failed")
+	}
+	submissionPath := filepath.Join(root, submissionID)
+	if err := os.MkdirAll(submissionPath, 0750); err != nil {
+		return "", func() {}, appErr.Wrapf(err, appErr.JudgeSystemError, "create submission cgroup path failed")
+	}
+	if err := enableSubtreeControllers(submissionPath, []string{"cpu", "memory", "pids"}); err != nil {
+		return "", func() {}, appErr.Wrapf(err, appErr.JudgeSystemError, "enable submission cgroup controllers failed")
+	}
 	runDir := fmt.Sprintf("%s-%d", testID, time.Now().UnixNano())
-	cgroupPath := filepath.Join(root, submissionID, runDir)
+	cgroupPath := filepath.Join(submissionPath, runDir)
 	if err := os.MkdirAll(cgroupPath, 0750); err != nil {
 		return "", func() {}, appErr.Wrapf(err, appErr.JudgeSystemError, "create cgroup path failed")
 	}
@@ -36,14 +48,17 @@ func applyCgroupLimits(cgroupPath string, limits spec.ResourceLimit) error {
 		pidsValue = strconv.FormatInt(limits.PIDs, 10)
 	}
 	if err := writeCgroupValue(cgroupPath, "pids.max", pidsValue); err != nil {
+		logx.Errorf("write pids.max failed: cgroupPath=%s value=%s err=%v", cgroupPath, pidsValue, err)
 		return appErr.Wrapf(err, appErr.JudgeSystemError, "write pids.max failed")
 	}
 	if limits.MemoryMB > 0 {
 		if err := writeCgroupValue(cgroupPath, "memory.max", strconv.FormatInt(limits.MemoryMB*1024*1024, 10)); err != nil {
+			logx.Errorf("write memory.max failed: cgroupPath=%s valueMB=%d err=%v", cgroupPath, limits.MemoryMB, err)
 			return appErr.Wrapf(err, appErr.JudgeSystemError, "write memory.max failed")
 		}
 	}
 	if err := writeCgroupValue(cgroupPath, "cpu.max", "max 100000"); err != nil {
+		logx.Errorf("write cpu.max failed: cgroupPath=%s err=%v", cgroupPath, err)
 		return appErr.Wrapf(err, appErr.JudgeSystemError, "write cpu.max failed")
 	}
 	return nil
@@ -145,7 +160,48 @@ func readCgroupInt(cgroupPath, name string) (int64, error) {
 func writeCgroupValue(cgroupPath, name, value string) error {
 	path := filepath.Join(cgroupPath, name)
 	if err := os.WriteFile(path, []byte(value), 0640); err != nil {
+		logx.Errorf("write cgroup value failed: path=%s value=%s err=%v", path, value, err)
 		return appErr.Wrapf(err, appErr.JudgeSystemError, "write cgroup value failed")
+	}
+	return nil
+}
+
+func enableSubtreeControllers(cgroupPath string, controllers []string) error {
+	ctrlPath := filepath.Join(cgroupPath, "cgroup.subtree_control")
+	if _, err := os.Stat(ctrlPath); err != nil {
+		return nil
+	}
+	currentRaw, err := os.ReadFile(ctrlPath)
+	if err != nil {
+		return appErr.Wrapf(err, appErr.JudgeSystemError, "read cgroup.subtree_control failed")
+	}
+	current := strings.Fields(strings.TrimSpace(string(currentRaw)))
+	missing := make([]string, 0, len(controllers))
+	for _, name := range controllers {
+		exists := false
+		for _, enabled := range current {
+			if enabled == name {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	value := strings.Join(func(names []string) []string {
+		prefixed := make([]string, 0, len(names))
+		for _, name := range names {
+			prefixed = append(prefixed, "+"+name)
+		}
+		return prefixed
+	}(missing), " ")
+	if err := os.WriteFile(ctrlPath, []byte(value), 0640); err != nil {
+		logx.Errorf("write cgroup.subtree_control failed: path=%s value=%s err=%v", ctrlPath, value, err)
+		return appErr.Wrapf(err, appErr.JudgeSystemError, "write cgroup.subtree_control failed")
 	}
 	return nil
 }

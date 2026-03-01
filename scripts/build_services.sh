@@ -114,6 +114,7 @@ generate_protos() {
 }
 
 generate_protos
+build_service "sandbox-init" "./cmd/sandbox-init"
 build_service "user-service" "./services/user_service"
 build_service "problem-service" "./services/problem_service"
 build_service "submit-service" "./services/submit_service"

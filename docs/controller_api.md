@@ -159,6 +159,7 @@
 - **GetStatus**：获取单个提交状态
   - 路径参数：`id`（submission_id）
   - 响应体：`JudgeStatusResponse`
+    - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
 
 - **BatchStatus**：批量获取提交状态
   - 请求体：`BatchStatusRequest`
@@ -166,6 +167,7 @@
   - 响应体：`BatchStatusResponse`
     - `items`（[]JudgeStatusResponse）
     - `missing`（[]string）
+    - `items[].compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
 
 - **GetSource**：获取提交源码
   - 路径参数：`id`（submission_id）
@@ -177,6 +179,15 @@
     - `language_id`（string）
     - `source_code`（string）
     - `created_at`（RFC3339 string）
+
+## Judge Service
+
+### JudgeController
+
+- **GetStatus**：获取单个提交状态（判题服务视角）
+  - 路径参数：`id`（submission_id）
+  - 响应体：`JudgeStatusResponse`
+    - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
 
 ## Contest Service
 

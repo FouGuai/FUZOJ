@@ -2,7 +2,9 @@
 import argparse
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -20,6 +22,198 @@ def load_manifest(path: Path) -> Dict:
     if not isinstance(data, dict):
         raise SystemExit("manifest root must be a mapping")
     return data
+
+
+def find_cgroup2_mount() -> Optional[Path]:
+    try:
+        with open("/proc/self/mountinfo", "r", encoding="utf-8") as handle:
+            for line in handle:
+                parts = line.strip().split(" - ")
+                if len(parts) != 2:
+                    continue
+                post = parts[1].split()
+                if not post or post[0] != "cgroup2":
+                    continue
+                pre = parts[0].split()
+                if len(pre) >= 5:
+                    return Path(pre[4])
+    except OSError:
+        return None
+    return None
+
+
+def current_cgroup_subpath() -> Optional[str]:
+    try:
+        raw = Path("/proc/self/cgroup").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in raw.splitlines():
+        if line.startswith("0::"):
+            return line.split("::", 1)[1] or "/"
+    return None
+
+
+def user_service_cgroup_base() -> Optional[Path]:
+    mount = find_cgroup2_mount()
+    if mount is None:
+        return None
+    uid = os.getuid()
+    base = mount / "user.slice" / f"user-{uid}.slice" / f"user@{uid}.service"
+    if base.exists():
+        return base
+    return None
+
+
+def app_slice_cgroup_base() -> Optional[Path]:
+    base = user_service_cgroup_base()
+    if base is None:
+        return None
+    app_slice = base / "app.slice"
+    if app_slice.exists():
+        return app_slice
+    return None
+
+
+def should_skip_cgroup_base(path: Path) -> bool:
+    name = path.name
+    if not name:
+        return False
+    if name.endswith(".scope"):
+        return True
+    if name == "init.scope":
+        return True
+    return False
+
+
+def collect_rootless_cgroup_bases() -> List[Path]:
+    bases: List[Path] = []
+
+    def append_base(path: Optional[Path]) -> None:
+        if path is None or not path.exists():
+            return
+        if should_skip_cgroup_base(path):
+            return
+        if path not in bases:
+            bases.append(path)
+
+    service_base = user_service_cgroup_base()
+    append_base(service_base)
+    append_base(app_slice_cgroup_base())
+
+    mount = find_cgroup2_mount()
+    subpath = current_cgroup_subpath()
+    if mount is None or subpath is None:
+        return bases
+
+    if subpath in ("", "/"):
+        current = mount
+    else:
+        current = mount / subpath.lstrip("/")
+    while current.exists():
+        append_base(current)
+        if service_base is not None and current == service_base:
+            break
+        if current == mount:
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    return bases
+
+
+def enable_cgroup_controllers(cgroup_path: Path, controllers: List[str]) -> None:
+    ctrl_file = cgroup_path / "cgroup.subtree_control"
+    if not ctrl_file.exists():
+        return
+    try:
+        current = ctrl_file.read_text(encoding="utf-8").strip().split()
+        missing = [name for name in controllers if name not in current]
+        if not missing:
+            return
+        ctrl_file.write_text(" ".join(f"+{name}" for name in missing), encoding="utf-8")
+    except OSError as exc:
+        print(f"warning: unable to enable cgroup controllers in {cgroup_path}: {exc}")
+
+
+def can_write_pids_max(cgroup_path: Path) -> bool:
+    pids_file = cgroup_path / "pids.max"
+    if not pids_file.exists():
+        return False
+    try:
+        pids_file.write_text("max", encoding="utf-8")
+    except OSError as exc:
+        print(f"warning: unable to write pids.max in {cgroup_path}: {exc}")
+        return False
+    return True
+
+
+def resolve_rootless_cgroup(prefix: str) -> Optional[Path]:
+    for base_path in collect_rootless_cgroup_bases():
+        enable_cgroup_controllers(base_path, ["cpu", "memory", "pids"])
+        target = base_path / prefix
+        target_exists_before = target.exists()
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            print(f"warning: unable to create cgroup directory {target}: {exc}")
+            continue
+        enable_cgroup_controllers(target, ["cpu", "memory", "pids"])
+        if not can_write_pids_max(target):
+            if not target_exists_before:
+                try:
+                    target.rmdir()
+                except OSError:
+                    pass
+            continue
+        return target
+    return None
+
+
+def prepare_cgroup_root(path: Path) -> Path:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise SystemExit(f"failed to create cgroup root {path}: {exc}") from exc
+    parent = path.parent
+    if parent.exists():
+        enable_cgroup_controllers(parent, ["cpu", "memory", "pids"])
+    if not (path / "cgroup.controllers").exists():
+        print(f"warning: {path} does not look like a cgroup v2 directory")
+    enable_cgroup_controllers(path, ["cpu", "memory", "pids"])
+    return path
+
+
+def patch_judge_cgroup_root(config_path: Path, cgroup_root: Path) -> None:
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise SystemExit("judge config root must be a mapping")
+    sandbox = data.get("Sandbox")
+    if sandbox is None:
+        sandbox = {}
+    if not isinstance(sandbox, dict):
+        raise SystemExit("judge sandbox config must be a mapping")
+    sandbox["CgroupRoot"] = str(cgroup_root)
+    data["Sandbox"] = sandbox
+    config_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
+def prepare_etcd_config_dir(root: Path, base_dir: Path, cgroup_root: Optional[Path]) -> Path:
+    if cgroup_root is None:
+        return base_dir
+    if not base_dir.exists():
+        raise SystemExit(f"etcd config dir not found: {base_dir}")
+    temp_root = root / "tmp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    temp_dir = Path(tempfile.mkdtemp(prefix="etcdinit-", dir=str(temp_root)))
+    shutil.copytree(base_dir, temp_dir, dirs_exist_ok=True)
+    judge_cfg = temp_dir / "judge_service/etc/judge.yaml"
+    if judge_cfg.exists():
+        patch_judge_cgroup_root(judge_cfg, cgroup_root)
+    else:
+        print("warning: judge config not found in etcd init dir; cgroup override skipped")
+    return temp_dir
 
 
 def run(
@@ -185,11 +379,11 @@ def ensure_minio_buckets(project: str, minio_cfg: Dict) -> None:
         run(cmd, check=False)
 
 
-def init_etcd(root: Path) -> None:
+def init_etcd(root: Path, config_dir: Path) -> None:
     script = root / "scripts/devtools/etcdinit/main.go"
     if not script.exists():
         raise SystemExit(f"etcd init script not found: {script}")
-    cmd = ["go", "run", str(script), "--config-dir", str(root / "configs/etcdinit")]
+    cmd = ["go", "run", str(script), "--config-dir", str(config_dir)]
     run(cmd, check=True)
 
 
@@ -246,7 +440,14 @@ def is_pid_running(pid: int) -> bool:
         return False
 
 
-def start_service(root: Path, log_dir: Path, bin_dir: Path, service: Dict) -> None:
+def start_service(
+    root: Path,
+    log_dir: Path,
+    bin_dir: Path,
+    service: Dict,
+    *,
+    allow_rootless: bool,
+) -> None:
     name = service["name"]
     pid_path = log_dir / f"{name}.pid"
     if pid_path.exists():
@@ -268,8 +469,11 @@ def start_service(root: Path, log_dir: Path, bin_dir: Path, service: Dict) -> No
 
     log_path = log_dir / f"{name}.log"
     cmd = [str(bin_path), "-f", str(config_path)]
-    if service.get("runAsRoot") and os.geteuid() != 0:
-        raise SystemExit(f"{name} requires root, please run debug_start.py with sudo")
+    if service.get("runAsRoot") and os.geteuid() != 0 and not allow_rootless:
+        raise SystemExit(
+            f"{name} requires root or a delegated cgroup v2 subtree; "
+            "configure Sandbox.CgroupRoot to a writable cgroup and try again"
+        )
     with log_path.open("ab") as log_file:
         proc = subprocess.Popen(
             cmd,
@@ -292,6 +496,18 @@ def build_service(root: Path, bin_dir: Path, service: Dict) -> None:
     run(cmd, env=os.environ.copy(), check=True, capture=False, input_data=None, cwd=root)
 
 
+def build_sandbox_helper(root: Path, bin_dir: Path) -> None:
+    cmd = [
+        "go",
+        "build",
+        "-gcflags=all=-N -l",
+        "-o",
+        str(bin_dir / "sandbox-init"),
+        "./cmd/sandbox-init",
+    ]
+    run(cmd, env=os.environ.copy(), check=True, capture=False, input_data=None, cwd=root)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Start debug deps and services")
     parser.add_argument("--manifest", default="scripts/debug_manifest.yaml", help="Path to manifest")
@@ -300,6 +516,11 @@ def main() -> None:
     parser.add_argument("--deps-only", action="store_true", help="Only start dependencies")
     parser.add_argument("--services-only", action="store_true", help="Only start services")
     parser.add_argument("--no-etcd-init", action="store_true", help="Skip etcd config initialization")
+    parser.add_argument(
+        "--cgroup-root",
+        default="",
+        help="Override Sandbox.CgroupRoot for rootless judge service",
+    )
     parser.add_argument("--only", default="", help="Comma-separated service list")
     parser.add_argument(
         "--pull",
@@ -335,8 +556,39 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     bin_dir.mkdir(parents=True, exist_ok=True)
 
+    only_set = {name.strip() for name in args.only.split(",") if name.strip()}
+    services = manifest.get("services", [])
+    if not isinstance(services, list):
+        raise SystemExit("manifest services must be a list")
+    active_services = [svc for svc in services if not only_set or svc["name"] in only_set]
+
+    needs_rootless = not args.deps_only and os.geteuid() != 0 and any(svc.get("runAsRoot") for svc in active_services)
+    cgroup_root = None
+    if args.cgroup_root:
+        cgroup_root = prepare_cgroup_root(Path(args.cgroup_root).expanduser())
+    elif needs_rootless:
+        cgroup_root = resolve_rootless_cgroup("fuzoj-debug")
+        if cgroup_root is None:
+            raise SystemExit(
+                "unable to resolve a writable cgroup v2 root for rootless services; "
+                "set --cgroup-root or update Sandbox.CgroupRoot in etcd"
+            )
+    if cgroup_root is not None:
+        print(f"using cgroup root: {cgroup_root}")
+
     base_cmd = compose_base(manifest, root)
     env = compose_env(manifest)
+
+    should_init_etcd = not args.no_deps and not args.services_only and not args.no_etcd_init
+    etcd_config_dir = root / "configs/etcdinit"
+    if cgroup_root is not None and should_init_etcd:
+        etcd_config_dir = prepare_etcd_config_dir(root, etcd_config_dir, cgroup_root)
+        print(f"using etcd config dir: {etcd_config_dir}")
+    elif cgroup_root is not None and not should_init_etcd:
+        print(
+            "warning: rootless cgroup detected but etcd init is disabled; "
+            "ensure judge config in etcd sets Sandbox.CgroupRoot to the cgroup root"
+        )
 
     if not args.no_deps and not args.services_only:
         compose_up(base_cmd, env, args.pull)
@@ -349,7 +601,7 @@ def main() -> None:
         wait_for_http(manifest["deps"]["minio"]["healthURL"], timeout_s=60)
 
         if not args.no_etcd_init:
-            init_etcd(root)
+            init_etcd(root, etcd_config_dir)
 
         init_mysql(base_cmd, env)
         for schema in manifest["deps"]["mysql"].get("schemas", []):
@@ -362,12 +614,8 @@ def main() -> None:
     if args.deps_only:
         return
 
-    only_set = {name.strip() for name in args.only.split(",") if name.strip()}
-    services = manifest.get("services", [])
-    if not isinstance(services, list):
-        raise SystemExit("manifest services must be a list")
-
     if not args.no_build:
+        build_sandbox_helper(root, bin_dir)
         for svc in services:
             if only_set and svc["name"] not in only_set:
                 continue
@@ -376,7 +624,7 @@ def main() -> None:
     for svc in services:
         if only_set and svc["name"] not in only_set:
             continue
-        start_service(root, log_dir, bin_dir, svc)
+        start_service(root, log_dir, bin_dir, svc, allow_rootless=cgroup_root is not None)
 
     gateway_config = None
     for svc in services:

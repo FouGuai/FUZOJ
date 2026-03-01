@@ -36,7 +36,7 @@ type CompileResult struct {
 	ExitCode int    `json:"ExitCode"`
 	TimeMs   int64  `json:"TimeMs"`
 	MemoryKB int64  `json:"MemoryKB"`
-	LogPath  string `json:"LogPath"`
+	Log      string `json:"Log"`
 	Error    string `json:"Error"`
 }
 

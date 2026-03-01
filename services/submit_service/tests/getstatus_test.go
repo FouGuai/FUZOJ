@@ -23,8 +23,16 @@ func TestGetStatusHandler(t *testing.T) {
 			Verdict:      "AC",
 			Score:        100,
 			Language:     "go",
-			Timestamps:   domain.Timestamps{ReceivedAt: time.Now().Unix(), FinishedAt: time.Now().Unix()},
-			Progress:     domain.Progress{TotalTests: 1, DoneTests: 1},
+			Compile: &domain.CompileResult{
+				OK:       false,
+				ExitCode: 1,
+				TimeMs:   11,
+				MemoryKB: 2048,
+				Log:      "compile error log",
+				Error:    "compile error log",
+			},
+			Timestamps: domain.Timestamps{ReceivedAt: time.Now().Unix(), FinishedAt: time.Now().Unix()},
+			Progress:   domain.Progress{TotalTests: 1, DoneTests: 1},
 		}
 		data, err := json.Marshal(payload)
 		if err != nil {
@@ -43,6 +51,9 @@ func TestGetStatusHandler(t *testing.T) {
 		}
 		if resp.Data.SubmissionId != payload.SubmissionID || resp.Data.Status != payload.Status {
 			t.Fatalf("unexpected data: %+v", resp.Data)
+		}
+		if resp.Data.Compile == nil || resp.Data.Compile.Log != "compile error log" {
+			t.Fatalf("unexpected compile data: %+v", resp.Data.Compile)
 		}
 	})
 

@@ -91,7 +91,7 @@ Judge:
 Sandbox:
   CgroupRoot: /sys/fs/cgroup
   SeccompDir: /etc/judge/seccomp
-  HelperPath: /usr/local/bin/judge-helper
+  HelperPath: /home/foushen.zhan/fuzoj/logs/bin/sandbox-init
   StdoutStderrMaxBytes: 1048576
   EnableSeccomp: true
   EnableCgroup: true

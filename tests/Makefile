@@ -1,11 +1,12 @@
-.PHONY: start down connect build status test killall
+.PHONY: start start-inner down connect build status test killall
 
 start:
+	@python3 ../scripts/ensure_cgroup_delegate.py -- $(MAKE) start-inner
+
+start-inner:
 	@$(MAKE) down
 	@$(MAKE) build
-	@python3 ../scripts/debug_start.py --deps-only
-	@go run ../scripts/devtools/etcdinit
-	@python3 ../scripts/debug_start.py --services-only
+	python3 ../scripts/debug_start.py
 
 down:
 	@python3 ../scripts/debug_stop.py

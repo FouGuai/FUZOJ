@@ -79,7 +79,7 @@ func toJudgeStatusData(status domain.JudgeStatusPayload) types.JudgeStatusData {
 			ExitCode: status.Compile.ExitCode,
 			TimeMs:   status.Compile.TimeMs,
 			MemoryKB: status.Compile.MemoryKB,
-			LogPath:  status.Compile.LogPath,
+			Log:      status.Compile.Log,
 			Error:    status.Compile.Error,
 		}
 	}

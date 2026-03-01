@@ -45,7 +45,7 @@ type CompileResult struct {
 	ExitCode int
 	TimeMs   int64
 	MemoryKB int64
-	LogPath  string
+	Log      string
 	Error    string
 }
 

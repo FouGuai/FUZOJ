@@ -3,12 +3,14 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/google/shlex"
+	"github.com/zeromicro/go-zero/core/logx"
 
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/judge_service/internal/sandbox/engine"
@@ -26,6 +28,7 @@ const (
 	compileLogName    = "compile.log"
 	runtimeLogName    = "runtime.log"
 	checkerLogName    = "checker.log"
+	compileLogMaxSize = 64 * 1024
 )
 
 // DefaultRunner implements compile/run workflows for supported languages.
@@ -48,6 +51,9 @@ func NewRunnerWithObserver(eng engine.Engine, metrics observer.MetricsRecorder) 
 }
 
 func (r *DefaultRunner) Compile(ctx context.Context, req CompileRequest) (result.CompileResult, error) {
+	logger := logx.WithContext(ctx)
+	logger.Infof("compile task start submission_id=%s language_id=%s work_dir=%s", req.SubmissionID, req.Language.ID, req.WorkDir)
+
 	if err := validateCompileRequest(req); err != nil {
 		return result.CompileResult{}, err
 	}
@@ -84,22 +90,34 @@ func (r *DefaultRunner) Compile(ctx context.Context, req CompileRequest) (result
 		}},
 	}
 
-	runRes, err := r.eng.Run(ctx, runSpec)
-	logPath := filepath.Join(req.WorkDir, compileLogName)
+	runRes, runErr := r.eng.Run(ctx, runSpec)
+	logContent, logErr := readCompileLog(filepath.Join(req.WorkDir, compileLogName), compileLogMaxSize)
+	if logErr != nil {
+		logger.Errorf("read compile log failed submission_id=%s language_id=%s err=%v", req.SubmissionID, req.Language.ID, logErr)
+	}
 	compileRes := result.CompileResult{
-		OK:       runRes.ExitCode == 0 && err == nil,
+		OK:       runRes.ExitCode == 0 && runErr == nil,
 		ExitCode: runRes.ExitCode,
 		TimeMs:   runRes.TimeMs,
 		MemoryKB: runRes.MemoryKB,
-		LogPath:  logPath,
+		Log:      logContent,
 	}
 	r.metrics.ObserveCompile(ctx, req.Language.ID, compileRes.OK, compileRes.TimeMs, compileRes.MemoryKB)
-	if err != nil {
-		compileRes.Error = err.Error()
-		return compileRes, err
+	if runErr != nil {
+		compileRes.Error = runErr.Error()
+		if compileRes.Log == "" {
+			compileRes.Log = runRes.Stderr
+		}
+		logger.Errorf("compile run failed submission_id=%s language_id=%s err=%v", req.SubmissionID, req.Language.ID, runErr)
+		return compileRes, runErr
 	}
 	if runRes.ExitCode != 0 {
-		compileRes.Error = runRes.Stderr
+		if compileRes.Log != "" {
+			compileRes.Error = compileRes.Log
+		} else {
+			compileRes.Error = runRes.Stderr
+			compileRes.Log = runRes.Stderr
+		}
 	}
 	return compileRes, nil
 }
@@ -213,6 +231,26 @@ func (r *DefaultRunner) runChecker(ctx context.Context, req RunRequest, outputNa
 type checkerRunResult struct {
 	ExitCode int
 	LogPath  string
+}
+
+func readCompileLog(path string, maxSize int64) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxSize+1))
+	if err != nil {
+		return "", err
+	}
+	if int64(len(data)) > maxSize {
+		data = data[:maxSize]
+	}
+	return string(data), nil
 }
 
 func validateCompileRequest(req CompileRequest) error {
