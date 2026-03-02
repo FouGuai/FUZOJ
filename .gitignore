@@ -57,4 +57,5 @@ coverage.out
 core.*
 configs/configs/dev.generated/*
 
-tmp/
+tmp/*
+rootfs/*

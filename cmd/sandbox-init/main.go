@@ -234,10 +234,50 @@ func redirectIO(runSpec runSpec) error {
 }
 
 func buildEnv(env []string) []string {
-	if len(env) > 0 {
-		return env
+	defaultPath := "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	if len(env) == 0 {
+		return []string{"PATH=" + defaultPath}
 	}
-	return []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+
+	merged := make([]string, 0, len(env)+1)
+	hasPath := false
+	for _, kv := range env {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if parts[0] == "PATH" {
+			hasPath = true
+			parts[1] = mergePath(parts[1], defaultPath)
+			kv = parts[0] + "=" + parts[1]
+		}
+		merged = append(merged, kv)
+	}
+	if !hasPath {
+		merged = append(merged, "PATH="+defaultPath)
+	}
+	return merged
+}
+
+func mergePath(pathValue, defaultPath string) string {
+	if pathValue == "" {
+		return defaultPath
+	}
+	parts := strings.Split(pathValue, ":")
+	exists := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		exists[p] = struct{}{}
+	}
+	for _, p := range strings.Split(defaultPath, ":") {
+		if _, ok := exists[p]; ok {
+			continue
+		}
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, ":")
 }
 
 func applySeccomp(profilePath string) error {
