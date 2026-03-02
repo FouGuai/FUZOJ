@@ -64,6 +64,12 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 	if err != nil {
 		return result.RunResult{}, appErr.Wrapf(err, appErr.JudgeSystemError, "resolve profile failed")
 	}
+	logger.Info("sandbox profile resolved",
+		zap.String("profile", runSpec.Profile),
+		zap.String("rootfs", isoProfile.RootFS),
+		zap.String("seccomp", isoProfile.SeccompProfile),
+		zap.Bool("disable_network", isoProfile.DisableNetwork),
+	)
 	if e.cfg.SeccompDir != "" && isoProfile.SeccompProfile != "" && !filepath.IsAbs(isoProfile.SeccompProfile) {
 		isoProfile.SeccompProfile = filepath.Join(e.cfg.SeccompDir, isoProfile.SeccompProfile)
 	}
@@ -117,7 +123,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 
 	if e.cfg.EnableCgroup {
 		if err := addProcessToCgroup(cgroupPath, cmd.Process.Pid); err != nil {
-			logger.Info(ctx, "add process to cgroup failed", zap.String("cgroup", cgroupPath), zap.Error(err))
+			logger.Info("add process to cgroup failed", zap.String("cgroup", cgroupPath), zap.Error(err))
 		}
 	}
 
@@ -199,6 +205,9 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 		Stdout:     readLimitedFile(stdoutPath, e.cfg.StdoutStderrMaxBytes),
 		Stderr:     readLimitedFile(stderrPath, e.cfg.StdoutStderrMaxBytes),
 		OomKilled:  wasOomKilled(cgroupPath),
+	}
+	if waitErr != nil && runResult.Stderr == "" && helperStderr.Len() > 0 {
+		runResult.Stderr = helperStderr.String()
 	}
 
 	if (timedOut.Load() || cpuTimedOut.Load()) && runResult.ExitCode == 0 {

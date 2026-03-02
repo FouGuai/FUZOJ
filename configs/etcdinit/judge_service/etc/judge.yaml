@@ -93,7 +93,7 @@ Sandbox:
   SeccompDir: /etc/judge/seccomp
   HelperPath: /home/foushen.zhan/fuzoj/logs/bin/sandbox-init
   StdoutStderrMaxBytes: 1048576
-  EnableSeccomp: true
+  EnableSeccomp: false
   EnableCgroup: true
   EnableNamespaces: true
 Language:
@@ -114,7 +114,7 @@ Language:
   Profiles:
     - LanguageID: cpp
       TaskType: compile
-      RootFS: cpp-compile-rootfs
+      RootFS: /home/foushen.zhan/fuzoj/rootfs/cpp-compile-rootfs
       SeccompProfile: cpp-compile.json
       DefaultLimits:
         CPUTimeMs: 5000
@@ -125,7 +125,7 @@ Language:
         PIDs: 64
     - LanguageID: cpp
       TaskType: run
-      RootFS: cpp-run-rootfs
+      RootFS: /home/foushen.zhan/fuzoj/rootfs/cpp-compile-rootfs
       SeccompProfile: cpp-run.json
       DefaultLimits:
         CPUTimeMs: 1000
