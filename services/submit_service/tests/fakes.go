@@ -34,11 +34,12 @@ func (f *fakeSubmissionRepo) GetByID(ctx context.Context, session sqlx.Session, 
 }
 
 type fakeSubmissionsModel struct {
-	finalStatus map[string]string
-	insertFn    func(ctx context.Context, data *model.Submissions) (sql.Result, error)
-	findOneFn   func(ctx context.Context, submissionID string) (*model.Submissions, error)
-	updateFn    func(ctx context.Context, data *model.Submissions) error
-	deleteFn    func(ctx context.Context, submissionID string) error
+	finalStatus         map[string]string
+	insertFn            func(ctx context.Context, data *model.Submissions) (sql.Result, error)
+	findOneFn           func(ctx context.Context, submissionID string) (*model.Submissions, error)
+	updateFn            func(ctx context.Context, data *model.Submissions) error
+	deleteFn            func(ctx context.Context, submissionID string) error
+	updateFinalStatusFn func(ctx context.Context, submissionID, payload string, finishedAt time.Time) (sql.Result, error)
 }
 
 func (f *fakeSubmissionsModel) Insert(ctx context.Context, data *model.Submissions) (sql.Result, error) {
@@ -100,6 +101,9 @@ func (f *fakeSubmissionsModel) FindFinalStatusBatch(ctx context.Context, submiss
 }
 
 func (f *fakeSubmissionsModel) UpdateFinalStatus(ctx context.Context, submissionID string, payload string, finishedAt time.Time) (sql.Result, error) {
+	if f.updateFinalStatusFn != nil {
+		return f.updateFinalStatusFn(ctx, submissionID, payload, finishedAt)
+	}
 	return fakeSQLResult{rows: 1}, nil
 }
 
@@ -166,7 +170,7 @@ func (f *fakeStorage) ListMultipartUploads(ctx context.Context, bucket, prefix, 
 }
 
 type fakePusher struct {
-	pushFn func(ctx context.Context, key, value string) error
+	pushFn  func(ctx context.Context, key, value string) error
 	closeFn func() error
 
 	keys   []string

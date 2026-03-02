@@ -3,6 +3,7 @@ package command
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -212,6 +213,7 @@ func Registry() map[string]Command {
 			RequiresAuth: true,
 			Fields: []Field{
 				{Name: "id", Prompt: "submission_id", Type: FieldString, Required: true},
+				{Name: "include", Prompt: "include (details/log)", Type: FieldString, Required: false},
 			},
 		},
 		{
@@ -369,6 +371,7 @@ func BuildRequest(cmd Command, params Params) (RequestSpec, error) {
 	if err != nil {
 		return RequestSpec{}, err
 	}
+	path = appendQuery(path, "include", params.Get("include"))
 
 	headers := map[string]string{}
 	if cmd.Service == "problem" && cmd.Action == "upload-prepare" {
@@ -398,6 +401,17 @@ func BuildRequest(cmd Command, params Params) (RequestSpec, error) {
 		Headers: headers,
 		Body:    body,
 	}, nil
+}
+
+func appendQuery(path, key, value string) string {
+	if strings.TrimSpace(value) == "" {
+		return path
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return fmt.Sprintf("%s%s%s=%s", path, sep, url.QueryEscape(key), url.QueryEscape(value))
 }
 
 func buildPath(template string, params Params) (string, error) {

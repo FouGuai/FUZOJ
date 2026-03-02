@@ -32,7 +32,7 @@ func (l *GetStatusLogic) GetStatus(req *types.GetStatusRequest) (resp *types.Get
 	if err != nil {
 		return nil, err
 	}
-	status, err := app.GetStatus(l.ctx, req.Id)
+	status, err := app.GetStatus(l.ctx, req.Id, req.Include)
 	if err != nil {
 		return nil, err
 	}

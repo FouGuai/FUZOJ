@@ -34,6 +34,10 @@ Contest:
   maxParticipantsPerTeam: 3
   defaultPageSize: 50
   maxPageSize: 200
+  eligibilityCacheTTL: 30m
+  eligibilityEmptyTTL: 5m
+  eligibilityLocalCacheSize: 2048
+  eligibilityLocalCacheTTL: 10s
 Leaderboard:
   hotCacheTTL: 3s
   pageCacheTTL: 5s

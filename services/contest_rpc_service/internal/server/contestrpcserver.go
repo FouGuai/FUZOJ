@@ -28,6 +28,11 @@ func (s *ContestRpcServer) CheckParticipation(ctx context.Context, in *contestpb
 	return l.CheckParticipation(in)
 }
 
+func (s *ContestRpcServer) CheckSubmissionEligibility(ctx context.Context, in *contestpb.CheckSubmissionEligibilityRequest) (*contestpb.CheckSubmissionEligibilityResponse, error) {
+	l := logic.NewCheckSubmissionEligibilityLogic(ctx, s.svcCtx)
+	return l.CheckSubmissionEligibility(in)
+}
+
 func (s *ContestRpcServer) GetContestMeta(ctx context.Context, in *contestpb.ContestMetaRequest) (*contestpb.ContestMetaResponse, error) {
 	l := logic.NewGetContestMetaLogic(ctx, s.svcCtx)
 	return l.GetContestMeta(in)

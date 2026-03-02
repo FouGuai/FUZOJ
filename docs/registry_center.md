@@ -90,7 +90,7 @@ Value：`host:port`
 ### Submit Service
 必需字段：
 - `name` `host` `port`（RestConf）
-- `mysql` `cache` `redis` `kafka` `minio` `topics` `submit`
+- `mysql` `cache` `redis` `kafka` `minio` `topics` `submit` `contestRpc`
 示例：
 ```json
 {
@@ -103,12 +103,13 @@ Value：`host:port`
   "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"submit-service","minBytes":10240,"maxBytes":10485760},
   "minio":{"endpoint":"127.0.0.1:9000","accessKey":"minioadmin","secretKey":"minioadmin","useSSL":false,"bucket":"fuzoj"},
   "topics":{"level0":"judge.level0","level1":"judge.level1","level2":"judge.level2","level3":"judge.level3"},
+  "contestRpc":{"etcd":{"hosts":["127.0.0.1:2379"],"key":"contest.rpc"}},
   "submit":{"sourceBucket":"fuzoj","sourceKeyPrefix":"submissions","maxCodeBytes":262144,"idempotencyTTL":"10m","batchLimit":200,
     "statusTTL":"24h","statusEmptyTTL":"5m","statusFinalTopic":"judge.status.final",
     "statusFinalConsumer":{"consumerGroup":"submit-service-status-final","prefetchCount":1,"concurrency":2,"maxRetries":3,"retryDelay":"1s","deadLetterTopic":"judge.status.final.dead","messageTTL":"10m"},
     "submissionCacheTTL":"30m","submissionEmptyTTL":"5m",
     "rateLimit":{"userMax":30,"ipMax":60,"window":"1m"},
-    "timeouts":{"db":"3s","cache":"1s","mq":"3s","storage":"5s","status":"2s"}}
+    "timeouts":{"db":"3s","cache":"1s","mq":"3s","storage":"5s","status":"2s","contestRPC":"800ms"}}
 }
 ```
 
@@ -182,7 +183,8 @@ Value：`host:port`
   "redis":{"host":"127.0.0.1:6379","type":"node"},
   "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"contest-service","minBytes":10240,"maxBytes":10485760,
     "topics":["judge.status.final","contest.leaderboard.rebuild","contest.hack.finished"]},
-  "contest":{"idempotencyTTL":"10m","resultPersistAfter":"1h","maxParticipantsPerTeam":3,"defaultPageSize":50,"maxPageSize":200},
+  "contest":{"idempotencyTTL":"10m","resultPersistAfter":"1h","maxParticipantsPerTeam":3,"defaultPageSize":50,"maxPageSize":200,
+    "eligibilityCacheTTL":"30m","eligibilityEmptyTTL":"5m","eligibilityLocalCacheSize":2048,"eligibilityLocalCacheTTL":"10s"},
   "leaderboard":{"hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","frozenCacheTTL":"10m","snapshotInterval":"5m"},
   "timeouts":{"db":"3s","cache":"1s","mq":"3s"}
 }

@@ -5,6 +5,7 @@ package svc
 
 import (
 	"fuzoj/internal/common/storage"
+	"fuzoj/services/contest_rpc_service/contestrpc"
 	"fuzoj/services/submit_service/internal/config"
 	"fuzoj/services/submit_service/internal/consumer"
 	"fuzoj/services/submit_service/internal/model"
@@ -16,6 +17,7 @@ import (
 	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
+	"github.com/zeromicro/go-zero/zrpc"
 )
 
 type ServiceContext struct {
@@ -25,10 +27,12 @@ type ServiceContext struct {
 	SubmissionsModel    model.SubmissionsModel
 	SubmissionRepo      repository.SubmissionRepository
 	StatusRepo          *repository.StatusRepository
+	LogRepo             *repository.SubmissionLogRepository
 	Storage             storage.ObjectStorage
 	StatusFinalQueue    queue.MessageQueue
 	StatusFinalConsumer *consumer.StatusFinalConsumer
 	TopicPushers        TopicPushers
+	ContestRpc          contestrpc.ContestRpc
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -62,6 +66,20 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		}
 	}
 
+	logBucket := c.Submit.LogBucket
+	if logBucket == "" {
+		logBucket = c.MinIO.Bucket
+	}
+	logRepo := repository.NewSubmissionLogRepository(
+		conn,
+		redisClient,
+		storageClient,
+		logBucket,
+		c.Submit.LogKeyPrefix,
+		c.Submit.LogMaxInlineBytes,
+		c.Submit.LogCacheTTL,
+	)
+
 	pushers := TopicPushers{}
 	if len(c.Kafka.Brokers) > 0 {
 		if c.Topics.Level0 != "" {
@@ -81,7 +99,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	var statusFinalConsumer *consumer.StatusFinalConsumer
 	var statusFinalQueue queue.MessageQueue
 	if len(c.Kafka.Brokers) > 0 && c.Submit.StatusFinalTopic != "" {
-		statusFinalConsumer = consumer.NewStatusFinalConsumer(statusRepo, nil, consumer.TimeoutConfig{
+		statusFinalConsumer = consumer.NewStatusFinalConsumer(statusRepo, logRepo, nil, consumer.TimeoutConfig{
 			DB: c.Submit.Timeouts.DB,
 		})
 		kqConf := consumer.BuildStatusFinalKqConf(c)
@@ -95,9 +113,19 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		SubmissionsModel:    submissionsModel,
 		SubmissionRepo:      submissionRepo,
 		StatusRepo:          statusRepo,
+		LogRepo:             logRepo,
 		Storage:             storageClient,
 		StatusFinalQueue:    statusFinalQueue,
 		StatusFinalConsumer: statusFinalConsumer,
 		TopicPushers:        pushers,
+		ContestRpc:          initContestRpc(c),
 	}
+}
+
+func initContestRpc(c config.Config) contestrpc.ContestRpc {
+	if len(c.ContestRpc.Etcd.Hosts) == 0 || c.ContestRpc.Etcd.Key == "" {
+		return nil
+	}
+	client := zrpc.MustNewClient(c.ContestRpc)
+	return contestrpc.NewContestRpc(client)
 }

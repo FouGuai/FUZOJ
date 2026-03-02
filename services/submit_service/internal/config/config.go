@@ -11,6 +11,7 @@ import (
 	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/rest"
+	"github.com/zeromicro/go-zero/zrpc"
 )
 
 type Config struct {
@@ -19,12 +20,13 @@ type Config struct {
 	Mysql     struct {
 		DataSource string `json:"dataSource"`
 	} `json:"mysql"`
-	Cache  cache.CacheConf `json:"cache"`
-	Redis  redis.RedisConf `json:"redis"`
-	Kafka  KafkaConfig     `json:"kafka"`
-	MinIO  MinIOConfig     `json:"minio"`
-	Topics TopicConfig     `json:"topics"`
-	Submit SubmitConfig    `json:"submit"`
+	Cache      cache.CacheConf    `json:"cache"`
+	Redis      redis.RedisConf    `json:"redis"`
+	Kafka      KafkaConfig        `json:"kafka"`
+	MinIO      MinIOConfig        `json:"minio"`
+	Topics     TopicConfig        `json:"topics"`
+	ContestRpc zrpc.RpcClientConf `json:"contestRpc"`
+	Submit     SubmitConfig       `json:"submit"`
 }
 
 type KafkaConfig struct {
@@ -53,6 +55,10 @@ type SubmitConfig struct {
 	SourceBucket        string          `json:"sourceBucket"`
 	SourceKeyPrefix     string          `json:"sourceKeyPrefix"`
 	MaxCodeBytes        int             `json:"maxCodeBytes"`
+	LogBucket           string          `json:"logBucket"`
+	LogKeyPrefix        string          `json:"logKeyPrefix"`
+	LogMaxInlineBytes   int             `json:"logMaxInlineBytes"`
+	LogCacheTTL         time.Duration   `json:"logCacheTTL"`
 	IdempotencyTTL      time.Duration   `json:"idempotencyTTL"`
 	BatchLimit          int             `json:"batchLimit"`
 	StatusTTL           time.Duration   `json:"statusTTL"`
@@ -82,9 +88,10 @@ type RateLimitConfig struct {
 }
 
 type TimeoutConfig struct {
-	DB      time.Duration `json:"db"`
-	Cache   time.Duration `json:"cache"`
-	MQ      time.Duration `json:"mq"`
-	Storage time.Duration `json:"storage"`
-	Status  time.Duration `json:"status"`
+	DB         time.Duration `json:"db"`
+	Cache      time.Duration `json:"cache"`
+	MQ         time.Duration `json:"mq"`
+	Storage    time.Duration `json:"storage"`
+	Status     time.Duration `json:"status"`
+	ContestRPC time.Duration `json:"contestRPC"`
 }

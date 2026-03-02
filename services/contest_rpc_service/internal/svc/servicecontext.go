@@ -1,13 +1,72 @@
 package svc
 
-import "fuzoj/services/contest_rpc_service/internal/config"
+import (
+	"database/sql"
+	"time"
+
+	"fuzoj/services/contest_rpc_service/internal/config"
+	"fuzoj/services/contest_rpc_service/internal/domain"
+	"fuzoj/services/contest_rpc_service/internal/repository"
+
+	"github.com/zeromicro/go-zero/core/stores/cache"
+	"github.com/zeromicro/go-zero/core/stores/sqlx"
+	"github.com/zeromicro/go-zero/core/syncx"
+)
 
 type ServiceContext struct {
-	Config config.Config
+	Config             config.Config
+	Conn               sqlx.SqlConn
+	Cache              cache.Cache
+	ContestRepo        repository.ContestRepository
+	ProblemRepo        repository.ContestProblemRepository
+	ParticipantRepo    repository.ContestParticipantRepository
+	EligibilityService *domain.EligibilityService
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
+	conn := sqlx.NewMysql(c.Mysql.DataSource)
+
+	var cacheClient cache.Cache
+	if len(c.Cache) > 0 {
+		cacheClient = cache.New(c.Cache, syncx.NewSingleFlight(), cache.NewStat("contest.rpc"), sql.ErrNoRows)
+	}
+
+	ttl := c.Contest.EligibilityCacheTTL
+	emptyTTL := c.Contest.EligibilityEmptyTTL
+	localSize := c.Contest.EligibilityLocalCacheSize
+	localTTL := c.Contest.EligibilityLocalCacheTTL
+	if localTTL <= 0 {
+		localTTL = ttl
+	}
+	if localSize == 0 {
+		localSize = 1024
+	}
+
+	contestRepo := repository.NewContestRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	problemRepo := repository.NewContestProblemRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	participantRepo := repository.NewContestParticipantRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	eligibilityService := domain.NewEligibilityService(contestRepo, problemRepo, participantRepo)
+
 	return &ServiceContext{
-		Config: c,
+		Config:             c,
+		Conn:               conn,
+		Cache:              cacheClient,
+		ContestRepo:        contestRepo,
+		ProblemRepo:        problemRepo,
+		ParticipantRepo:    participantRepo,
+		EligibilityService: eligibilityService,
+	}
+}
+
+func EligibilityRequestFromProto(in interface {
+	GetContestId() string
+	GetUserId() int64
+	GetProblemId() int64
+}, now time.Time) domain.EligibilityRequest {
+	return domain.EligibilityRequest{
+		ContestID: in.GetContestId(),
+		UserID:    in.GetUserId(),
+		ProblemID: in.GetProblemId(),
+		Now:       now,
 	}
 }

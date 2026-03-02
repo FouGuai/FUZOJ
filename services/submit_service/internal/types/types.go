@@ -67,7 +67,8 @@ type GetSourceResponse struct {
 }
 
 type GetStatusRequest struct {
-	Id string `path:"id"`
+	Id      string `path:"id"`
+	Include string `form:"include,optional"`
 }
 
 type GetStatusResponse struct {
@@ -123,18 +124,18 @@ type SummaryStat struct {
 }
 
 type TestcaseResult struct {
-	TestID         string `json:"TestID"`
-	Verdict        string `json:"Verdict"`
-	TimeMs         int64  `json:"TimeMs"`
-	MemoryKB       int64  `json:"MemoryKB"`
-	OutputKB       int64  `json:"OutputKB"`
-	ExitCode       int    `json:"ExitCode"`
-	RuntimeLog     string `json:"RuntimeLog"`
-	CheckerLog     string `json:"CheckerLog"`
-	Stdout         string `json:"Stdout"`
-	Stderr         string `json:"Stderr"`
-	Score          int    `json:"Score"`
-	SubtaskID      string `json:"SubtaskID"`
+	TestID     string `json:"TestID"`
+	Verdict    string `json:"Verdict"`
+	TimeMs     int64  `json:"TimeMs"`
+	MemoryKB   int64  `json:"MemoryKB"`
+	OutputKB   int64  `json:"OutputKB"`
+	ExitCode   int    `json:"ExitCode"`
+	RuntimeLog string `json:"RuntimeLog"`
+	CheckerLog string `json:"CheckerLog"`
+	Stdout     string `json:"Stdout"`
+	Stderr     string `json:"Stderr"`
+	Score      int    `json:"Score"`
+	SubtaskID  string `json:"SubtaskID"`
 }
 
 type Timestamps struct {

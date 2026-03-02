@@ -4,7 +4,7 @@
 
 - `services/`：go-zero 服务入口与代码（例如 `services/judge_service/`、`services/user_service/`）。
   - 每个服务是独立的 go-zero 项目结构，目录结构：`internal/handler` → `internal/logic` → `internal/repository` → `internal/model`，依赖由 `internal/svc` 注入。
-- `internal/`：业务的共用逻辑
+- `internal/`：业务的共用逻辑，不能写具体的业务逻辑，这边应该是 utils 工具之类的东西
   **Controller → Logic → Repository → Model**（禁止反向调用或跨层调用）。
 - `pkg/`：可被其他模块复用的公共库；**统一错误码**存放在 `pkg/errors/`。
 - `api/`：API 定义（OpenAPI / Proto 等规范）。
@@ -180,3 +180,4 @@
 - **CLI Client**：`docs/cli_client.md` — 面向联调用的命令行客户端，覆盖主要 HTTP 接口
 - **ELK Logging**：`docs/logging_elk.md` — 结构化日志、采集与检索规范
 - **Registry Center**：`docs/registry_center.md` — 注册中心与配置中心格式说明（新增配置时需同步更新）
+- **Contest Submission Eligibility**：`docs/contest_submission_eligibility.md` — Submit→Contest 资格校验与缓存设计说明

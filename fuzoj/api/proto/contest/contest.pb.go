@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: contest/contest.proto
+// source: api/proto/contest/contest.proto
 
 package contest
 
@@ -32,7 +32,7 @@ type CheckParticipationRequest struct {
 
 func (x *CheckParticipationRequest) Reset() {
 	*x = CheckParticipationRequest{}
-	mi := &file_contest_contest_proto_msgTypes[0]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +44,7 @@ func (x *CheckParticipationRequest) String() string {
 func (*CheckParticipationRequest) ProtoMessage() {}
 
 func (x *CheckParticipationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[0]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +57,7 @@ func (x *CheckParticipationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckParticipationRequest.ProtoReflect.Descriptor instead.
 func (*CheckParticipationRequest) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{0}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *CheckParticipationRequest) GetContestId() string {
@@ -92,7 +92,7 @@ type CheckParticipationResponse struct {
 
 func (x *CheckParticipationResponse) Reset() {
 	*x = CheckParticipationResponse{}
-	mi := &file_contest_contest_proto_msgTypes[1]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -104,7 +104,7 @@ func (x *CheckParticipationResponse) String() string {
 func (*CheckParticipationResponse) ProtoMessage() {}
 
 func (x *CheckParticipationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[1]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -117,7 +117,7 @@ func (x *CheckParticipationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckParticipationResponse.ProtoReflect.Descriptor instead.
 func (*CheckParticipationResponse) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{1}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CheckParticipationResponse) GetOk() bool {
@@ -153,7 +153,7 @@ type CheckSubmissionEligibilityRequest struct {
 
 func (x *CheckSubmissionEligibilityRequest) Reset() {
 	*x = CheckSubmissionEligibilityRequest{}
-	mi := &file_contest_contest_proto_msgTypes[2]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -165,7 +165,7 @@ func (x *CheckSubmissionEligibilityRequest) String() string {
 func (*CheckSubmissionEligibilityRequest) ProtoMessage() {}
 
 func (x *CheckSubmissionEligibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[2]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -178,7 +178,7 @@ func (x *CheckSubmissionEligibilityRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CheckSubmissionEligibilityRequest.ProtoReflect.Descriptor instead.
 func (*CheckSubmissionEligibilityRequest) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{2}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CheckSubmissionEligibilityRequest) GetContestId() string {
@@ -220,7 +220,7 @@ type CheckSubmissionEligibilityResponse struct {
 
 func (x *CheckSubmissionEligibilityResponse) Reset() {
 	*x = CheckSubmissionEligibilityResponse{}
-	mi := &file_contest_contest_proto_msgTypes[3]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -232,7 +232,7 @@ func (x *CheckSubmissionEligibilityResponse) String() string {
 func (*CheckSubmissionEligibilityResponse) ProtoMessage() {}
 
 func (x *CheckSubmissionEligibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[3]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -245,7 +245,7 @@ func (x *CheckSubmissionEligibilityResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use CheckSubmissionEligibilityResponse.ProtoReflect.Descriptor instead.
 func (*CheckSubmissionEligibilityResponse) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{3}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CheckSubmissionEligibilityResponse) GetOk() bool {
@@ -289,7 +289,7 @@ type ContestRule struct {
 
 func (x *ContestRule) Reset() {
 	*x = ContestRule{}
-	mi := &file_contest_contest_proto_msgTypes[4]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -301,7 +301,7 @@ func (x *ContestRule) String() string {
 func (*ContestRule) ProtoMessage() {}
 
 func (x *ContestRule) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[4]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -314,7 +314,7 @@ func (x *ContestRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestRule.ProtoReflect.Descriptor instead.
 func (*ContestRule) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{4}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ContestRule) GetRuleType() string {
@@ -410,7 +410,7 @@ type ContestMetaRequest struct {
 
 func (x *ContestMetaRequest) Reset() {
 	*x = ContestMetaRequest{}
-	mi := &file_contest_contest_proto_msgTypes[5]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -422,7 +422,7 @@ func (x *ContestMetaRequest) String() string {
 func (*ContestMetaRequest) ProtoMessage() {}
 
 func (x *ContestMetaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[5]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -435,7 +435,7 @@ func (x *ContestMetaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestMetaRequest.ProtoReflect.Descriptor instead.
 func (*ContestMetaRequest) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{5}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ContestMetaRequest) GetContestId() string {
@@ -459,7 +459,7 @@ type ContestMetaResponse struct {
 
 func (x *ContestMetaResponse) Reset() {
 	*x = ContestMetaResponse{}
-	mi := &file_contest_contest_proto_msgTypes[6]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -471,7 +471,7 @@ func (x *ContestMetaResponse) String() string {
 func (*ContestMetaResponse) ProtoMessage() {}
 
 func (x *ContestMetaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[6]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -484,7 +484,7 @@ func (x *ContestMetaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestMetaResponse.ProtoReflect.Descriptor instead.
 func (*ContestMetaResponse) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{6}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ContestMetaResponse) GetContestId() string {
@@ -538,7 +538,7 @@ type ContestRuleRequest struct {
 
 func (x *ContestRuleRequest) Reset() {
 	*x = ContestRuleRequest{}
-	mi := &file_contest_contest_proto_msgTypes[7]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -550,7 +550,7 @@ func (x *ContestRuleRequest) String() string {
 func (*ContestRuleRequest) ProtoMessage() {}
 
 func (x *ContestRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[7]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -563,7 +563,7 @@ func (x *ContestRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestRuleRequest.ProtoReflect.Descriptor instead.
 func (*ContestRuleRequest) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{7}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ContestRuleRequest) GetContestId() string {
@@ -582,7 +582,7 @@ type ContestRuleResponse struct {
 
 func (x *ContestRuleResponse) Reset() {
 	*x = ContestRuleResponse{}
-	mi := &file_contest_contest_proto_msgTypes[8]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +594,7 @@ func (x *ContestRuleResponse) String() string {
 func (*ContestRuleResponse) ProtoMessage() {}
 
 func (x *ContestRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[8]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +607,7 @@ func (x *ContestRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestRuleResponse.ProtoReflect.Descriptor instead.
 func (*ContestRuleResponse) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{8}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ContestRuleResponse) GetRule() *ContestRule {
@@ -630,7 +630,7 @@ type ContestProblem struct {
 
 func (x *ContestProblem) Reset() {
 	*x = ContestProblem{}
-	mi := &file_contest_contest_proto_msgTypes[9]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +642,7 @@ func (x *ContestProblem) String() string {
 func (*ContestProblem) ProtoMessage() {}
 
 func (x *ContestProblem) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[9]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +655,7 @@ func (x *ContestProblem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestProblem.ProtoReflect.Descriptor instead.
 func (*ContestProblem) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{9}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ContestProblem) GetProblemId() int64 {
@@ -702,7 +702,7 @@ type ContestProblemsRequest struct {
 
 func (x *ContestProblemsRequest) Reset() {
 	*x = ContestProblemsRequest{}
-	mi := &file_contest_contest_proto_msgTypes[10]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -714,7 +714,7 @@ func (x *ContestProblemsRequest) String() string {
 func (*ContestProblemsRequest) ProtoMessage() {}
 
 func (x *ContestProblemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[10]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -727,7 +727,7 @@ func (x *ContestProblemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestProblemsRequest.ProtoReflect.Descriptor instead.
 func (*ContestProblemsRequest) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{10}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ContestProblemsRequest) GetContestId() string {
@@ -746,7 +746,7 @@ type ContestProblemsResponse struct {
 
 func (x *ContestProblemsResponse) Reset() {
 	*x = ContestProblemsResponse{}
-	mi := &file_contest_contest_proto_msgTypes[11]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -758,7 +758,7 @@ func (x *ContestProblemsResponse) String() string {
 func (*ContestProblemsResponse) ProtoMessage() {}
 
 func (x *ContestProblemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_contest_contest_proto_msgTypes[11]
+	mi := &file_api_proto_contest_contest_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -771,7 +771,7 @@ func (x *ContestProblemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContestProblemsResponse.ProtoReflect.Descriptor instead.
 func (*ContestProblemsResponse) Descriptor() ([]byte, []int) {
-	return file_contest_contest_proto_rawDescGZIP(), []int{11}
+	return file_api_proto_contest_contest_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ContestProblemsResponse) GetItems() []*ContestProblem {
@@ -781,11 +781,11 @@ func (x *ContestProblemsResponse) GetItems() []*ContestProblem {
 	return nil
 }
 
-var File_contest_contest_proto protoreflect.FileDescriptor
+var File_api_proto_contest_contest_proto protoreflect.FileDescriptor
 
-const file_contest_contest_proto_rawDesc = "" +
+const file_api_proto_contest_contest_proto_rawDesc = "" +
 	"\n" +
-	"\x15contest/contest.proto\x12\acontest\"r\n" +
+	"\x1fapi/proto/contest/contest.proto\x12\acontest\"r\n" +
 	"\x19CheckParticipationRequest\x12\x1d\n" +
 	"\n" +
 	"contest_id\x18\x01 \x01(\tR\tcontestId\x12\x17\n" +
@@ -863,19 +863,19 @@ const file_contest_contest_proto_rawDesc = "" +
 	"\x12GetContestProblems\x12\x1f.contest.ContestProblemsRequest\x1a .contest.ContestProblemsResponseB!Z\x1ffuzoj/api/proto/contest;contestb\x06proto3"
 
 var (
-	file_contest_contest_proto_rawDescOnce sync.Once
-	file_contest_contest_proto_rawDescData []byte
+	file_api_proto_contest_contest_proto_rawDescOnce sync.Once
+	file_api_proto_contest_contest_proto_rawDescData []byte
 )
 
-func file_contest_contest_proto_rawDescGZIP() []byte {
-	file_contest_contest_proto_rawDescOnce.Do(func() {
-		file_contest_contest_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_contest_contest_proto_rawDesc), len(file_contest_contest_proto_rawDesc)))
+func file_api_proto_contest_contest_proto_rawDescGZIP() []byte {
+	file_api_proto_contest_contest_proto_rawDescOnce.Do(func() {
+		file_api_proto_contest_contest_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_proto_contest_contest_proto_rawDesc), len(file_api_proto_contest_contest_proto_rawDesc)))
 	})
-	return file_contest_contest_proto_rawDescData
+	return file_api_proto_contest_contest_proto_rawDescData
 }
 
-var file_contest_contest_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
-var file_contest_contest_proto_goTypes = []any{
+var file_api_proto_contest_contest_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_api_proto_contest_contest_proto_goTypes = []any{
 	(*CheckParticipationRequest)(nil),          // 0: contest.CheckParticipationRequest
 	(*CheckParticipationResponse)(nil),         // 1: contest.CheckParticipationResponse
 	(*CheckSubmissionEligibilityRequest)(nil),  // 2: contest.CheckSubmissionEligibilityRequest
@@ -889,7 +889,7 @@ var file_contest_contest_proto_goTypes = []any{
 	(*ContestProblemsRequest)(nil),             // 10: contest.ContestProblemsRequest
 	(*ContestProblemsResponse)(nil),            // 11: contest.ContestProblemsResponse
 }
-var file_contest_contest_proto_depIdxs = []int32{
+var file_api_proto_contest_contest_proto_depIdxs = []int32{
 	4,  // 0: contest.ContestMetaResponse.rule:type_name -> contest.ContestRule
 	4,  // 1: contest.ContestRuleResponse.rule:type_name -> contest.ContestRule
 	9,  // 2: contest.ContestProblemsResponse.items:type_name -> contest.ContestProblem
@@ -910,26 +910,26 @@ var file_contest_contest_proto_depIdxs = []int32{
 	0,  // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_contest_contest_proto_init() }
-func file_contest_contest_proto_init() {
-	if File_contest_contest_proto != nil {
+func init() { file_api_proto_contest_contest_proto_init() }
+func file_api_proto_contest_contest_proto_init() {
+	if File_api_proto_contest_contest_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_contest_contest_proto_rawDesc), len(file_contest_contest_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_contest_contest_proto_rawDesc), len(file_api_proto_contest_contest_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_contest_contest_proto_goTypes,
-		DependencyIndexes: file_contest_contest_proto_depIdxs,
-		MessageInfos:      file_contest_contest_proto_msgTypes,
+		GoTypes:           file_api_proto_contest_contest_proto_goTypes,
+		DependencyIndexes: file_api_proto_contest_contest_proto_depIdxs,
+		MessageInfos:      file_api_proto_contest_contest_proto_msgTypes,
 	}.Build()
-	File_contest_contest_proto = out.File
-	file_contest_contest_proto_goTypes = nil
-	file_contest_contest_proto_depIdxs = nil
+	File_api_proto_contest_contest_proto = out.File
+	file_api_proto_contest_contest_proto_goTypes = nil
+	file_api_proto_contest_contest_proto_depIdxs = nil
 }

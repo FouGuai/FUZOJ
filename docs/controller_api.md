@@ -158,7 +158,10 @@
 
 - **GetStatus**：获取单个提交状态
   - 路径参数：`id`（submission_id）
+  - Query：`include`（string，可选，取值 `details`/`log`）
   - 响应体：`JudgeStatusResponse`
+    - 默认仅返回摘要字段（不包含 `compile`/`tests`）
+    - `include=details` 时返回 `compile`/`tests`
     - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
     - `tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
     - `tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）
@@ -169,6 +172,7 @@
   - 响应体：`BatchStatusResponse`
     - `items`（[]JudgeStatusResponse）
     - `missing`（[]string）
+    - 默认返回摘要字段（不包含 `compile`/`tests`）
     - `items[].compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
     - `items[].tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
     - `items[].tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）

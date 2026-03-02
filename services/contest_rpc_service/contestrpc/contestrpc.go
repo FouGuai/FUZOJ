@@ -14,19 +14,22 @@ import (
 )
 
 type (
-	CheckParticipationRequest  = contestpb.CheckParticipationRequest
-	CheckParticipationResponse = contestpb.CheckParticipationResponse
-	ContestMetaRequest         = contestpb.ContestMetaRequest
-	ContestMetaResponse        = contestpb.ContestMetaResponse
-	ContestProblem             = contestpb.ContestProblem
-	ContestProblemsRequest     = contestpb.ContestProblemsRequest
-	ContestProblemsResponse    = contestpb.ContestProblemsResponse
-	ContestRule                = contestpb.ContestRule
-	ContestRuleRequest         = contestpb.ContestRuleRequest
-	ContestRuleResponse        = contestpb.ContestRuleResponse
+	CheckParticipationRequest          = contestpb.CheckParticipationRequest
+	CheckParticipationResponse         = contestpb.CheckParticipationResponse
+	CheckSubmissionEligibilityRequest  = contestpb.CheckSubmissionEligibilityRequest
+	CheckSubmissionEligibilityResponse = contestpb.CheckSubmissionEligibilityResponse
+	ContestMetaRequest                 = contestpb.ContestMetaRequest
+	ContestMetaResponse                = contestpb.ContestMetaResponse
+	ContestProblem                     = contestpb.ContestProblem
+	ContestProblemsRequest             = contestpb.ContestProblemsRequest
+	ContestProblemsResponse            = contestpb.ContestProblemsResponse
+	ContestRule                        = contestpb.ContestRule
+	ContestRuleRequest                 = contestpb.ContestRuleRequest
+	ContestRuleResponse                = contestpb.ContestRuleResponse
 
 	ContestRpc interface {
 		CheckParticipation(ctx context.Context, in *CheckParticipationRequest, opts ...grpc.CallOption) (*CheckParticipationResponse, error)
+		CheckSubmissionEligibility(ctx context.Context, in *CheckSubmissionEligibilityRequest, opts ...grpc.CallOption) (*CheckSubmissionEligibilityResponse, error)
 		GetContestMeta(ctx context.Context, in *ContestMetaRequest, opts ...grpc.CallOption) (*ContestMetaResponse, error)
 		GetContestRule(ctx context.Context, in *ContestRuleRequest, opts ...grpc.CallOption) (*ContestRuleResponse, error)
 		GetContestProblems(ctx context.Context, in *ContestProblemsRequest, opts ...grpc.CallOption) (*ContestProblemsResponse, error)
@@ -46,6 +49,11 @@ func NewContestRpc(cli zrpc.Client) ContestRpc {
 func (m *defaultContestRpc) CheckParticipation(ctx context.Context, in *CheckParticipationRequest, opts ...grpc.CallOption) (*CheckParticipationResponse, error) {
 	client := contestpb.NewContestRpcClient(m.cli.Conn())
 	return client.CheckParticipation(ctx, in, opts...)
+}
+
+func (m *defaultContestRpc) CheckSubmissionEligibility(ctx context.Context, in *CheckSubmissionEligibilityRequest, opts ...grpc.CallOption) (*CheckSubmissionEligibilityResponse, error) {
+	client := contestpb.NewContestRpcClient(m.cli.Conn())
+	return client.CheckSubmissionEligibility(ctx, in, opts...)
 }
 
 func (m *defaultContestRpc) GetContestMeta(ctx context.Context, in *ContestMetaRequest, opts ...grpc.CallOption) (*ContestMetaResponse, error) {

@@ -15,7 +15,7 @@ import (
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
-const statusKeyPrefix = "judge:status:"
+const statusKeyPrefix = "js:"
 const nullCacheValue = "$NULL$"
 
 const (
@@ -55,8 +55,9 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (domain
 		logger.Error("submission_id is required")
 		return domain.JudgeStatusPayload{}, appErr.ValidationError("submission_id", "required")
 	}
+	cacheKey := statusKeyPrefix + hashKey(submissionID)
 	if r.redis != nil {
-		val, err := r.redis.GetCtx(ctx, statusKeyPrefix+submissionID)
+		val, err := r.redis.GetCtx(ctx, cacheKey)
 		if err != nil {
 			logger.Errorf("get status cache failed: %v", err)
 			return domain.JudgeStatusPayload{}, appErr.Wrapf(err, appErr.CacheError, "get status failed")
@@ -78,8 +79,8 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (domain
 		return domain.JudgeStatusPayload{}, err
 	}
 	if r.redis != nil {
-		if payload := mustMarshalStatus(status); payload != "" {
-			_ = r.redis.SetexCtx(ctx, statusKeyPrefix+submissionID, payload, ttlSeconds(r.ttl))
+		if payload := mustMarshalStatus(statusSummary(status)); payload != "" {
+			_ = r.redis.SetexCtx(ctx, cacheKey, payload, ttlSeconds(r.ttl))
 		}
 	}
 	return status, nil
@@ -102,7 +103,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 				logger.Error("submission_id is required")
 				return nil, nil, appErr.ValidationError("submission_id", "required")
 			}
-			keys = append(keys, statusKeyPrefix+submissionID)
+			keys = append(keys, statusKeyPrefix+hashKey(submissionID))
 		}
 		values, err := r.redis.MgetCtx(ctx, keys...)
 		if err != nil {
@@ -141,11 +142,13 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 		return nil, nil, err
 	}
 	if len(dbStatuses) > 0 {
-		statuses = append(statuses, dbStatuses...)
+		for _, st := range dbStatuses {
+			statuses = append(statuses, statusSummary(st))
+		}
 		if r.redis != nil {
 			for _, st := range dbStatuses {
-				if payload := mustMarshalStatus(st); payload != "" {
-					_ = r.redis.SetexCtx(ctx, statusKeyPrefix+st.SubmissionID, payload, ttlSeconds(r.ttl))
+				if payload := mustMarshalStatus(statusSummary(st)); payload != "" {
+					_ = r.redis.SetexCtx(ctx, statusKeyPrefix+hashKey(st.SubmissionID), payload, ttlSeconds(r.ttl))
 				}
 			}
 		}
@@ -155,10 +158,18 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 			if id == "" {
 				continue
 			}
-			_ = r.redis.SetexCtx(ctx, statusKeyPrefix+id, nullCacheValue, ttlSeconds(r.emptyTTL))
+			_ = r.redis.SetexCtx(ctx, statusKeyPrefix+hashKey(id), nullCacheValue, ttlSeconds(r.emptyTTL))
 		}
 	}
 	return statuses, dbMissing, nil
+}
+
+// GetFinalDetail returns final status payload from database directly.
+func (r *StatusRepository) GetFinalDetail(ctx context.Context, submissionID string) (domain.JudgeStatusPayload, error) {
+	if submissionID == "" {
+		return domain.JudgeStatusPayload{}, appErr.ValidationError("submission_id", "required")
+	}
+	return r.getFinalStatusFromDB(ctx, submissionID)
 }
 
 // Save persists status.
@@ -172,12 +183,12 @@ func (r *StatusRepository) Save(ctx context.Context, status domain.JudgeStatusPa
 	if r.redis == nil {
 		return nil
 	}
-	data, err := json.Marshal(status)
+	data, err := json.Marshal(statusSummary(status))
 	if err != nil {
 		logger.Errorf("marshal status failed: %v", err)
 		return fmt.Errorf("marshal status failed: %w", err)
 	}
-	if err := r.redis.SetexCtx(ctx, statusKeyPrefix+status.SubmissionID, string(data), ttlSeconds(r.ttl)); err != nil {
+	if err := r.redis.SetexCtx(ctx, statusKeyPrefix+hashKey(status.SubmissionID), string(data), ttlSeconds(r.ttl)); err != nil {
 		logger.Errorf("store status failed: %v", err)
 		return appErr.Wrapf(err, appErr.CacheError, "store status failed")
 	}
@@ -228,7 +239,7 @@ func (r *StatusRepository) getFinalStatusFromDB(ctx context.Context, submissionI
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			if r.redis != nil {
-				_ = r.redis.SetexCtx(ctx, statusKeyPrefix+submissionID, nullCacheValue, ttlSeconds(r.emptyTTL))
+				_ = r.redis.SetexCtx(ctx, statusKeyPrefix+hashKey(submissionID), nullCacheValue, ttlSeconds(r.emptyTTL))
 			}
 			return domain.JudgeStatusPayload{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 		}
@@ -286,6 +297,13 @@ func unmarshalStatus(data string) (*domain.JudgeStatusPayload, error) {
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func statusSummary(status domain.JudgeStatusPayload) domain.JudgeStatusPayload {
+	summary := status
+	summary.Compile = nil
+	summary.Tests = nil
+	return summary
 }
 
 func ttlSeconds(ttl time.Duration) int {

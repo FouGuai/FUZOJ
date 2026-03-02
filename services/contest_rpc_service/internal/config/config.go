@@ -33,11 +33,15 @@ type KafkaConfig struct {
 }
 
 type ContestConfig struct {
-	IdempotencyTTL         time.Duration `json:"idempotencyTTL"`
-	ResultPersistAfter     time.Duration `json:"resultPersistAfter"`
-	MaxParticipantsPerTeam int           `json:"maxParticipantsPerTeam"`
-	DefaultPageSize        int           `json:"defaultPageSize"`
-	MaxPageSize            int           `json:"maxPageSize"`
+	IdempotencyTTL            time.Duration `json:"idempotencyTTL"`
+	ResultPersistAfter        time.Duration `json:"resultPersistAfter"`
+	MaxParticipantsPerTeam    int           `json:"maxParticipantsPerTeam"`
+	DefaultPageSize           int           `json:"defaultPageSize"`
+	MaxPageSize               int           `json:"maxPageSize"`
+	EligibilityCacheTTL       time.Duration `json:"eligibilityCacheTTL"`
+	EligibilityEmptyTTL       time.Duration `json:"eligibilityEmptyTTL"`
+	EligibilityLocalCacheSize int           `json:"eligibilityLocalCacheSize"`
+	EligibilityLocalCacheTTL  time.Duration `json:"eligibilityLocalCacheTTL"`
 }
 
 type LeaderboardConfig struct {

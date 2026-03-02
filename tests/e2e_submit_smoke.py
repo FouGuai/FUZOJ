@@ -385,7 +385,22 @@ def main() -> int:
         time.sleep(args.poll_interval)
     require(status != "", "final status is empty")
 
-    status_data = pick(status_resp, "data") or {}
+    print("== submit status details ==")
+    details_resp = {}
+    for _ in range(10):
+        details_resp = request_json(
+            session,
+            "GET",
+            f"{base_url}/api/v1/submissions/{submission_id}?include=details",
+            timeout=args.timeout,
+        )
+        details_data = pick(details_resp, "data") or {}
+        tests = details_data.get("tests") or []
+        if tests:
+            break
+        time.sleep(args.poll_interval)
+
+    status_data = pick(details_resp, "data") or pick(status_resp, "data") or {}
     verdict = status_data.get("verdict")
     score = status_data.get("score")
     tests = status_data.get("tests") or []

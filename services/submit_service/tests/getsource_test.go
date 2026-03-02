@@ -33,7 +33,7 @@ func TestGetSourceHandler(t *testing.T) {
 				}, nil
 			},
 		}
-		ctx := newTestServiceContext(defaultTestConfig(), repo, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), repo, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		rr := doRequest(t, handler.GetSourceHandler(ctx), http.MethodGet, "/api/v1/submissions/sub-1/source", nil, nil, map[string]string{"id": "sub-1"})
 		if rr.Code != http.StatusOK {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -51,7 +51,7 @@ func TestGetSourceHandler(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		rr := doRequest(t, handler.GetSourceHandler(ctx), http.MethodGet, "/api/v1/submissions//source", nil, nil, map[string]string{"id": ""})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -71,7 +71,7 @@ func TestGetSourceHandler(t *testing.T) {
 				return nil, repository.ErrSubmissionNotFound
 			},
 		}
-		ctx := newTestServiceContext(defaultTestConfig(), repo, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), repo, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		rr := doRequest(t, handler.GetSourceHandler(ctx), http.MethodGet, "/api/v1/submissions/sub-miss/source", nil, nil, map[string]string{"id": "sub-miss"})
 		if rr.Code != http.StatusInternalServerError {
 			t.Fatalf("unexpected status: %d", rr.Code)

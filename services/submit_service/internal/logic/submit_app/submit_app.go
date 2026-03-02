@@ -13,6 +13,7 @@ import (
 
 	"fuzoj/internal/common/storage"
 	appErr "fuzoj/pkg/errors"
+	"fuzoj/services/contest_rpc_service/contestrpc"
 	"fuzoj/services/submit_service/internal/domain"
 	"fuzoj/services/submit_service/internal/repository"
 	"fuzoj/services/submit_service/internal/svc"
@@ -40,11 +41,12 @@ type RateLimitConfig struct {
 
 // TimeoutConfig holds timeout settings for external calls.
 type TimeoutConfig struct {
-	DB      time.Duration
-	Cache   time.Duration
-	MQ      time.Duration
-	Storage time.Duration
-	Status  time.Duration
+	DB         time.Duration
+	Cache      time.Duration
+	MQ         time.Duration
+	Storage    time.Duration
+	Status     time.Duration
+	ContestRPC time.Duration
 }
 
 type SubmitParams struct {
@@ -64,12 +66,14 @@ type SubmitParams struct {
 type SubmitApp struct {
 	submissionRepo repository.SubmissionRepository
 	statusRepo     *repository.StatusRepository
+	logRepo        *repository.SubmissionLogRepository
 	storage        storage.ObjectStorage
 	redis          *redis.Redis
 
-	topics   svc.TopicConfig
-	pushers  svc.TopicPushers
-	timeouts TimeoutConfig
+	topics     svc.TopicConfig
+	pushers    svc.TopicPushers
+	timeouts   TimeoutConfig
+	contestRpc contestrpc.ContestRpc
 
 	sourceBucket    string
 	sourceKeyPrefix string
@@ -112,6 +116,7 @@ func NewSubmitApp(svcCtx *svc.ServiceContext) (*SubmitApp, error) {
 	return &SubmitApp{
 		submissionRepo: svcCtx.SubmissionRepo,
 		statusRepo:     svcCtx.StatusRepo,
+		logRepo:        svcCtx.LogRepo,
 		storage:        svcCtx.Storage,
 		redis:          svcCtx.Redis,
 		topics: svc.TopicConfig{
@@ -132,12 +137,14 @@ func NewSubmitApp(svcCtx *svc.ServiceContext) (*SubmitApp, error) {
 			Window:  svcCtx.Config.Submit.RateLimit.Window,
 		},
 		timeouts: TimeoutConfig{
-			DB:      svcCtx.Config.Submit.Timeouts.DB,
-			Cache:   svcCtx.Config.Submit.Timeouts.Cache,
-			MQ:      svcCtx.Config.Submit.Timeouts.MQ,
-			Storage: svcCtx.Config.Submit.Timeouts.Storage,
-			Status:  svcCtx.Config.Submit.Timeouts.Status,
+			DB:         svcCtx.Config.Submit.Timeouts.DB,
+			Cache:      svcCtx.Config.Submit.Timeouts.Cache,
+			MQ:         svcCtx.Config.Submit.Timeouts.MQ,
+			Storage:    svcCtx.Config.Submit.Timeouts.Storage,
+			Status:     svcCtx.Config.Submit.Timeouts.Status,
+			ContestRPC: svcCtx.Config.Submit.Timeouts.ContestRPC,
 		},
+		contestRpc: svcCtx.ContestRpc,
 	}, nil
 }
 
@@ -161,6 +168,10 @@ func (a *SubmitApp) Submit(ctx context.Context, input SubmitParams) (string, dom
 			return "", domain.JudgeStatusPayload{}, statusErr
 		}
 		return existingID, status, nil
+	}
+	if err := a.checkContestEligibility(ctx, input); err != nil {
+		a.releaseIdempotency(ctx, input.IdempotencyKey, acquired)
+		return "", domain.JudgeStatusPayload{}, err
 	}
 
 	submissionID := uuid.NewString()
@@ -211,13 +222,60 @@ func (a *SubmitApp) Submit(ctx context.Context, input SubmitParams) (string, dom
 	return submissionID, pending, nil
 }
 
-func (a *SubmitApp) GetStatus(ctx context.Context, submissionID string) (domain.JudgeStatusPayload, error) {
+func (a *SubmitApp) GetStatus(ctx context.Context, submissionID, include string) (domain.JudgeStatusPayload, error) {
 	if submissionID == "" {
 		return domain.JudgeStatusPayload{}, appErr.ValidationError("submission_id", "required")
 	}
 	ctxStatus := withTimeout(ctx, a.timeouts.Status)
 	defer ctxStatus.cancel()
-	return a.statusRepo.Get(ctxStatus.ctx, submissionID)
+	status, err := a.statusRepo.Get(ctxStatus.ctx, submissionID)
+	if err != nil {
+		return domain.JudgeStatusPayload{}, err
+	}
+	if !isFinalStatus(status.Status) || strings.TrimSpace(include) == "" {
+		return summaryStatus(status), nil
+	}
+	detail, err := a.statusRepo.GetFinalDetail(ctxStatus.ctx, submissionID)
+	if err != nil {
+		return domain.JudgeStatusPayload{}, err
+	}
+	if a.logRepo == nil {
+		logx.WithContext(ctx).Error("log repository is not configured")
+		return detail, nil
+	}
+	return a.withLogs(ctxStatus.ctx, detail)
+}
+
+func (a *SubmitApp) checkContestEligibility(ctx context.Context, input SubmitParams) error {
+	if strings.TrimSpace(input.ContestID) == "" {
+		return nil
+	}
+	if a.contestRpc == nil {
+		return appErr.New(appErr.ServiceUnavailable).WithMessage("contest rpc is not configured")
+	}
+	ctxRPC := withTimeout(ctx, a.timeouts.ContestRPC)
+	defer ctxRPC.cancel()
+	resp, err := a.contestRpc.CheckSubmissionEligibility(ctxRPC.ctx, &contestrpc.CheckSubmissionEligibilityRequest{
+		ContestId: input.ContestID,
+		UserId:    input.UserID,
+		ProblemId: input.ProblemID,
+		SubmitAt:  time.Now().Unix(),
+	})
+	if err != nil {
+		logx.WithContext(ctx).Errorf("contest eligibility check failed: %v", err)
+		return appErr.New(appErr.ServiceUnavailable).WithMessage("contest eligibility check failed")
+	}
+	if resp == nil {
+		return appErr.New(appErr.ServiceUnavailable).WithMessage("contest eligibility response is empty")
+	}
+	if !resp.Ok {
+		code := appErr.ErrorCode(resp.ErrorCode)
+		if code == appErr.Success {
+			code = appErr.ServiceUnavailable
+		}
+		return appErr.New(code).WithMessage(resp.ErrorMessage)
+	}
+	return nil
 }
 
 func (a *SubmitApp) GetStatusBatch(ctx context.Context, submissionIDs []string) ([]domain.JudgeStatusPayload, []string, error) {
@@ -246,6 +304,62 @@ func (a *SubmitApp) GetSource(ctx context.Context, submissionID string) (*reposi
 		return nil, appErr.Wrapf(err, appErr.DatabaseError, "get submission failed")
 	}
 	return submission, nil
+}
+
+func (a *SubmitApp) withLogs(ctx context.Context, status domain.JudgeStatusPayload) (domain.JudgeStatusPayload, error) {
+	if status.Compile != nil {
+		if status.Compile.Log == "" {
+			if logItem, err := a.logRepo.Get(ctx, status.SubmissionID, repository.LogTypeCompileLog, ""); err == nil {
+				status.Compile.Log = logItem.Content
+			}
+		}
+		if status.Compile.Error == "" {
+			if logItem, err := a.logRepo.Get(ctx, status.SubmissionID, repository.LogTypeCompileError, ""); err == nil {
+				status.Compile.Error = logItem.Content
+			}
+		}
+	}
+	if len(status.Tests) == 0 {
+		return status, nil
+	}
+	tests := make([]domain.TestcaseResult, 0, len(status.Tests))
+	for _, test := range status.Tests {
+		item := test
+		if item.RuntimeLog == "" {
+			if logItem, err := a.logRepo.Get(ctx, status.SubmissionID, repository.LogTypeRuntime, item.TestID); err == nil {
+				item.RuntimeLog = logItem.Content
+			}
+		}
+		if item.CheckerLog == "" {
+			if logItem, err := a.logRepo.Get(ctx, status.SubmissionID, repository.LogTypeChecker, item.TestID); err == nil {
+				item.CheckerLog = logItem.Content
+			}
+		}
+		if item.Stdout == "" {
+			if logItem, err := a.logRepo.Get(ctx, status.SubmissionID, repository.LogTypeStdout, item.TestID); err == nil {
+				item.Stdout = logItem.Content
+			}
+		}
+		if item.Stderr == "" {
+			if logItem, err := a.logRepo.Get(ctx, status.SubmissionID, repository.LogTypeStderr, item.TestID); err == nil {
+				item.Stderr = logItem.Content
+			}
+		}
+		tests = append(tests, item)
+	}
+	status.Tests = tests
+	return status, nil
+}
+
+func summaryStatus(status domain.JudgeStatusPayload) domain.JudgeStatusPayload {
+	summary := status
+	summary.Compile = nil
+	summary.Tests = nil
+	return summary
+}
+
+func isFinalStatus(status string) bool {
+	return status == domain.StatusFinished || status == domain.StatusFailed
 }
 
 func (a *SubmitApp) validateInput(input SubmitParams) error {

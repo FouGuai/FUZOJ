@@ -24,14 +24,16 @@ type TimeoutConfig struct {
 // StatusFinalConsumer processes final status messages from MQ.
 type StatusFinalConsumer struct {
 	statusRepo *repository.StatusRepository
+	logRepo    *repository.SubmissionLogRepository
 	handlers   []FinalStatusHandler
 	timeouts   TimeoutConfig
 }
 
 // NewStatusFinalConsumer creates a consumer for final status events.
-func NewStatusFinalConsumer(statusRepo *repository.StatusRepository, handlers []FinalStatusHandler, timeouts TimeoutConfig) *StatusFinalConsumer {
+func NewStatusFinalConsumer(statusRepo *repository.StatusRepository, logRepo *repository.SubmissionLogRepository, handlers []FinalStatusHandler, timeouts TimeoutConfig) *StatusFinalConsumer {
 	return &StatusFinalConsumer{
 		statusRepo: statusRepo,
+		logRepo:    logRepo,
 		handlers:   handlers,
 		timeouts:   timeouts,
 	}
@@ -72,7 +74,20 @@ func (c *StatusFinalConsumer) Consume(ctx context.Context, key, value string) er
 func (c *StatusFinalConsumer) persistFinalStatus(ctx context.Context, status domain.JudgeStatusPayload) error {
 	ctxDB := withTimeout(ctx, c.timeouts.DB)
 	defer ctxDB.cancel()
-	return c.statusRepo.PersistFinalStatus(ctxDB.ctx, status)
+	cleanStatus := status
+	if c.logRepo != nil {
+		logs := []repository.LogRecord{}
+		cleanStatus, logs = repository.ExtractLogs(status)
+		if len(logs) > 0 {
+			if err := c.logRepo.SaveBatch(ctxDB.ctx, logs); err != nil {
+				return err
+			}
+		}
+	}
+	if err := c.statusRepo.Save(ctxDB.ctx, cleanStatus); err != nil {
+		return err
+	}
+	return c.statusRepo.PersistFinalStatus(ctxDB.ctx, cleanStatus)
 }
 
 type timeoutCtx struct {

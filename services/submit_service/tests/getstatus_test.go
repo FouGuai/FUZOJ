@@ -40,8 +40,8 @@ func TestGetStatusHandler(t *testing.T) {
 		}
 		model := &fakeSubmissionsModel{finalStatus: map[string]string{"sub-1": string(data)}}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
-		rr := doRequest(t, handler.GetStatusHandler(ctx), http.MethodGet, "/api/v1/submissions/sub-1", nil, nil, map[string]string{"id": "sub-1"})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		rr := doRequest(t, handler.GetStatusHandler(ctx), http.MethodGet, "/api/v1/submissions/sub-1?include=details", nil, nil, map[string]string{"id": "sub-1"})
 		if rr.Code != http.StatusOK {
 			t.Fatalf("unexpected status: %d", rr.Code)
 		}
@@ -57,11 +57,60 @@ func TestGetStatusHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("summary only", func(t *testing.T) {
+		_, redisClient := newTestRedis(t)
+		payload := domain.JudgeStatusPayload{
+			SubmissionID: "sub-2",
+			Status:       domain.StatusFinished,
+			Verdict:      "AC",
+			Score:        100,
+			Language:     "go",
+			Compile: &domain.CompileResult{
+				OK:       true,
+				ExitCode: 0,
+				TimeMs:   10,
+				MemoryKB: 1024,
+				Log:      "compile log",
+				Error:    "",
+			},
+			Tests: []domain.TestcaseResult{
+				{
+					TestID:     "1",
+					RuntimeLog: "runtime log",
+					CheckerLog: "checker log",
+				},
+			},
+			Timestamps: domain.Timestamps{ReceivedAt: time.Now().Unix(), FinishedAt: time.Now().Unix()},
+			Progress:   domain.Progress{TotalTests: 1, DoneTests: 1},
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal payload failed: %v", err)
+		}
+		model := &fakeSubmissionsModel{finalStatus: map[string]string{"sub-2": string(data)}}
+		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		rr := doRequest(t, handler.GetStatusHandler(ctx), http.MethodGet, "/api/v1/submissions/sub-2", nil, nil, map[string]string{"id": "sub-2"})
+		if rr.Code != http.StatusOK {
+			t.Fatalf("unexpected status: %d", rr.Code)
+		}
+		resp := decodeJSON[types.GetStatusResponse](t, rr.Body)
+		if resp.Code != int(pkgerrors.Success) {
+			t.Fatalf("unexpected response: %+v", resp)
+		}
+		if resp.Data.Compile != nil {
+			t.Fatalf("expected compile to be omitted in summary response")
+		}
+		if len(resp.Data.Tests) != 0 {
+			t.Fatalf("expected tests to be omitted in summary response")
+		}
+	})
+
 	t.Run("missing id", func(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		rr := doRequest(t, handler.GetStatusHandler(ctx), http.MethodGet, "/api/v1/submissions/", nil, nil, map[string]string{"id": ""})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -76,7 +125,7 @@ func TestGetStatusHandler(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		rr := doRequest(t, handler.GetStatusHandler(ctx), http.MethodGet, "/api/v1/submissions/sub-miss", nil, nil, map[string]string{"id": "sub-miss"})
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("unexpected status: %d", rr.Code)

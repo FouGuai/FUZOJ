@@ -35,6 +35,11 @@ Topics:
   Level1: judge.level1
   Level2: judge.level2
   Level3: judge.level3
+ContestRpc:
+  Etcd:
+    Hosts:
+      - 127.0.0.1:2379
+    Key: contest.rpc
 Submit:
   SourceBucket: fuzoj
   SourceKeyPrefix: submissions
@@ -64,3 +69,4 @@ Submit:
     MQ: 3s
     Storage: 5s
     Status: 2s
+    ContestRPC: 800ms

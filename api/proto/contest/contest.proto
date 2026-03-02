@@ -16,6 +16,19 @@ message CheckParticipationResponse {
   string error_message = 3;
 }
 
+message CheckSubmissionEligibilityRequest {
+  string contest_id = 1;
+  int64 user_id = 2;
+  int64 problem_id = 3;
+  int64 submit_at = 4;
+}
+
+message CheckSubmissionEligibilityResponse {
+  bool ok = 1;
+  int32 error_code = 2;
+  string error_message = 3;
+}
+
 message ContestRule {
   string rule_type = 1;
   int32 penalty_minutes = 2;
@@ -70,6 +83,7 @@ message ContestProblemsResponse {
 
 service ContestRpc {
   rpc CheckParticipation(CheckParticipationRequest) returns (CheckParticipationResponse);
+  rpc CheckSubmissionEligibility(CheckSubmissionEligibilityRequest) returns (CheckSubmissionEligibilityResponse);
   rpc GetContestMeta(ContestMetaRequest) returns (ContestMetaResponse);
   rpc GetContestRule(ContestRuleRequest) returns (ContestRuleResponse);
   rpc GetContestProblems(ContestProblemsRequest) returns (ContestProblemsResponse);

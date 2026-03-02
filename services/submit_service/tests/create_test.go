@@ -44,14 +44,14 @@ func TestCreateHandler(t *testing.T) {
 			},
 		}
 		cfg := defaultTestConfig()
-		ctx := newTestServiceContext(cfg, repo, statusRepo, storageClient, redisClient, svc.TopicPushers{Level1: pusher})
+		ctx := newTestServiceContext(cfg, repo, statusRepo, nil, storageClient, redisClient, svc.TopicPushers{Level1: pusher})
 		req := types.CreateSubmissionRequest{
-			ProblemId:  100,
-			UserId:     200,
-			LanguageId: "go",
-			SourceCode: "package main",
-			ContestId:  "",
-			Scene:      "practice",
+			ProblemId:         100,
+			UserId:            200,
+			LanguageId:        "go",
+			SourceCode:        "package main",
+			ContestId:         "",
+			Scene:             "practice",
 			ExtraCompileFlags: []string{},
 		}
 		rr := doRequest(t, handler.CreateHandler(ctx), http.MethodPost, "/api/v1/submissions", req, map[string]string{"Idempotency-Key": "test-idem"}, nil)
@@ -93,7 +93,7 @@ func TestCreateHandler(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		rr := doRequest(t, handler.CreateHandler(ctx), http.MethodPost, "/api/v1/submissions", "{", map[string]string{"Idempotency-Key": "test-idem"}, nil)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -111,19 +111,19 @@ func TestCreateHandler(t *testing.T) {
 		}{
 			{
 				name: "missing problem",
-				req: types.CreateSubmissionRequest{UserId: 1, LanguageId: "go", SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
+				req:  types.CreateSubmissionRequest{UserId: 1, LanguageId: "go", SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
 			},
 			{
 				name: "missing user",
-				req: types.CreateSubmissionRequest{ProblemId: 1, LanguageId: "go", SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
+				req:  types.CreateSubmissionRequest{ProblemId: 1, LanguageId: "go", SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
 			},
 			{
 				name: "missing language",
-				req: types.CreateSubmissionRequest{ProblemId: 1, UserId: 1, SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
+				req:  types.CreateSubmissionRequest{ProblemId: 1, UserId: 1, SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
 			},
 			{
 				name: "missing source",
-				req: types.CreateSubmissionRequest{ProblemId: 1, UserId: 1, LanguageId: "go", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
+				req:  types.CreateSubmissionRequest{ProblemId: 1, UserId: 1, LanguageId: "go", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}},
 			},
 		}
 		for _, tc := range cases {
@@ -131,7 +131,7 @@ func TestCreateHandler(t *testing.T) {
 				_, redisClient := newTestRedis(t)
 				model := &fakeSubmissionsModel{}
 				statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-				ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+				ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 				rr := doRequest(t, handler.CreateHandler(ctx), http.MethodPost, "/api/v1/submissions", tc.req, map[string]string{"Idempotency-Key": "test-idem"}, nil)
 				if rr.Code != http.StatusBadRequest {
 					t.Fatalf("unexpected status: %d", rr.Code)
@@ -150,7 +150,7 @@ func TestCreateHandler(t *testing.T) {
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
 		cfg := defaultTestConfig()
 		cfg.Submit.MaxCodeBytes = 1
-		ctx := newTestServiceContext(cfg, &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(cfg, &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		req := types.CreateSubmissionRequest{ProblemId: 1, UserId: 1, LanguageId: "go", SourceCode: "xx", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}}
 		rr := doRequest(t, handler.CreateHandler(ctx), http.MethodPost, "/api/v1/submissions", req, map[string]string{"Idempotency-Key": "test-idem"}, nil)
 		if rr.Code != http.StatusInternalServerError {
@@ -168,7 +168,7 @@ func TestCreateHandler(t *testing.T) {
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
 		cfg := defaultTestConfig()
 		cfg.Submit.RateLimit = config.RateLimitConfig{UserMax: 1, IPMax: 0, Window: time.Minute}
-		ctx := newTestServiceContext(cfg, &fakeSubmissionRepo{}, statusRepo, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(cfg, &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
 		req := types.CreateSubmissionRequest{ProblemId: 1, UserId: 10, LanguageId: "go", SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}}
 		rr := doRequest(t, handler.CreateHandler(ctx), http.MethodPost, "/api/v1/submissions", req, map[string]string{"Idempotency-Key": "test-idem"}, nil)
 		if rr.Code != http.StatusInternalServerError && rr.Code != http.StatusOK {
@@ -213,7 +213,7 @@ func TestCreateHandler(t *testing.T) {
 			calls++
 			return nil
 		}}
-		ctx := newTestServiceContext(defaultTestConfig(), repo, statusRepo, storageClient, redisClient, svc.TopicPushers{Level1: pusher})
+		ctx := newTestServiceContext(defaultTestConfig(), repo, statusRepo, nil, storageClient, redisClient, svc.TopicPushers{Level1: pusher})
 		req := types.CreateSubmissionRequest{ProblemId: 1, UserId: 2, LanguageId: "go", SourceCode: "code", ContestId: "", Scene: "practice", ExtraCompileFlags: []string{}, IdempotencyKey: "idem-key"}
 		rr := doRequest(t, handler.CreateHandler(ctx), http.MethodPost, "/api/v1/submissions", req, map[string]string{"Idempotency-Key": "idem-key"}, nil)
 		if rr.Code != http.StatusOK {
