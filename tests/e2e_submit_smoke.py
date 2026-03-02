@@ -60,6 +60,11 @@ def pick(data: dict, *keys):
     return cur
 
 
+def require(cond: bool, message: str) -> None:
+    if not cond:
+        raise RuntimeError(message)
+
+
 def request_json(session: requests.Session, method: str, url: str, *, headers=None, payload=None, timeout=10) -> dict:
     start = time.time()
     resp = session.request(method, url, headers=headers, json=payload, timeout=timeout)
@@ -152,6 +157,10 @@ def main() -> int:
     tests_dir.mkdir(parents=True, exist_ok=True)
     (tests_dir / "1.in").write_text("1 2\n", encoding="utf-8")
     (tests_dir / "1.out").write_text("3\n", encoding="utf-8")
+    (tests_dir / "2.in").write_text("10 5\n", encoding="utf-8")
+    (tests_dir / "2.out").write_text("15\n", encoding="utf-8")
+    (tests_dir / "3.in").write_text("7 8\n", encoding="utf-8")
+    (tests_dir / "3.out").write_text("15\n", encoding="utf-8")
 
     def build_pack(ver: int) -> tuple[Path, Path, Path]:
         manifest = {
@@ -163,7 +172,21 @@ def main() -> int:
                     "testId": "1",
                     "inputPath": "tests/1.in",
                     "answerPath": "tests/1.out",
-                    "score": 100,
+                    "score": 40,
+                    "subtaskId": "",
+                },
+                {
+                    "testId": "2",
+                    "inputPath": "tests/2.in",
+                    "answerPath": "tests/2.out",
+                    "score": 30,
+                    "subtaskId": "",
+                },
+                {
+                    "testId": "3",
+                    "inputPath": "tests/3.in",
+                    "answerPath": "tests/3.out",
+                    "score": 30,
                     "subtaskId": "",
                 }
             ],
@@ -250,6 +273,16 @@ def main() -> int:
         timeout=args.timeout,
     )
 
+    print("== statement get version ==")
+    statement_ver_resp = request_json(
+        session,
+        "GET",
+        f"{base_url}/api/v1/problems/{problem_id}/versions/{version}/statement",
+        timeout=args.timeout,
+    )
+    statement_ver_md = pick(statement_ver_resp, "data", "statement_md") or pick(statement_ver_resp, "statement_md")
+    require(statement_ver_md == statement, "statement_md mismatch for version")
+
     print("== upload sign ==")
     sign_resp = request_json(
         session,
@@ -291,6 +324,16 @@ def main() -> int:
         timeout=args.timeout,
     )
 
+    print("== statement get latest (after publish) ==")
+    statement_resp = request_json(
+        session,
+        "GET",
+        f"{base_url}/api/v1/problems/{problem_id}/statement",
+        timeout=args.timeout,
+    )
+    statement_md = pick(statement_resp, "data", "statement_md") or pick(statement_resp, "statement_md")
+    require(statement_md == statement, "statement_md mismatch after publish")
+
     print("== latest ==")
     request_json(
         session,
@@ -328,6 +371,7 @@ def main() -> int:
 
     print("== submit status ==")
     status = ""
+    status_resp = {}
     for _ in range(args.poll_times):
         status_resp = request_json(
             session,
@@ -339,6 +383,40 @@ def main() -> int:
         if status.lower() in {"finished", "failed"}:
             break
         time.sleep(args.poll_interval)
+    require(status != "", "final status is empty")
+
+    status_data = pick(status_resp, "data") or {}
+    verdict = status_data.get("verdict")
+    score = status_data.get("score")
+    tests = status_data.get("tests") or []
+    require(verdict in {"AC", "WA", "TLE", "MLE", "OLE", "RE", "CE", "SE"}, "verdict is invalid")
+    require(isinstance(score, int), "score is missing or invalid")
+    require(isinstance(tests, list) and len(tests) == 3, "tests list size mismatch")
+    first_test = tests[0] if tests else {}
+    require("RuntimeLog" in first_test, "RuntimeLog missing in test result")
+    require("CheckerLog" in first_test, "CheckerLog missing in test result")
+
+    print("== submit batch status ==")
+    batch_resp = request_json(
+        session,
+        "POST",
+        f"{base_url}/api/v1/submissions/batch_status",
+        payload={"submission_ids": [submission_id]},
+        timeout=args.timeout,
+    )
+    batch_items = pick(batch_resp, "data", "items") or []
+    require(len(batch_items) == 1, "batch status items size mismatch")
+
+    print("== submit source ==")
+    source_resp = request_json(
+        session,
+        "GET",
+        f"{base_url}/api/v1/submissions/{submission_id}/source",
+        timeout=args.timeout,
+    )
+    source_payload = pick(source_resp, "data") or {}
+    require(source_payload.get("submission_id") == submission_id, "source submission_id mismatch")
+    require(source_payload.get("source_code") == source_code, "source_code mismatch")
 
     print("== judge status ==")
     request_json(

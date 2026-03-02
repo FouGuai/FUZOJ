@@ -46,7 +46,7 @@ Kafka:
     judge.level3: 1
   ConsumerGroup: judge-service
   PrefetchCount: 10
-  Concurrency: 4
+  Concurrency: 128
   MaxRetries: 3
   RetryDelay: 1s
   RetryTopic: judge.retry
