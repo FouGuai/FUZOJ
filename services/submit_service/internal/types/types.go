@@ -129,8 +129,8 @@ type TestcaseResult struct {
 	MemoryKB       int64  `json:"MemoryKB"`
 	OutputKB       int64  `json:"OutputKB"`
 	ExitCode       int    `json:"ExitCode"`
-	RuntimeLogPath string `json:"RuntimeLogPath"`
-	CheckerLogPath string `json:"CheckerLogPath"`
+	RuntimeLog     string `json:"RuntimeLog"`
+	CheckerLog     string `json:"CheckerLog"`
 	Stdout         string `json:"Stdout"`
 	Stderr         string `json:"Stderr"`
 	Score          int    `json:"Score"`

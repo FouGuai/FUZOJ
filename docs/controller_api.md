@@ -160,6 +160,8 @@
   - 路径参数：`id`（submission_id）
   - 响应体：`JudgeStatusResponse`
     - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
+    - `tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
+    - `tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）
 
 - **BatchStatus**：批量获取提交状态
   - 请求体：`BatchStatusRequest`
@@ -168,6 +170,8 @@
     - `items`（[]JudgeStatusResponse）
     - `missing`（[]string）
     - `items[].compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
+    - `items[].tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
+    - `items[].tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）
 
 - **GetSource**：获取提交源码
   - 路径参数：`id`（submission_id）
@@ -188,6 +192,8 @@
   - 路径参数：`id`（submission_id）
   - 响应体：`JudgeStatusResponse`
     - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
+    - `tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
+    - `tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）
 
 ## Contest Service
 

@@ -57,8 +57,8 @@ type TestcaseResult struct {
 	MemoryKB       int64
 	OutputKB       int64
 	ExitCode       int
-	RuntimeLogPath string
-	CheckerLogPath string
+	RuntimeLog     string
+	CheckerLog     string
 	Stdout         string
 	Stderr         string
 	Score          int

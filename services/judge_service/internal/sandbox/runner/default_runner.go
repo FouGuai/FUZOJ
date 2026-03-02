@@ -29,6 +29,8 @@ const (
 	runtimeLogName    = "runtime.log"
 	checkerLogName    = "checker.log"
 	compileLogMaxSize = 64 * 1024
+	runtimeLogMaxSize = 64 * 1024
+	checkerLogMaxSize = 64 * 1024
 )
 
 // DefaultRunner implements compile/run workflows for supported languages.
@@ -140,26 +142,35 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 	}
 
 	runRes, runErr := r.eng.Run(ctx, runSpec)
+	runtimeLog, runtimeErr := readLogFile(runtimeLogPath, runtimeLogMaxSize)
+	if runtimeErr != nil {
+		logx.WithContext(ctx).Errorf("read runtime log failed submission_id=%s test_id=%s err=%v", req.SubmissionID, req.TestID, runtimeErr)
+	}
 	if runErr != nil {
 		r.metrics.ObserveRun(ctx, req.Language.ID, string(result.VerdictSE), runRes.TimeMs, runRes.MemoryKB, runRes.OutputKB)
 		return result.TestcaseResult{
-			TestID:         req.TestID,
-			Verdict:        result.VerdictSE,
-			RuntimeLogPath: runtimeLogPath,
+			TestID:     req.TestID,
+			Verdict:    result.VerdictSE,
+			RuntimeLog: runtimeLog,
 		}, runErr
 	}
 
 	verdict := mapRunVerdict(runRes, limits)
 	checkerLogPath := ""
+	checkerLog := ""
 	if verdict == result.VerdictAC && req.Checker != nil && req.CheckerProfile != nil {
 		checkerRes, checkerErr := r.runChecker(ctx, req, outputName)
 		checkerLogPath = checkerRes.LogPath
+		checkerLog, runtimeErr = readLogFile(checkerLogPath, checkerLogMaxSize)
+		if runtimeErr != nil {
+			logx.WithContext(ctx).Errorf("read checker log failed submission_id=%s test_id=%s err=%v", req.SubmissionID, req.TestID, runtimeErr)
+		}
 		if checkerErr != nil {
 			return result.TestcaseResult{
-				TestID:         req.TestID,
-				Verdict:        result.VerdictSE,
-				RuntimeLogPath: runtimeLogPath,
-				CheckerLogPath: checkerLogPath,
+				TestID:     req.TestID,
+				Verdict:    result.VerdictSE,
+				RuntimeLog: runtimeLog,
+				CheckerLog: checkerLog,
 			}, checkerErr
 		}
 		if checkerRes.ExitCode != 0 {
@@ -168,18 +179,18 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 	}
 
 	res := result.TestcaseResult{
-		TestID:         req.TestID,
-		Verdict:        verdict,
-		TimeMs:         runRes.TimeMs,
-		MemoryKB:       runRes.MemoryKB,
-		OutputKB:       runRes.OutputKB,
-		ExitCode:       runRes.ExitCode,
-		RuntimeLogPath: runtimeLogPath,
-		CheckerLogPath: checkerLogPath,
-		Stdout:         runRes.Stdout,
-		Stderr:         runRes.Stderr,
-		Score:          req.Score,
-		SubtaskID:      req.SubtaskID,
+		TestID:     req.TestID,
+		Verdict:    verdict,
+		TimeMs:     runRes.TimeMs,
+		MemoryKB:   runRes.MemoryKB,
+		OutputKB:   runRes.OutputKB,
+		ExitCode:   runRes.ExitCode,
+		RuntimeLog: runtimeLog,
+		CheckerLog: checkerLog,
+		Stdout:     runRes.Stdout,
+		Stderr:     runRes.Stderr,
+		Score:      req.Score,
+		SubtaskID:  req.SubtaskID,
 	}
 	r.metrics.ObserveRun(ctx, req.Language.ID, string(verdict), res.TimeMs, res.MemoryKB, res.OutputKB)
 	return res, nil
@@ -234,6 +245,10 @@ type checkerRunResult struct {
 }
 
 func readCompileLog(path string, maxSize int64) (string, error) {
+	return readLogFile(path, maxSize)
+}
+
+func readLogFile(path string, maxSize int64) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
