@@ -161,12 +161,22 @@ func main() {
 	ctx.DeadLetterPusher = deadLetterPusher
 
 	statusPublisher := repository.NewMQStatusEventPublisher(statusPusher, c.Status.FinalTopic)
+	finalBatcher := repository.NewFinalStatusBatcher(
+		ctx.SubmissionsModel,
+		statusPublisher,
+		c.Status.FinalBatchSize,
+		c.Status.FinalBatchInterval,
+		c.Status.FinalBatchTimeout,
+	)
+	finalBatcher.Start()
+	defer finalBatcher.Stop()
+	ctx.FinalStatusBatcher = finalBatcher
 	ctx.StatusRepo = repository.NewStatusRepository(
 		ctx.StatusCache,
 		ctx.SubmissionsModel,
 		c.StatusCacheTTL,
 		c.StatusCacheEmptyTTL,
-		statusPublisher,
+		finalBatcher,
 	)
 
 	dataCache := cache.NewDataPackCache(
@@ -268,6 +278,15 @@ func applyDefaults(c *config.Config) {
 	}
 	if c.Status.FinalTopic == "" {
 		c.Status.FinalTopic = "judge.status.final"
+	}
+	if c.Status.FinalBatchSize <= 0 {
+		c.Status.FinalBatchSize = 100
+	}
+	if c.Status.FinalBatchInterval <= 0 {
+		c.Status.FinalBatchInterval = time.Second
+	}
+	if c.Status.FinalBatchTimeout <= 0 {
+		c.Status.FinalBatchTimeout = 3 * time.Second
 	}
 	if c.Kafka.RetryTopic == "" {
 		c.Kafka.RetryTopic = "judge.retry"

@@ -12,7 +12,7 @@ import (
 	"fuzoj/services/submit_service/internal/repository"
 )
 
-func TestStatusFinalConsumer_ExtractLogsAndPersistSummary(t *testing.T) {
+func TestStatusFinalConsumer_ExtractLogsOnly(t *testing.T) {
 	_, redisClient := newTestRedis(t)
 	var storedPayload string
 	model := &fakeSubmissionsModel{
@@ -54,30 +54,11 @@ func TestStatusFinalConsumer_ExtractLogsAndPersistSummary(t *testing.T) {
 	if err := consumerWithLogs.Consume(context.Background(), "sub-1", string(payload)); err != nil {
 		t.Fatalf("consume failed: %v", err)
 	}
-	if storedPayload == "" {
-		t.Fatalf("expected final status payload to be stored")
-	}
-	var stored domain.JudgeStatusPayload
-	if err := json.Unmarshal([]byte(storedPayload), &stored); err != nil {
-		t.Fatalf("decode stored payload failed: %v", err)
-	}
-	if stored.Compile != nil && (stored.Compile.Log != "" || stored.Compile.Error != "") {
-		t.Fatalf("expected compile logs to be stripped")
-	}
-	if len(stored.Tests) > 0 {
-		if stored.Tests[0].RuntimeLog != "" || stored.Tests[0].CheckerLog != "" || stored.Tests[0].Stdout != "" || stored.Tests[0].Stderr != "" {
-			t.Fatalf("expected testcase logs to be stripped")
-		}
+	if storedPayload != "" {
+		t.Fatalf("expected final status payload not to be stored")
 	}
 
 	if err := consumerNoLogs.Consume(context.Background(), "sub-1", string(payload)); err != nil {
 		t.Fatalf("consume without log repo failed: %v", err)
-	}
-	statusSummary, err := statusRepo.Get(context.Background(), "sub-1")
-	if err != nil {
-		t.Fatalf("status repo get failed: %v", err)
-	}
-	if statusSummary.Compile != nil || len(statusSummary.Tests) != 0 {
-		t.Fatalf("expected summary cache without compile/tests")
 	}
 }

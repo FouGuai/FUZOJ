@@ -1,0 +1,25 @@
+Name: rank-rpc
+ListenOn: 0.0.0.0:0
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: rank.rpc.config
+    rpcRuntime: rank.rpc.runtime
+    log: rank.rpc.log
+Mysql:
+  dataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
+Cache:
+  - host: 127.0.0.1:6379
+    type: node
+Redis:
+  host: 127.0.0.1:6379
+  type: node
+Rank:
+  hotCacheTTL: 3s
+  pageCacheTTL: 5s
+  emptyTTL: 5m
+Timeouts:
+  cache: 1s

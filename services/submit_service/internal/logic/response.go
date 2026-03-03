@@ -25,15 +25,6 @@ func buildCreateResponse(ctx context.Context, submissionID string, status domain
 	}
 }
 
-func buildStatusResponse(ctx context.Context, status domain.JudgeStatusPayload) *types.GetStatusResponse {
-	return &types.GetStatusResponse{
-		Code:    int(errors.Success),
-		Message: "Success",
-		Data:    toJudgeStatusData(status),
-		TraceId: traceIDFromContext(ctx),
-	}
-}
-
 func buildBatchStatusResponse(ctx context.Context, statuses []domain.JudgeStatusPayload, missing []string) *types.BatchStatusResponse {
 	items := make([]types.JudgeStatusData, 0, len(statuses))
 	for _, status := range statuses {

@@ -156,16 +156,6 @@
     - `status`（string）
     - `received_at`（unix ts）
 
-- **GetStatus**：获取单个提交状态
-  - 路径参数：`id`（submission_id）
-  - Query：`include`（string，可选，取值 `details`/`log`）
-  - 响应体：`JudgeStatusResponse`
-    - 默认仅返回摘要字段（不包含 `compile`/`tests`）
-    - `include=details` 时返回 `compile`/`tests`
-    - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
-    - `tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
-    - `tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）
-
 - **BatchStatus**：批量获取提交状态
   - 请求体：`BatchStatusRequest`
     - `submission_ids`（[]string，必填）
@@ -195,6 +185,20 @@
 - **GetStatus**：获取单个提交状态（判题服务视角）
   - 路径参数：`id`（submission_id）
   - 响应体：`JudgeStatusResponse`
+    - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
+    - `tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
+    - `tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）
+
+## Status Service
+
+### StatusController
+
+- **GetStatus**：获取单个提交状态（前端轮询入口）
+  - 路径参数：`id`（submission_id）
+  - Query：`include`（string，可选，取值 `details`/`log`）
+  - 响应体：`JudgeStatusResponse`
+    - 默认仅返回摘要字段（不包含 `compile`/`tests`）
+    - `include=details` 时返回 `compile`/`tests`
     - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
     - `tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
     - `tests[].CheckerLog`（string）：Checker 日志文本（最大 64KB，超出截断）
@@ -317,3 +321,20 @@
 - **AnnouncementList**：公告列表
   - 路径参数：`id`（contest_id）
   - 请求参数：`page`、`page_size`
+
+## Rank Service
+
+### RankController
+
+- **Leaderboard**：获取比赛排行榜分页
+  - 路径参数：`id`（contest_id）
+  - Query：`page` `page_size` `mode`(live|frozen)
+  - 响应体：`LeaderboardResponse`
+    - `items`（[]LeaderboardEntry）
+    - `page`（PageInfo）
+    - `version`（string）
+
+- **LeaderboardWS**：订阅排行榜分页增量推送
+  - 路径：`GET /api/v1/contests/:id/leaderboard/ws`
+  - Query：`page` `page_size` `mode`
+  - 推送：`snapshot` 首包 + `refresh` 更新包

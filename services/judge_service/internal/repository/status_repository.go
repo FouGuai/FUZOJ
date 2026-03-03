@@ -13,6 +13,7 @@ import (
 	"fuzoj/services/judge_service/internal/pmodel"
 	"fuzoj/services/judge_service/internal/sandbox/result"
 
+	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
@@ -28,13 +29,18 @@ const (
 type StatusRepository struct {
 	cache            *redis.Redis
 	submissionsModel dbmodel.SubmissionsModel
-	publisher        StatusEventPublisher
+	batcher          FinalStatusEnqueuer
 	ttl              time.Duration
 	emptyTTL         time.Duration
 }
 
+// FinalStatusEnqueuer abstracts final status batching.
+type FinalStatusEnqueuer interface {
+	Enqueue(ctx context.Context, status pmodel.JudgeStatusResponse) error
+}
+
 // NewStatusRepository creates a new repository.
-func NewStatusRepository(cacheClient *redis.Redis, submissionsModel dbmodel.SubmissionsModel, ttl, emptyTTL time.Duration, publisher StatusEventPublisher) *StatusRepository {
+func NewStatusRepository(cacheClient *redis.Redis, submissionsModel dbmodel.SubmissionsModel, ttl, emptyTTL time.Duration, batcher FinalStatusEnqueuer) *StatusRepository {
 	if ttl <= 0 {
 		ttl = defaultStatusCacheTTL
 	}
@@ -44,7 +50,7 @@ func NewStatusRepository(cacheClient *redis.Redis, submissionsModel dbmodel.Subm
 	return &StatusRepository{
 		cache:            cacheClient,
 		submissionsModel: submissionsModel,
-		publisher:        publisher,
+		batcher:          batcher,
 		ttl:              ttl,
 		emptyTTL:         emptyTTL,
 	}
@@ -65,8 +71,12 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (pmodel
 	cacheKey := statusKeyPrefix + submissionID
 	cached, err := r.cache.GetCtx(ctx, cacheKey)
 	if err != nil {
-		logger.Errorf("get status cache failed: %v", err)
-		return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
+		if errors.Is(err, red.Nil) {
+			cached = ""
+		} else {
+			logger.Errorf("get status cache failed: %v", err)
+			return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
+		}
 	}
 	if cached != "" {
 		if cached == nullCacheValue {
@@ -179,10 +189,10 @@ func (r *StatusRepository) Save(ctx context.Context, status pmodel.JudgeStatusRe
 		return appErr.ValidationError("submission_id", "required")
 	}
 	if isFinalStatus(status.Status) {
-		if r.publisher == nil {
-			logger.Error("status publisher is not configured")
-		} else if err := r.publisher.PublishFinalStatus(ctx, status); err != nil {
-			logger.Errorf("publish final status failed: %v", err)
+		if r.batcher == nil {
+			logger.Error("final status batcher is not configured")
+		} else if err := r.batcher.Enqueue(ctx, status); err != nil {
+			logger.Errorf("enqueue final status failed: %v", err)
 		}
 	}
 	if r.cache != nil {

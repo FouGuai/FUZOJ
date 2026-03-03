@@ -34,6 +34,7 @@ type BootstrapKeys struct {
 	Runtime    string `yaml:"runtime"`
 	RpcRuntime string `yaml:"rpcRuntime"`
 	Log        string `yaml:"log"`
+	Switch     string `yaml:"switch"`
 }
 
 type Bootstrap struct {
@@ -156,6 +157,14 @@ func main() {
 		logPayload := buildLogConfig(meta, raw)
 		if err := writer.putJSON(keys.Log, logPayload, dryRun); err != nil {
 			fail(err)
+		}
+
+		if keys.Switch != "" {
+			if payload, ok := raw["switch"]; ok {
+				if err := writer.putJSON(keys.Switch, payload, dryRun); err != nil {
+					fail(err)
+				}
+			}
 		}
 
 		_ = cli.Close()

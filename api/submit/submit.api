@@ -27,18 +27,18 @@ type CompileResult {
 }
 
 type TestcaseResult {
-	TestID         string `json:"TestID"`
-	Verdict        string `json:"Verdict"`
-	TimeMs         int64  `json:"TimeMs"`
-	MemoryKB       int64  `json:"MemoryKB"`
-	OutputKB       int64  `json:"OutputKB"`
-	ExitCode       int    `json:"ExitCode"`
-	RuntimeLog     string `json:"RuntimeLog"`
-	CheckerLog     string `json:"CheckerLog"`
-	Stdout         string `json:"Stdout"`
-	Stderr         string `json:"Stderr"`
-	Score          int    `json:"Score"`
-	SubtaskID      string `json:"SubtaskID"`
+	TestID     string `json:"TestID"`
+	Verdict    string `json:"Verdict"`
+	TimeMs     int64  `json:"TimeMs"`
+	MemoryKB   int64  `json:"MemoryKB"`
+	OutputKB   int64  `json:"OutputKB"`
+	ExitCode   int    `json:"ExitCode"`
+	RuntimeLog string `json:"RuntimeLog"`
+	CheckerLog string `json:"CheckerLog"`
+	Stdout     string `json:"Stdout"`
+	Stderr     string `json:"Stderr"`
+	Score      int    `json:"Score"`
+	SubtaskID  string `json:"SubtaskID"`
 }
 
 type SummaryStat {
@@ -93,18 +93,6 @@ type CreateSubmissionResponse {
 	TraceId string               `json:"trace_id,omitempty"`
 }
 
-type GetStatusRequest {
-	Id string `path:"id"`
-}
-
-type GetStatusResponse {
-	Code    int               `json:"code"`
-	Message string            `json:"message"`
-	Data    JudgeStatusData   `json:"data"`
-	Details map[string]string `json:"details,omitempty"`
-	TraceId string            `json:"trace_id,omitempty"`
-}
-
 type BatchStatusRequest {
 	SubmissionIds []string `json:"submission_ids"`
 }
@@ -151,12 +139,10 @@ service submit {
 	@handler Create
 	post / (CreateSubmissionRequest) returns (CreateSubmissionResponse)
 
-	@handler GetStatus
-	get /:id (GetStatusRequest) returns (GetStatusResponse)
-
 	@handler BatchStatus
 	post /batch_status (BatchStatusRequest) returns (BatchStatusResponse)
 
 	@handler GetSource
 	get /:id/source (GetSourceRequest) returns (GetSourceResponse)
 }
+

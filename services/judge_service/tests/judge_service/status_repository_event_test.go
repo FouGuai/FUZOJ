@@ -22,10 +22,22 @@ func (f *fakeStatusPublisher) PublishFinalStatus(ctx context.Context, status pmo
 	return f.err
 }
 
-func TestStatusRepositorySavePublishesFinalStatus(t *testing.T) {
+type fakeStatusBatcher struct {
+	called int
+	status pmodel.JudgeStatusResponse
+	err    error
+}
+
+func (f *fakeStatusBatcher) Enqueue(ctx context.Context, status pmodel.JudgeStatusResponse) error {
+	f.called++
+	f.status = status
+	return f.err
+}
+
+func TestStatusRepositorySaveEnqueueFinalStatus(t *testing.T) {
 	t.Parallel()
-	pub := &fakeStatusPublisher{}
-	repo := repository.NewStatusRepository(nil, nil, time.Minute, time.Minute, pub)
+	batcher := &fakeStatusBatcher{}
+	repo := repository.NewStatusRepository(nil, nil, time.Minute, time.Minute, batcher)
 	status := pmodel.JudgeStatusResponse{
 		SubmissionID: "sub-1",
 		Status:       result.StatusFinished,
@@ -33,18 +45,18 @@ func TestStatusRepositorySavePublishesFinalStatus(t *testing.T) {
 	if err := repo.Save(context.Background(), status); err != nil {
 		t.Fatalf("save final status failed: %v", err)
 	}
-	if pub.called != 1 {
-		t.Fatalf("expected publisher called once, got %d", pub.called)
+	if batcher.called != 1 {
+		t.Fatalf("expected batcher called once, got %d", batcher.called)
 	}
-	if pub.status.SubmissionID != status.SubmissionID {
-		t.Fatalf("unexpected submission id: %s", pub.status.SubmissionID)
+	if batcher.status.SubmissionID != status.SubmissionID {
+		t.Fatalf("unexpected submission id: %s", batcher.status.SubmissionID)
 	}
 }
 
 func TestStatusRepositorySaveSkipsNonFinalStatus(t *testing.T) {
 	t.Parallel()
-	pub := &fakeStatusPublisher{}
-	repo := repository.NewStatusRepository(nil, nil, time.Minute, time.Minute, pub)
+	batcher := &fakeStatusBatcher{}
+	repo := repository.NewStatusRepository(nil, nil, time.Minute, time.Minute, batcher)
 	status := pmodel.JudgeStatusResponse{
 		SubmissionID: "sub-2",
 		Status:       result.StatusRunning,
@@ -52,8 +64,8 @@ func TestStatusRepositorySaveSkipsNonFinalStatus(t *testing.T) {
 	if err := repo.Save(context.Background(), status); err != nil {
 		t.Fatalf("save non-final status failed: %v", err)
 	}
-	if pub.called != 0 {
-		t.Fatalf("expected publisher not called, got %d", pub.called)
+	if batcher.called != 0 {
+		t.Fatalf("expected batcher not called, got %d", batcher.called)
 	}
 }
 

@@ -4,12 +4,12 @@
 package handler
 
 import (
-	"fuzoj/pkg/handlerx"
 	"net/http"
 
-	"fuzoj/services/submit_service/internal/logic"
-	"fuzoj/services/submit_service/internal/svc"
-	"fuzoj/services/submit_service/internal/types"
+	"fuzoj/services/status_service/internal/logic"
+	"fuzoj/services/status_service/internal/svc"
+	"fuzoj/services/status_service/internal/types"
+
 	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
@@ -17,14 +17,14 @@ func GetStatusHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req types.GetStatusRequest
 		if err := httpx.Parse(r, &req); err != nil {
-			handlerx.WriteError(w, r, handlerx.BadRequestError())
+			httpx.ErrorCtx(r.Context(), w, err)
 			return
 		}
 
 		l := logic.NewGetStatusLogic(r.Context(), svcCtx)
 		resp, err := l.GetStatus(&req)
 		if err != nil {
-			handlerx.WriteError(w, r, err)
+			httpx.ErrorCtx(r.Context(), w, err)
 		} else {
 			httpx.OkJsonCtx(r.Context(), w, resp)
 		}

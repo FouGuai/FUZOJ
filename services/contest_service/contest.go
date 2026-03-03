@@ -92,6 +92,26 @@ func main() {
 	ctx := svc.NewServiceContext(c)
 	handler.RegisterHandlers(server, ctx)
 
+	if ctx.ContestDispatchQueue != nil {
+		go ctx.ContestDispatchQueue.Start()
+		defer ctx.ContestDispatchQueue.Stop()
+	}
+	if ctx.JudgePushers.Level0 != nil {
+		defer ctx.JudgePushers.Level0.Close()
+	}
+	if ctx.JudgePushers.Level1 != nil {
+		defer ctx.JudgePushers.Level1.Close()
+	}
+	if ctx.JudgePushers.Level2 != nil {
+		defer ctx.JudgePushers.Level2.Close()
+	}
+	if ctx.JudgePushers.Level3 != nil {
+		defer ctx.JudgePushers.Level3.Close()
+	}
+	if ctx.DeadLetterPusher != nil {
+		defer ctx.DeadLetterPusher.Close()
+	}
+
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)
 	server.Start()
 }

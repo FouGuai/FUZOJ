@@ -21,18 +21,20 @@ import (
 )
 
 type ServiceContext struct {
-	Config              config.Config
-	Conn                sqlx.SqlConn
-	Redis               *redis.Redis
-	SubmissionsModel    model.SubmissionsModel
-	SubmissionRepo      repository.SubmissionRepository
-	StatusRepo          *repository.StatusRepository
-	LogRepo             *repository.SubmissionLogRepository
-	Storage             storage.ObjectStorage
-	StatusFinalQueue    queue.MessageQueue
-	StatusFinalConsumer *consumer.StatusFinalConsumer
-	TopicPushers        TopicPushers
-	ContestRpc          contestrpc.ContestRpc
+	Config                config.Config
+	Conn                  sqlx.SqlConn
+	Redis                 *redis.Redis
+	SubmissionsModel      model.SubmissionsModel
+	SubmissionRepo        repository.SubmissionRepository
+	StatusRepo            *repository.StatusRepository
+	LogRepo               *repository.SubmissionLogRepository
+	Storage               storage.ObjectStorage
+	StatusFinalQueue      queue.MessageQueue
+	StatusFinalConsumer   *consumer.StatusFinalConsumer
+	TopicPushers          TopicPushers
+	ContestDispatchPusher TopicPusher
+	ContestDispatchSwitch *ContestDispatchSwitch
+	ContestRpc            contestrpc.ContestRpc
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -96,6 +98,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		}
 	}
 
+	var contestDispatchPusher TopicPusher
+	if len(c.Kafka.Brokers) > 0 && c.Submit.ContestDispatch.Topic != "" {
+		contestDispatchPusher = kq.NewPusher(c.Kafka.Brokers, c.Submit.ContestDispatch.Topic, kq.WithSyncPush())
+	}
+
 	var statusFinalConsumer *consumer.StatusFinalConsumer
 	var statusFinalQueue queue.MessageQueue
 	if len(c.Kafka.Brokers) > 0 && c.Submit.StatusFinalTopic != "" {
@@ -107,18 +114,19 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	return &ServiceContext{
-		Config:              c,
-		Conn:                conn,
-		Redis:               redisClient,
-		SubmissionsModel:    submissionsModel,
-		SubmissionRepo:      submissionRepo,
-		StatusRepo:          statusRepo,
-		LogRepo:             logRepo,
-		Storage:             storageClient,
-		StatusFinalQueue:    statusFinalQueue,
-		StatusFinalConsumer: statusFinalConsumer,
-		TopicPushers:        pushers,
-		ContestRpc:          initContestRpc(c),
+		Config:                c,
+		Conn:                  conn,
+		Redis:                 redisClient,
+		SubmissionsModel:      submissionsModel,
+		SubmissionRepo:        submissionRepo,
+		StatusRepo:            statusRepo,
+		LogRepo:               logRepo,
+		Storage:               storageClient,
+		StatusFinalQueue:      statusFinalQueue,
+		StatusFinalConsumer:   statusFinalConsumer,
+		TopicPushers:          pushers,
+		ContestDispatchPusher: contestDispatchPusher,
+		ContestRpc:            initContestRpc(c),
 	}
 }
 

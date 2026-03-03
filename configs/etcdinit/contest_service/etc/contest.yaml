@@ -28,12 +28,29 @@ Kafka:
     - judge.status.final
     - contest.leaderboard.rebuild
     - contest.hack.finished
+Topics:
+  level0: judge.level0
 Contest:
   idempotencyTTL: 10m
   resultPersistAfter: 1h
   maxParticipantsPerTeam: 3
   defaultPageSize: 50
   maxPageSize: 200
+  eligibilityCacheTTL: 30m
+  eligibilityEmptyTTL: 5m
+  eligibilityLocalCacheSize: 2048
+  eligibilityLocalCacheTTL: 10s
+ContestDispatch:
+  topic: contest.submit.validate
+  consumerGroup: contest-dispatch
+  prefetchCount: 1
+  concurrency: 4
+  maxRetries: 3
+  retryDelay: 1s
+  deadLetterTopic: contest.submit.validate.dead
+  messageTTL: 10m
+  idempotencyTTL: 30m
+  statusTTL: 24h
 Leaderboard:
   hotCacheTTL: 3s
   pageCacheTTL: 5s

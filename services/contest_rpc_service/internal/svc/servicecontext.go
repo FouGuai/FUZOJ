@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"time"
 
+	"fuzoj/pkg/contest/eligibility"
+	"fuzoj/pkg/contest/repository"
 	"fuzoj/services/contest_rpc_service/internal/config"
-	"fuzoj/services/contest_rpc_service/internal/domain"
-	"fuzoj/services/contest_rpc_service/internal/repository"
 
 	"github.com/zeromicro/go-zero/core/stores/cache"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
@@ -20,7 +20,7 @@ type ServiceContext struct {
 	ContestRepo        repository.ContestRepository
 	ProblemRepo        repository.ContestProblemRepository
 	ParticipantRepo    repository.ContestParticipantRepository
-	EligibilityService *domain.EligibilityService
+	EligibilityService *eligibility.Service
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -45,7 +45,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	contestRepo := repository.NewContestRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
 	problemRepo := repository.NewContestProblemRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
 	participantRepo := repository.NewContestParticipantRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
-	eligibilityService := domain.NewEligibilityService(contestRepo, problemRepo, participantRepo)
+	eligibilityService := eligibility.NewService(contestRepo, problemRepo, participantRepo)
 
 	return &ServiceContext{
 		Config:             c,
@@ -62,8 +62,8 @@ func EligibilityRequestFromProto(in interface {
 	GetContestId() string
 	GetUserId() int64
 	GetProblemId() int64
-}, now time.Time) domain.EligibilityRequest {
-	return domain.EligibilityRequest{
+}, now time.Time) eligibility.Request {
+	return eligibility.Request{
 		ContestID: in.GetContestId(),
 		UserID:    in.GetUserId(),
 		ProblemID: in.GetProblemId(),

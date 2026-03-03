@@ -1,0 +1,9 @@
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: rank.config
+    runtime: rank.rest.runtime
+    log: rank.log

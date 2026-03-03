@@ -158,6 +158,10 @@
 - **新增/变更 Controller 接口时必须同步更新 CLI 调试客户端与 `docs/cli_client.md`**
 - **新增服务时必须同步更新启动脚本（如 `scripts/debug_start.py`）**
 
+### 服务设计原则
+**因为该项目qps非常高，重要服务务必都要支持水平扩展**
+老服务使用 MVC 架构，新的服务使用 DDD 架构
+
 ### 在 AGENTS.md 中的注册方式
 
 - 在本文件末尾的 **已实现的模块文档** 部分添加条目
@@ -181,3 +185,6 @@
 - **ELK Logging**：`docs/logging_elk.md` — 结构化日志、采集与检索规范
 - **Registry Center**：`docs/registry_center.md` — 注册中心与配置中心格式说明（新增配置时需同步更新）
 - **Contest Submission Eligibility**：`docs/contest_submission_eligibility.md` — Submit→Contest 资格校验与缓存设计说明
+- **Contest Dispatch Kafka**：`docs/contest_dispatch_kafka.md` — Submit→Contest Kafka 分流与动态切换说明
+- **Status Service**：`docs/status_service.md` — 判题状态查询与缓存策略说明
+- **Rank Service**：`docs/rank_service.md` — 高性能排行榜存取与订阅服务说明

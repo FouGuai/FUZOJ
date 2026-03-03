@@ -15,14 +15,16 @@ import (
 
 type Config struct {
 	rest.RestConf
-	Bootstrap   bootstrap.Config  `json:"bootstrap,optional"`
-	Mysql       MysqlConfig       `json:"mysql"`
-	Cache       cache.CacheConf   `json:"cache"`
-	Redis       redis.RedisConf   `json:"redis"`
-	Kafka       KafkaConfig       `json:"kafka"`
-	Contest     ContestConfig     `json:"contest"`
-	Leaderboard LeaderboardConfig `json:"leaderboard"`
-	Timeouts    TimeoutConfig     `json:"timeouts"`
+	Bootstrap       bootstrap.Config      `json:"bootstrap,optional"`
+	Mysql           MysqlConfig           `json:"mysql"`
+	Cache           cache.CacheConf       `json:"cache"`
+	Redis           redis.RedisConf       `json:"redis"`
+	Kafka           KafkaConfig           `json:"kafka"`
+	Topics          TopicConfig           `json:"topics"`
+	Contest         ContestConfig         `json:"contest"`
+	ContestDispatch ContestDispatchConfig `json:"contestDispatch"`
+	Leaderboard     LeaderboardConfig     `json:"leaderboard"`
+	Timeouts        TimeoutConfig         `json:"timeouts"`
 }
 
 type MysqlConfig struct {
@@ -37,12 +39,36 @@ type KafkaConfig struct {
 	Topics   []string `json:"topics"`
 }
 
+type TopicConfig struct {
+	Level0 string `json:"level0"`
+	Level1 string `json:"level1"`
+	Level2 string `json:"level2"`
+	Level3 string `json:"level3"`
+}
+
 type ContestConfig struct {
-	IdempotencyTTL         time.Duration `json:"idempotencyTTL"`
-	ResultPersistAfter     time.Duration `json:"resultPersistAfter"`
-	MaxParticipantsPerTeam int           `json:"maxParticipantsPerTeam"`
-	DefaultPageSize        int           `json:"defaultPageSize"`
-	MaxPageSize            int           `json:"maxPageSize"`
+	IdempotencyTTL            time.Duration `json:"idempotencyTTL"`
+	ResultPersistAfter        time.Duration `json:"resultPersistAfter"`
+	MaxParticipantsPerTeam    int           `json:"maxParticipantsPerTeam"`
+	DefaultPageSize           int           `json:"defaultPageSize"`
+	MaxPageSize               int           `json:"maxPageSize"`
+	EligibilityCacheTTL       time.Duration `json:"eligibilityCacheTTL"`
+	EligibilityEmptyTTL       time.Duration `json:"eligibilityEmptyTTL"`
+	EligibilityLocalCacheSize int           `json:"eligibilityLocalCacheSize"`
+	EligibilityLocalCacheTTL  time.Duration `json:"eligibilityLocalCacheTTL"`
+}
+
+type ContestDispatchConfig struct {
+	Topic           string        `json:"topic"`
+	ConsumerGroup   string        `json:"consumerGroup"`
+	PrefetchCount   int           `json:"prefetchCount"`
+	Concurrency     int           `json:"concurrency"`
+	MaxRetries      int           `json:"maxRetries"`
+	RetryDelay      time.Duration `json:"retryDelay"`
+	DeadLetterTopic string        `json:"deadLetterTopic"`
+	MessageTTL      time.Duration `json:"messageTTL"`
+	IdempotencyTTL  time.Duration `json:"idempotencyTTL"`
+	StatusTTL       time.Duration `json:"statusTTL"`
 }
 
 type LeaderboardConfig struct {

@@ -24,6 +24,7 @@ type ServiceContext struct {
 	SubmissionsModel model.SubmissionsModel
 	StatusCache      *redis.Redis
 	StatusPublisher  repository.StatusEventPublisher
+	FinalStatusBatcher *repository.FinalStatusBatcher
 	StatusRepo       *repository.StatusRepository
 	Worker           *sandbox.Worker
 	ProblemClient    *problemclient.Client

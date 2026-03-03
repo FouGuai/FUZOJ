@@ -6,9 +6,9 @@ package logic
 import (
 	"context"
 
-	"fuzoj/services/submit_service/internal/logic/submit_app"
-	"fuzoj/services/submit_service/internal/svc"
-	"fuzoj/services/submit_service/internal/types"
+	"fuzoj/services/status_service/internal/logic/status_app"
+	"fuzoj/services/status_service/internal/svc"
+	"fuzoj/services/status_service/internal/types"
 
 	"github.com/zeromicro/go-zero/core/logx"
 )
@@ -28,7 +28,7 @@ func NewGetStatusLogic(ctx context.Context, svcCtx *svc.ServiceContext) *GetStat
 }
 
 func (l *GetStatusLogic) GetStatus(req *types.GetStatusRequest) (resp *types.GetStatusResponse, err error) {
-	app, err := submit_app.NewSubmitApp(l.svcCtx)
+	app, err := status_app.NewStatusApp(l.svcCtx)
 	if err != nil {
 		return nil, err
 	}

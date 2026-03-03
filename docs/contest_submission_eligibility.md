@@ -19,8 +19,19 @@ Submit 在创建提交前调用 RPC：
 2) `contest_id` 非空 → 调用 Contest RPC  
 3) `ok=false` 直接返回业务错误  
 
+Submit 也支持 Kafka 分流模式：
+1) `contest_id` 非空 → Submit 写入 `contest.submit.validate`  
+2) Contest 消费后做资格校验  
+3) 校验通过 → 转发到 `judge.level0`  
+4) 校验失败 → Contest 直接写入最终状态（StatusFailed + error_code/error_message）
+
 配置项（contest.rpc）建议：
 - `contest.eligibilityCacheTTL`：资格缓存 TTL（默认 30m）
 - `contest.eligibilityEmptyTTL`：空值缓存 TTL（默认 5m）
 - `contest.eligibilityLocalCacheSize`：本地缓存容量
 - `contest.eligibilityLocalCacheTTL`：本地缓存 TTL
+
+Kafka 分流配置示例：
+- `submit.switch`：`{"mode":"rpc|kafka"}`，运行时动态切换
+- `submit.ContestDispatch.topic`：contest 校验消息 Topic
+- `contest.ContestDispatch.*`：Contest 消费配置与最终状态写入 TTL

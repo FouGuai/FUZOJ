@@ -10,8 +10,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/zeromicro/go-zero/core/discov"
 	"github.com/zeromicro/go-zero/core/conf"
+	"github.com/zeromicro/go-zero/core/discov"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -148,6 +148,48 @@ func unmarshalConfig(data []byte, out any) error {
 		return conf.LoadFromJsonBytes(data, out)
 	}
 	return json.Unmarshal(data, out)
+}
+
+// DecodeJSON decodes JSON bytes into output.
+func DecodeJSON(data []byte, out any) error {
+	return unmarshalConfig(data, out)
+}
+
+// StartWatchJSON watches etcd key and invokes callback on updates.
+func StartWatchJSON(ctx context.Context, etcdConf discov.EtcdConf, key string, onChange func([]byte)) (context.CancelFunc, error) {
+	if err := etcdConf.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid etcd config: %w", err)
+	}
+	if key == "" {
+		return nil, fmt.Errorf("etcd key is required")
+	}
+	if onChange == nil {
+		return nil, fmt.Errorf("onChange is required")
+	}
+	cli, err := newEtcdClient(etcdConf)
+	if err != nil {
+		return nil, err
+	}
+	watchCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		defer func() { _ = cli.Close() }()
+		ch := cli.Watch(watchCtx, key)
+		for resp := range ch {
+			if resp.Canceled {
+				return
+			}
+			for _, ev := range resp.Events {
+				if ev.Type != clientv3.EventTypePut {
+					continue
+				}
+				if ev.Kv == nil || len(ev.Kv.Value) == 0 {
+					continue
+				}
+				onChange(ev.Kv.Value)
+			}
+		}
+	}()
+	return cancel, nil
 }
 
 func buildTLSConfig(etcdConf discov.EtcdConf) (*tls.Config, error) {

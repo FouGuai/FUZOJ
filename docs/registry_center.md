@@ -160,11 +160,30 @@ Value：`host:port`
   "worker":{"poolSize":4,"timeout":"30s"},
   "source":{"bucket":"judge-sources","timeout":"10s"},
   "problemRpc":{"etcd":{"hosts":["127.0.0.1:2379"],"key":"problem.rpc"},"timeout":2000,"callTimeout":"2s","metaTTL":"30s"},
-  "status":{"ttl":"30m","timeout":"2s","finalTopic":"judge.status.final"},
+  "status":{"ttl":"30m","timeout":"2s","finalTopic":"judge.status.final","finalBatchSize":100,"finalBatchInterval":"1s","finalBatchTimeout":"3s"},
   "judge":{"workRoot":"/data/judge/work"},
   "sandbox":{"cgroupRoot":"/sys/fs/cgroup","seccompDir":"/etc/judge/seccomp","helperPath":"/usr/local/bin/judge-helper","stdoutStderrMaxBytes":1048576,
     "enableSeccomp":true,"enableCgroup":true,"enableNamespaces":true},
   "language":{"languages":[],"profiles":[]}
+}
+```
+
+### Status Service
+必需字段：
+- `name` `host` `port`（RestConf）
+- `mysql` `cache` `redis` `minio` `status`
+示例：
+```json
+{
+  "name":"status",
+  "host":"0.0.0.0",
+  "port":8089,
+  "mysql":{"dataSource":"user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local"},
+  "cache":[{"host":"127.0.0.1:6379","type":"node"}],
+  "redis":{"host":"127.0.0.1:6379","type":"node"},
+  "minio":{"endpoint":"127.0.0.1:9000","accessKey":"minioadmin","secretKey":"minioadmin","useSSL":false,"bucket":"fuzoj","presignTTL":"15m"},
+  "status":{"cacheTTL":"30m","cacheEmptyTTL":"5m","logBucket":"fuzoj","logKeyPrefix":"submission-logs","logMaxBytes":65536,"logCacheTTL":"10m",
+    "timeouts":{"db":"3s","cache":"1s","storage":"5s","status":"2s"}}
 }
 ```
 
@@ -225,3 +244,40 @@ RPC 运行时（`problem.rpc.runtime`）：
 
 ## 更新约定
 如新增或变更 Etcd 中的运行时字段、日志字段、Key 命名规则或 `{service}.config` 字段，必须同步更新本文件，保持与代码实现一致。
+
+### Rank Service
+必需字段：
+- `name` `host` `port`（RestConf）
+- `mysql` `cache` `redis` `kafka` `rank` `timeouts`
+示例：
+```json
+{
+  "name":"rank",
+  "host":"0.0.0.0",
+  "port":8091,
+  "mysql":{"dataSource":"user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local"},
+  "cache":[{"host":"127.0.0.1:6379","type":"node"}],
+  "redis":{"host":"127.0.0.1:6379","type":"node"},
+  "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"rank-service","minBytes":10240,"maxBytes":10485760},
+  "rank":{"updateTopic":"contest.rank.updates","consumerGroup":"rank-service","prefetchCount":1,"concurrency":8,
+    "batchSize":200,"batchInterval":"100ms","hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","wsDebounce":"100ms"},
+  "timeouts":{"cache":"1s","mq":"3s"}
+}
+```
+
+### Rank RPC Service
+必需字段：
+- `name` `listenOn`（RpcServerConf）
+- `mysql` `cache` `redis` `rank` `timeouts`
+示例：
+```json
+{
+  "name":"rank-rpc",
+  "listenOn":"0.0.0.0:9096",
+  "mysql":{"dataSource":"user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local"},
+  "cache":[{"host":"127.0.0.1:6379","type":"node"}],
+  "redis":{"host":"127.0.0.1:6379","type":"node"},
+  "rank":{"hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m"},
+  "timeouts":{"cache":"1s"}
+}
+```

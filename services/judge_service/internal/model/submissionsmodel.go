@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/zeromicro/go-zero/core/stores/cache"
@@ -16,6 +17,7 @@ type (
 	// and implement the added methods in customSubmissionsModel.
 	SubmissionsModel interface {
 		submissionsModel
+		UpdateFinalStatusBatch(ctx context.Context, records []FinalStatusRecord) error
 	}
 
 	customSubmissionsModel struct {
@@ -27,6 +29,13 @@ type (
 type SubmissionFinalStatus struct {
 	SubmissionID string `db:"submission_id"`
 	FinalStatus  string `db:"final_status"`
+}
+
+// FinalStatusRecord holds data for batch final status updates.
+type FinalStatusRecord struct {
+	SubmissionID string
+	Payload      string
+	FinishedAt   time.Time
 }
 
 // NewSubmissionsModel returns a model for the database table.
@@ -46,4 +55,26 @@ func (m *customSubmissionsModel) FindFinalStatusBatch(ctx context.Context, submi
 
 func (m *customSubmissionsModel) UpdateFinalStatus(ctx context.Context, submissionID string, payload string, finishedAt time.Time) (sql.Result, error) {
 	return m.defaultSubmissionsModel.UpdateFinalStatus(ctx, submissionID, payload, finishedAt)
+}
+
+func (m *customSubmissionsModel) UpdateFinalStatusBatch(ctx context.Context, records []FinalStatusRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	query := fmt.Sprintf("update %s set `final_status` = ?, `final_status_at` = ? where `submission_id` = ?", m.table)
+	_, err := m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (sql.Result, error) {
+		var res sql.Result
+		for _, record := range records {
+			if record.SubmissionID == "" {
+				continue
+			}
+			r, err := conn.ExecCtx(ctx, query, record.Payload, record.FinishedAt, record.SubmissionID)
+			if err != nil {
+				return nil, err
+			}
+			res = r
+		}
+		return res, nil
+	})
+	return err
 }

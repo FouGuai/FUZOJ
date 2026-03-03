@@ -92,6 +92,11 @@ func main() {
 	ctx := svc.NewServiceContext(c)
 	handler.RegisterHandlers(server, ctx)
 
+	cancelSwitch := initContestDispatchSwitch(c, ctx)
+	if cancelSwitch != nil {
+		defer cancelSwitch()
+	}
+
 	if ctx.StatusFinalQueue != nil {
 		go ctx.StatusFinalQueue.Start()
 		defer ctx.StatusFinalQueue.Stop()
@@ -108,7 +113,46 @@ func main() {
 	if ctx.TopicPushers.Level3 != nil {
 		defer ctx.TopicPushers.Level3.Close()
 	}
+	if ctx.ContestDispatchPusher != nil {
+		defer ctx.ContestDispatchPusher.Close()
+	}
 
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)
 	server.Start()
+}
+
+func initContestDispatchSwitch(c config.Config, ctx *svc.ServiceContext) context.CancelFunc {
+	if ctx == nil {
+		return nil
+	}
+	switchKey := c.Bootstrap.Keys.Switch
+	mode := svc.ContestDispatchModeRPC
+	if switchKey != "" {
+		var switchCfg svc.ContestDispatchSwitchConfig
+		if err := bootstrap.LoadJSON(context.Background(), c.Bootstrap.Etcd, switchKey, &switchCfg); err != nil {
+			logx.Errorf("load contest dispatch switch failed: %v", err)
+		} else {
+			mode = svc.NormalizeContestDispatchMode(switchCfg.Mode)
+		}
+	}
+	ctx.ContestDispatchSwitch = svc.NewContestDispatchSwitch(mode)
+	logx.Infof("contest dispatch switch initialized mode=%s", ctx.ContestDispatchSwitch.Mode())
+
+	if switchKey == "" {
+		return nil
+	}
+	cancel, err := bootstrap.StartWatchJSON(context.Background(), c.Bootstrap.Etcd, switchKey, func(data []byte) {
+		var updated svc.ContestDispatchSwitchConfig
+		if err := bootstrap.DecodeJSON(data, &updated); err != nil {
+			logx.Errorf("decode contest dispatch switch failed: %v", err)
+			return
+		}
+		ctx.ContestDispatchSwitch.Update(updated.Mode)
+		logx.Infof("contest dispatch switch updated mode=%s", ctx.ContestDispatchSwitch.Mode())
+	})
+	if err != nil {
+		logx.Errorf("watch contest dispatch switch failed: %v", err)
+		return nil
+	}
+	return cancel
 }

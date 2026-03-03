@@ -14,4 +14,5 @@ type Keys struct {
 	Runtime    string `json:"runtime,optional"`
 	RpcRuntime string `json:"rpcRuntime,optional"`
 	Log        string `json:"log"`
+	Switch     string `json:"switch,optional"`
 }

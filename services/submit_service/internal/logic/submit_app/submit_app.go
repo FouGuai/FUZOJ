@@ -75,6 +75,10 @@ type SubmitApp struct {
 	timeouts   TimeoutConfig
 	contestRpc contestrpc.ContestRpc
 
+	contestDispatchTopic  string
+	contestDispatchPusher svc.TopicPusher
+	contestDispatchSwitch *svc.ContestDispatchSwitch
+
 	sourceBucket    string
 	sourceKeyPrefix string
 	maxCodeBytes    int
@@ -144,7 +148,10 @@ func NewSubmitApp(svcCtx *svc.ServiceContext) (*SubmitApp, error) {
 			Status:     svcCtx.Config.Submit.Timeouts.Status,
 			ContestRPC: svcCtx.Config.Submit.Timeouts.ContestRPC,
 		},
-		contestRpc: svcCtx.ContestRpc,
+		contestRpc:            svcCtx.ContestRpc,
+		contestDispatchTopic:  svcCtx.Config.Submit.ContestDispatch.Topic,
+		contestDispatchPusher: svcCtx.ContestDispatchPusher,
+		contestDispatchSwitch: svcCtx.ContestDispatchSwitch,
 	}, nil
 }
 
@@ -248,6 +255,10 @@ func (a *SubmitApp) GetStatus(ctx context.Context, submissionID, include string)
 
 func (a *SubmitApp) checkContestEligibility(ctx context.Context, input SubmitParams) error {
 	if strings.TrimSpace(input.ContestID) == "" {
+		return nil
+	}
+	if a.isContestDispatchKafka() {
+		logx.WithContext(ctx).Infof("contest eligibility skip rpc due to kafka mode contest_id=%s", input.ContestID)
 		return nil
 	}
 	if a.contestRpc == nil {
@@ -529,6 +540,10 @@ func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.S
 		return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "encode judge message failed")
 	}
 
+	if a.shouldDispatchContest(submission) {
+		return a.publishContestDispatch(ctx, submission, string(body))
+	}
+
 	topic := resolveTopic(submission.Scene, a.topics)
 	pusher := a.pusherForTopic(topic)
 	if pusher == nil {
@@ -557,6 +572,52 @@ func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.S
 		submission.Scene,
 	)
 	return nil
+}
+
+func (a *SubmitApp) publishContestDispatch(ctx context.Context, submission *repository.Submission, body string) error {
+	if a.contestDispatchPusher == nil || strings.TrimSpace(a.contestDispatchTopic) == "" {
+		return appErr.New(appErr.SubmissionCreateFailed).WithMessage("contest dispatch topic is not configured")
+	}
+	ctxMQ := withTimeout(ctx, a.timeouts.MQ)
+	defer ctxMQ.cancel()
+	if err := a.contestDispatchPusher.PushWithKey(ctxMQ.ctx, submission.SubmissionID, body); err != nil {
+		logx.WithContext(ctxMQ.ctx).Errorf(
+			"publish contest dispatch failed: %v topic=%s submission_id=%s problem_id=%d user_id=%d scene=%s",
+			err,
+			a.contestDispatchTopic,
+			submission.SubmissionID,
+			submission.ProblemID,
+			submission.UserID,
+			submission.Scene,
+		)
+		return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "publish contest dispatch failed")
+	}
+	logx.WithContext(ctxMQ.ctx).Infof(
+		"publish contest dispatch ok topic=%s submission_id=%s problem_id=%d user_id=%d scene=%s",
+		a.contestDispatchTopic,
+		submission.SubmissionID,
+		submission.ProblemID,
+		submission.UserID,
+		submission.Scene,
+	)
+	return nil
+}
+
+func (a *SubmitApp) shouldDispatchContest(submission *repository.Submission) bool {
+	if submission == nil {
+		return false
+	}
+	if strings.TrimSpace(submission.ContestID) == "" {
+		return false
+	}
+	return a.isContestDispatchKafka()
+}
+
+func (a *SubmitApp) isContestDispatchKafka() bool {
+	if a.contestDispatchSwitch == nil {
+		return false
+	}
+	return a.contestDispatchSwitch.Mode() == svc.ContestDispatchModeKafka
 }
 
 func (a *SubmitApp) pusherForTopic(topic string) svc.TopicPusher {

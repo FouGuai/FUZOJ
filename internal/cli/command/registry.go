@@ -206,10 +206,10 @@ func Registry() map[string]Command {
 			},
 		},
 		{
-			Service:      "submit",
+			Service:      "status",
 			Action:       "status",
 			Method:       "GET",
-			PathTemplate: "/api/v1/submissions/:id",
+			PathTemplate: "/api/v1/status/submissions/:id",
 			RequiresAuth: true,
 			Fields: []Field{
 				{Name: "id", Prompt: "submission_id", Type: FieldString, Required: true},

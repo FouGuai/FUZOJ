@@ -107,9 +107,12 @@ type ProblemRpcConfig struct {
 
 // StatusConfig holds status persistence settings.
 type StatusConfig struct {
-	TTL        time.Duration `json:"ttl"`
-	Timeout    time.Duration `json:"timeout"`
-	FinalTopic string        `json:"finalTopic"`
+	TTL               time.Duration `json:"ttl"`
+	Timeout           time.Duration `json:"timeout"`
+	FinalTopic        string        `json:"finalTopic"`
+	FinalBatchSize    int           `json:"finalBatchSize"`
+	FinalBatchInterval time.Duration `json:"finalBatchInterval"`
+	FinalBatchTimeout time.Duration `json:"finalBatchTimeout"`
 }
 
 // JudgeConfig holds judge runtime settings.

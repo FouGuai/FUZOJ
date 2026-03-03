@@ -66,19 +66,6 @@ type GetSourceResponse struct {
 	TraceId string            `json:"trace_id,omitempty"`
 }
 
-type GetStatusRequest struct {
-	Id      string `path:"id"`
-	Include string `form:"include,optional"`
-}
-
-type GetStatusResponse struct {
-	Code    int               `json:"code"`
-	Message string            `json:"message"`
-	Data    JudgeStatusData   `json:"data"`
-	Details map[string]string `json:"details,omitempty"`
-	TraceId string            `json:"trace_id,omitempty"`
-}
-
 type JudgeStatusData struct {
 	SubmissionId string           `json:"submission_id"`
 	Status       string           `json:"status"`

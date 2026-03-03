@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,15 +35,22 @@ func newTestServiceContext(
 	storageClient storage.ObjectStorage,
 	redisClient *redis.Redis,
 	pushers svc.TopicPushers,
+	contestDispatchPusher svc.TopicPusher,
+	contestDispatchMode string,
 ) *svc.ServiceContext {
+	if strings.TrimSpace(contestDispatchMode) == "" {
+		contestDispatchMode = svc.ContestDispatchModeRPC
+	}
 	return &svc.ServiceContext{
-		Config:         cfg,
-		SubmissionRepo: submissionRepo,
-		StatusRepo:     statusRepo,
-		LogRepo:        logRepo,
-		Storage:        storageClient,
-		Redis:          redisClient,
-		TopicPushers:   pushers,
+		Config:                cfg,
+		SubmissionRepo:        submissionRepo,
+		StatusRepo:            statusRepo,
+		LogRepo:               logRepo,
+		Storage:               storageClient,
+		Redis:                 redisClient,
+		TopicPushers:          pushers,
+		ContestDispatchPusher: contestDispatchPusher,
+		ContestDispatchSwitch: svc.NewContestDispatchSwitch(contestDispatchMode),
 	}
 }
 

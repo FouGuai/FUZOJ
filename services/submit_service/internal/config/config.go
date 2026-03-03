@@ -65,10 +65,16 @@ type SubmitConfig struct {
 	StatusEmptyTTL      time.Duration   `json:"statusEmptyTTL"`
 	StatusFinalTopic    string          `json:"statusFinalTopic"`
 	StatusFinalConsumer ConsumerConfig  `json:"statusFinalConsumer"`
+	ContestDispatch     ContestDispatch `json:"contestDispatch"`
 	SubmissionCacheTTL  time.Duration   `json:"submissionCacheTTL"`
 	SubmissionEmptyTTL  time.Duration   `json:"submissionEmptyTTL"`
 	RateLimit           RateLimitConfig `json:"rateLimit"`
 	Timeouts            TimeoutConfig   `json:"timeouts"`
+}
+
+// ContestDispatch defines topic config for contest validation dispatch.
+type ContestDispatch struct {
+	Topic string `json:"topic"`
 }
 
 type ConsumerConfig struct {

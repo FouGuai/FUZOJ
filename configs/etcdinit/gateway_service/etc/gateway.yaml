@@ -188,12 +188,6 @@ upstreams:
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
-      - name: "submit.get"
-        method: "GET"
-        path: "/api/v1/submissions/:id"
-        auth:
-          mode: "protected"
-          roles: ["user", "problem_setter", "admin", "super_admin"]
       - name: "submit.source"
         method: "GET"
         path: "/api/v1/submissions/:id/source"
@@ -203,6 +197,18 @@ upstreams:
       - name: "submit.batch"
         method: "POST"
         path: "/api/v1/submissions/batch_status"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+
+  - name: "status"
+    http:
+      target: "127.0.0.1:8089"
+      timeout: 0
+    mappings:
+      - name: "status.get"
+        method: "GET"
+        path: "/api/v1/status/*any"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
@@ -256,5 +262,21 @@ upstreams:
       - name: "objects.download"
         method: "GET"
         path: "/objects/*any"
+        auth:
+          mode: "public"
+
+  - name: "rank"
+    http:
+      target: "127.0.0.1:8091"
+      timeout: 0
+    mappings:
+      - name: "rank.leaderboard"
+        method: "GET"
+        path: "/api/v1/contests/:id/leaderboard"
+        auth:
+          mode: "public"
+      - name: "rank.leaderboard.ws"
+        method: "GET"
+        path: "/api/v1/contests/:id/leaderboard/ws"
         auth:
           mode: "public"

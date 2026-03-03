@@ -86,6 +86,9 @@ Status:
   TTL: 30m
   Timeout: 2s
   FinalTopic: judge.status.final
+  FinalBatchSize: 100
+  FinalBatchInterval: 1s
+  FinalBatchTimeout: 3s
 Judge:
   WorkRoot: /home/foushen.zhan/fuzoj/tmp/work
 Sandbox:

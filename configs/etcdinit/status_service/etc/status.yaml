@@ -1,0 +1,38 @@
+Name: status
+Host: 0.0.0.0
+Port: 0
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: status.config
+    runtime: status.rest.runtime
+    log: status.log
+Mysql:
+  DataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
+Cache:
+  - Host: 127.0.0.1:6379
+    Type: node
+Redis:
+  Host: 127.0.0.1:6379
+  Type: node
+MinIO:
+  Endpoint: 127.0.0.1:9000
+  AccessKey: minioadmin
+  SecretKey: minioadmin
+  UseSSL: false
+  Bucket: fuzoj
+Status:
+  CacheTTL: 30m
+  CacheEmptyTTL: 5m
+  LogBucket: fuzoj
+  LogKeyPrefix: submission-logs
+  LogMaxBytes: 65536
+  LogCacheTTL: 10m
+  Timeouts:
+    DB: 3s
+    Cache: 1s
+    Storage: 5s
+    Status: 2s

@@ -39,7 +39,7 @@ func TestBatchStatusHandler(t *testing.T) {
 		if err := statusRepo.Save(context.Background(), status1); err != nil {
 			t.Fatalf("store status failed: %v", err)
 		}
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{}, nil, "")
 		req := types.BatchStatusRequest{SubmissionIds: []string{"sub-1", "sub-2", "sub-3"}}
 		rr := doRequest(t, handler.BatchStatusHandler(ctx), http.MethodPost, "/api/v1/submissions/batch_status", req, nil, nil)
 		if rr.Code != http.StatusOK {
@@ -71,7 +71,7 @@ func TestBatchStatusHandler(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{}, nil, "")
 		rr := doRequest(t, handler.BatchStatusHandler(ctx), http.MethodPost, "/api/v1/submissions/batch_status", "{", nil, nil)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("unexpected status: %d", rr.Code)
@@ -86,7 +86,7 @@ func TestBatchStatusHandler(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{}, nil, "")
 		req := types.BatchStatusRequest{SubmissionIds: []string{}}
 		rr := doRequest(t, handler.BatchStatusHandler(ctx), http.MethodPost, "/api/v1/submissions/batch_status", req, nil, nil)
 		if rr.Code != http.StatusBadRequest {
@@ -104,7 +104,7 @@ func TestBatchStatusHandler(t *testing.T) {
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
 		cfg := defaultTestConfig()
 		cfg.Submit.BatchLimit = 1
-		ctx := newTestServiceContext(cfg, &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(cfg, &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{}, nil, "")
 		req := types.BatchStatusRequest{SubmissionIds: []string{"sub-1", "sub-2"}}
 		rr := doRequest(t, handler.BatchStatusHandler(ctx), http.MethodPost, "/api/v1/submissions/batch_status", req, nil, nil)
 		if rr.Code != http.StatusBadRequest {
@@ -120,7 +120,7 @@ func TestBatchStatusHandler(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
-		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{})
+		ctx := newTestServiceContext(defaultTestConfig(), &fakeSubmissionRepo{}, statusRepo, nil, &fakeStorage{}, redisClient, svc.TopicPushers{}, nil, "")
 		req := types.BatchStatusRequest{SubmissionIds: []string{"sub-1", ""}}
 		rr := doRequest(t, handler.BatchStatusHandler(ctx), http.MethodPost, "/api/v1/submissions/batch_status", req, nil, nil)
 		if rr.Code != http.StatusBadRequest {

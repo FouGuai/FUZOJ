@@ -76,6 +76,12 @@ def collect_topics(cfg):
     if submit_cfg:
         append_topic(topics, seen, submit_cfg.get("statusFinalTopic"))
         append_topic(topics, seen, submit_cfg.get("StatusFinalTopic"))
+        contest_dispatch = submit_cfg.get("contestDispatch", {})
+        if not contest_dispatch:
+            contest_dispatch = submit_cfg.get("ContestDispatch", {})
+        if isinstance(contest_dispatch, dict):
+            append_topic(topics, seen, contest_dispatch.get("topic"))
+            append_topic(topics, seen, contest_dispatch.get("Topic"))
         status_consumer = submit_cfg.get("statusFinalConsumer", {})
         if not status_consumer:
             status_consumer = submit_cfg.get("StatusFinalConsumer", {})
@@ -87,6 +93,18 @@ def collect_topics(cfg):
     if cleanup_cfg:
         append_topic(topics, seen, cleanup_cfg.get("topic"))
         append_topic(topics, seen, cleanup_cfg.get("Topic"))
+
+    contest_dispatch_cfg = pick_cfg(cfg, "contestDispatch", "ContestDispatch")
+    if contest_dispatch_cfg:
+        append_topic(topics, seen, contest_dispatch_cfg.get("topic"))
+        append_topic(topics, seen, contest_dispatch_cfg.get("Topic"))
+        append_topic(topics, seen, contest_dispatch_cfg.get("deadLetterTopic"))
+        append_topic(topics, seen, contest_dispatch_cfg.get("DeadLetterTopic"))
+
+    rank_cfg = pick_cfg(cfg, "rank", "Rank")
+    if rank_cfg:
+        append_topic(topics, seen, rank_cfg.get("updateTopic"))
+        append_topic(topics, seen, rank_cfg.get("UpdateTopic"))
 
     ban_event_cfg = pick_cfg(cfg, "banEvent", "BanEvent")
     if ban_event_cfg:

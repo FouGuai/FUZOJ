@@ -7,3 +7,4 @@ bootstrap:
     config: submit.config
     runtime: submit.rest.runtime
     log: submit.log
+    switch: submit.switch
