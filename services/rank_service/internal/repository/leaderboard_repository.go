@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"time"
 
 	appErr "fuzoj/pkg/errors"
@@ -31,6 +33,17 @@ type LeaderboardRepository struct {
 	emptyTTL time.Duration
 }
 
+// UpdateApplier applies rank updates.
+type UpdateApplier interface {
+	ApplyUpdates(ctx context.Context, events []pmodel.RankUpdateEvent) error
+}
+
+// RankUpdateMeta holds max version information for a contest.
+type RankUpdateMeta struct {
+	MaxVersion   int64
+	MaxUpdatedAt int64
+}
+
 // NewLeaderboardRepository creates a new repository.
 func NewLeaderboardRepository(redisClient *redis.Redis, pageTTL, emptyTTL time.Duration) *LeaderboardRepository {
 	return &LeaderboardRepository{
@@ -50,8 +63,35 @@ func (r *LeaderboardRepository) ApplyUpdates(ctx context.Context, events []pmode
 	if len(events) == 0 {
 		return nil
 	}
+	currentVersions := make(map[string]int64)
+	contestIDs := uniqueContestIDs(events)
+	for _, contestID := range contestIDs {
+		versionStr, err := r.redis.HgetCtx(ctx, metaKey(contestID), "version")
+		if err != nil && !errors.Is(err, red.Nil) {
+			logger.Errorf("load rank meta version failed: %v", err)
+			return appErr.Wrapf(err, appErr.CacheError, "load rank meta version failed")
+		}
+		if versionStr == "" {
+			currentVersions[contestID] = 0
+			continue
+		}
+		versionValue, err := strconv.ParseInt(versionStr, 10, 64)
+		if err != nil {
+			logger.Errorf("invalid rank meta version: %v", err)
+			return appErr.ValidationError("version", "invalid")
+		}
+		currentVersions[contestID] = versionValue
+	}
+	filtered, metaInfo, err := SortAndFilterRankUpdates(events, currentVersions)
+	if err != nil {
+		logger.Errorf("sort rank updates failed: %v", err)
+		return err
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
 	return r.redis.PipelinedCtx(ctx, func(pipe redis.Pipeliner) error {
-		for _, event := range events {
+		for _, event := range filtered {
 			if event.ContestID == "" || event.MemberID == "" {
 				logger.Error("contest_id and member_id are required")
 				return appErr.ValidationError("contest_id", "required")
@@ -81,11 +121,74 @@ func (r *LeaderboardRepository) ApplyUpdates(ctx context.Context, events []pmode
 			if event.ProblemID != "" && event.DetailJSON != "" {
 				pipe.HSet(ctx, detailKey, problemField(event.ProblemID), event.DetailJSON)
 			}
-			pipe.HSet(ctx, metaKey(event.ContestID), "version", event.Version)
-			pipe.HSet(ctx, metaKey(event.ContestID), "updated_at", fmt.Sprint(event.UpdatedAt))
+		}
+		for contestID, meta := range metaInfo {
+			pipe.HSet(ctx, metaKey(contestID), "version", fmt.Sprint(meta.MaxVersion))
+			pipe.HSet(ctx, metaKey(contestID), "updated_at", fmt.Sprint(meta.MaxUpdatedAt))
 		}
 		return nil
 	})
+}
+
+// SortAndFilterRankUpdates sorts events by version per contest and filters out stale versions.
+func SortAndFilterRankUpdates(events []pmodel.RankUpdateEvent, currentVersion map[string]int64) ([]pmodel.RankUpdateEvent, map[string]RankUpdateMeta, error) {
+	type versionedEvent struct {
+		version int64
+		event   pmodel.RankUpdateEvent
+	}
+	grouped := make(map[string][]versionedEvent)
+	for _, event := range events {
+		if event.ContestID == "" {
+			return nil, nil, appErr.ValidationError("contest_id", "required")
+		}
+		versionValue, err := strconv.ParseInt(event.Version, 10, 64)
+		if err != nil {
+			return nil, nil, appErr.ValidationError("version", "invalid")
+		}
+		grouped[event.ContestID] = append(grouped[event.ContestID], versionedEvent{
+			version: versionValue,
+			event:   event,
+		})
+	}
+	filtered := make([]pmodel.RankUpdateEvent, 0, len(events))
+	metaInfo := make(map[string]RankUpdateMeta)
+	for contestID, items := range grouped {
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].version < items[j].version
+		})
+		current := currentVersion[contestID]
+		for _, item := range items {
+			if item.version <= current {
+				continue
+			}
+			filtered = append(filtered, item.event)
+			meta := metaInfo[contestID]
+			if item.version > meta.MaxVersion {
+				meta.MaxVersion = item.version
+			}
+			if item.event.UpdatedAt > meta.MaxUpdatedAt {
+				meta.MaxUpdatedAt = item.event.UpdatedAt
+			}
+			metaInfo[contestID] = meta
+		}
+	}
+	return filtered, metaInfo, nil
+}
+
+func uniqueContestIDs(events []pmodel.RankUpdateEvent) []string {
+	seen := make(map[string]struct{}, len(events))
+	ids := make([]string, 0, len(events))
+	for _, event := range events {
+		if event.ContestID == "" {
+			continue
+		}
+		if _, ok := seen[event.ContestID]; ok {
+			continue
+		}
+		seen[event.ContestID] = struct{}{}
+		ids = append(ids, event.ContestID)
+	}
+	return ids
 }
 
 // GetPage returns a leaderboard page.

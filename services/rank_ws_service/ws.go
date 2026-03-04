@@ -8,16 +8,16 @@ import (
 	"flag"
 
 	"fuzoj/pkg/bootstrap"
-	"fuzoj/services/contest_service/internal/config"
-	"fuzoj/services/contest_service/internal/handler"
-	"fuzoj/services/contest_service/internal/svc"
+	"fuzoj/services/rank_ws_service/internal/config"
+	"fuzoj/services/rank_ws_service/internal/handler"
+	"fuzoj/services/rank_ws_service/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest"
 )
 
-var configFile = flag.String("f", "etc/contest.yaml", "the config file")
+var configFile = flag.String("f", "etc/rank_ws.yaml", "the config file")
 
 func main() {
 	flag.Parse()
@@ -92,38 +92,8 @@ func main() {
 	ctx := svc.NewServiceContext(c)
 	handler.RegisterHandlers(server, ctx)
 
-	if ctx.ContestDispatchQueue != nil {
-		go ctx.ContestDispatchQueue.Start()
-		defer ctx.ContestDispatchQueue.Stop()
-	}
-	if ctx.JudgeFinalQueue != nil {
-		go ctx.JudgeFinalQueue.Start()
-		defer ctx.JudgeFinalQueue.Stop()
-	}
-	if ctx.RankOutboxRelay != nil {
-		ctx.RankOutboxRelay.Start()
-		defer ctx.RankOutboxRelay.Stop()
-	}
-	if ctx.JudgePushers.Level0 != nil {
-		defer ctx.JudgePushers.Level0.Close()
-	}
-	if ctx.JudgePushers.Level1 != nil {
-		defer ctx.JudgePushers.Level1.Close()
-	}
-	if ctx.JudgePushers.Level2 != nil {
-		defer ctx.JudgePushers.Level2.Close()
-	}
-	if ctx.JudgePushers.Level3 != nil {
-		defer ctx.JudgePushers.Level3.Close()
-	}
-	if ctx.RankUpdatePusher != nil {
-		defer ctx.RankUpdatePusher.Close()
-	}
-	if ctx.JudgeFinalDeadLetter != nil {
-		defer ctx.JudgeFinalDeadLetter.Close()
-	}
-	if ctx.DeadLetterPusher != nil {
-		defer ctx.DeadLetterPusher.Close()
+	if ctx.Hub != nil {
+		defer ctx.Hub.Close()
 	}
 
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)

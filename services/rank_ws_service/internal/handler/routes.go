@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"fuzoj/services/rank_service/internal/svc"
+	"fuzoj/services/rank_ws_service/internal/svc"
 
 	"github.com/zeromicro/go-zero/rest"
 )
@@ -13,8 +13,8 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 		[]rest.Route{
 			{
 				Method:  http.MethodGet,
-				Path:    "/:id/leaderboard",
-				Handler: LeaderboardHandler(serverCtx),
+				Path:    "/:id/leaderboard/ws",
+				Handler: LeaderboardWSHandler(serverCtx),
 			},
 		},
 		rest.WithPrefix("/api/v1/contests"),

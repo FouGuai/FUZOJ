@@ -40,6 +40,8 @@ func (c *RankUpdateConsumer) Consume(ctx context.Context, key, value string) err
 	if event.ContestID == "" || event.MemberID == "" {
 		return appErr.ValidationError("contest_id", "required")
 	}
-	c.batcher.Add(event)
+	if err := c.batcher.Add(ctxMQ, event); err != nil {
+		return err
+	}
 	return nil
 }

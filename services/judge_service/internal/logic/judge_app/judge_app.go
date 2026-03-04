@@ -223,6 +223,9 @@ func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessag
 
 	finished := pmodel.JudgeStatusResponse{
 		SubmissionID: payload.SubmissionID,
+		ContestID:    payload.ContestID,
+		UserID:       payload.UserID,
+		ProblemID:    payload.ProblemID,
 		Status:       res.Status,
 		Verdict:      res.Verdict,
 		Score:        res.Summary.TotalScore,
@@ -230,6 +233,7 @@ func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessag
 		Compile:      res.Compile,
 		Tests:        res.Tests,
 		Summary:      res.Summary,
+		CreatedAt:    payload.CreatedAt,
 		Timestamps: result.Timestamps{
 			ReceivedAt: pending.Timestamps.ReceivedAt,
 			FinishedAt: time.Now().Unix(),

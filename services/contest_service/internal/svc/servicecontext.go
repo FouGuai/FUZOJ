@@ -5,12 +5,14 @@ package svc
 
 import (
 	"database/sql"
+	"time"
 
 	"fuzoj/pkg/contest/eligibility"
-	"fuzoj/pkg/contest/repository"
+	contestRepo "fuzoj/pkg/contest/repository"
 	"fuzoj/pkg/submit/statuswriter"
 	"fuzoj/services/contest_service/internal/config"
 	"fuzoj/services/contest_service/internal/consumer"
+	rankRepo "fuzoj/services/contest_service/internal/repository"
 
 	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
@@ -26,13 +28,21 @@ type ServiceContext struct {
 	Conn                    sqlx.SqlConn
 	Cache                   cache.Cache
 	Redis                   *redis.Redis
-	ContestRepo             repository.ContestRepository
-	ProblemRepo             repository.ContestProblemRepository
-	ParticipantRepo         repository.ContestParticipantRepository
+	ContestRepo             contestRepo.ContestRepository
+	ProblemRepo             contestRepo.ContestProblemRepository
+	ParticipantRepo         contestRepo.ContestParticipantRepository
 	EligibilityService      *eligibility.Service
 	StatusWriter            *statuswriter.FinalStatusWriter
 	ContestDispatchQueue    queue.MessageQueue
 	ContestDispatchConsumer *consumer.ContestDispatchConsumer
+	JudgeFinalQueue         queue.MessageQueue
+	JudgeFinalConsumer      *consumer.JudgeFinalConsumer
+	MemberProblemRepo       *rankRepo.MemberProblemRepository
+	MemberSummaryRepo       *rankRepo.MemberSummaryRepository
+	RankOutboxRepo          *rankRepo.RankOutboxRepository
+	RankUpdatePusher        *kq.Pusher
+	RankOutboxRelay         *consumer.RankOutboxRelay
+	JudgeFinalDeadLetter    *kq.Pusher
 	DeadLetterPusher        *kq.Pusher
 	JudgePushers            TopicPushers
 }
@@ -61,12 +71,15 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		localSize = 1024
 	}
 
-	contestRepo := repository.NewContestRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
-	problemRepo := repository.NewContestProblemRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
-	participantRepo := repository.NewContestParticipantRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	contestRepo := contestRepo.NewContestRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	problemRepo := contestRepo.NewContestProblemRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	participantRepo := contestRepo.NewContestParticipantRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
 	eligibilityService := eligibility.NewService(contestRepo, problemRepo, participantRepo)
 
 	statusWriter := statuswriter.NewFinalStatusWriter(conn, redisClient, c.ContestDispatch.StatusTTL)
+	memberProblemRepo := rankRepo.NewMemberProblemRepository(conn)
+	memberSummaryRepo := rankRepo.NewMemberSummaryRepository(conn)
+	rankOutboxRepo := rankRepo.NewRankOutboxRepository(conn)
 
 	pushers := TopicPushers{}
 	if len(c.Kafka.Brokers) > 0 {
@@ -82,6 +95,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		if c.Topics.Level3 != "" {
 			pushers.Level3 = kq.NewPusher(c.Kafka.Brokers, c.Topics.Level3, kq.WithSyncPush())
 		}
+	}
+
+	var rankUpdatePusher *kq.Pusher
+	if len(c.Kafka.Brokers) > 0 && c.RankUpdate.Topic != "" {
+		rankUpdatePusher = kq.NewPusher(c.Kafka.Brokers, c.RankUpdate.Topic, kq.WithSyncPush())
 	}
 
 	var dispatchConsumer *consumer.ContestDispatchConsumer
@@ -106,6 +124,42 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		logx.Infof("contest dispatch consumer is disabled due to missing kafka config")
 	}
 
+	var judgeFinalConsumer *consumer.JudgeFinalConsumer
+	var judgeFinalQueue queue.MessageQueue
+	var judgeFinalDeadLetter *kq.Pusher
+	if len(c.Kafka.Brokers) > 0 && c.JudgeFinal.Topic != "" {
+		judgeFinalConsumer = consumer.NewJudgeFinalConsumer(
+			conn,
+			redisClient,
+			contestRepo,
+			eligibilityService,
+			memberProblemRepo,
+			memberSummaryRepo,
+			rankOutboxRepo,
+			consumer.JudgeFinalOptions{
+				IdempotencyTTL:  c.JudgeFinal.IdempotencyTTL,
+				MessageTTL:      c.JudgeFinal.MessageTTL,
+				MaxRetries:      c.JudgeFinal.MaxRetries,
+				RetryDelay:      c.JudgeFinal.RetryDelay,
+				DeadLetterTopic: c.JudgeFinal.DeadLetterTopic,
+			},
+			consumer.TimeoutConfig{MQ: c.Timeouts.MQ},
+		)
+		if c.JudgeFinal.DeadLetterTopic != "" {
+			judgeFinalDeadLetter = kq.NewPusher(c.Kafka.Brokers, c.JudgeFinal.DeadLetterTopic, kq.WithSyncPush())
+			judgeFinalConsumer.SetDeadLetterPusher(judgeFinalDeadLetter)
+		}
+		kqConf := consumer.BuildJudgeFinalKqConf(c)
+		judgeFinalQueue = kq.MustNewQueue(kqConf, judgeFinalConsumer)
+	} else {
+		logx.Infof("judge final consumer is disabled due to missing kafka config")
+	}
+
+	var rankOutboxRelay *consumer.RankOutboxRelay
+	if rankOutboxRepo != nil && rankUpdatePusher != nil {
+		rankOutboxRelay = consumer.NewRankOutboxRelay(rankOutboxRepo, rankUpdatePusher, time.Second, 200)
+	}
+
 	return &ServiceContext{
 		Config:                  c,
 		Conn:                    conn,
@@ -118,6 +172,14 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		StatusWriter:            statusWriter,
 		ContestDispatchQueue:    dispatchQueue,
 		ContestDispatchConsumer: dispatchConsumer,
+		JudgeFinalQueue:         judgeFinalQueue,
+		JudgeFinalConsumer:      judgeFinalConsumer,
+		MemberProblemRepo:       memberProblemRepo,
+		MemberSummaryRepo:       memberSummaryRepo,
+		RankOutboxRepo:          rankOutboxRepo,
+		RankUpdatePusher:        rankUpdatePusher,
+		RankOutboxRelay:         rankOutboxRelay,
+		JudgeFinalDeadLetter:    judgeFinalDeadLetter,
 		DeadLetterPusher:        deadLetterPusher,
 		JudgePushers:            pushers,
 	}

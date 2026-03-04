@@ -5,6 +5,9 @@ import "fuzoj/services/judge_service/internal/sandbox/result"
 // JudgeStatusResponse is returned to API clients.
 type JudgeStatusResponse struct {
 	SubmissionID string                  `json:"submission_id"`
+	ContestID    string                  `json:"contest_id"`
+	UserID       string                  `json:"user_id"`
+	ProblemID    int64                   `json:"problem_id"`
 	Status       result.JudgeStatus      `json:"status"`
 	Verdict      result.Verdict          `json:"verdict"`
 	Score        int                     `json:"score"`
@@ -16,6 +19,7 @@ type JudgeStatusResponse struct {
 	Progress     Progress                `json:"progress"`
 	ErrorCode    int                     `json:"error_code,omitempty"`
 	ErrorMessage string                  `json:"error_message,omitempty"`
+	CreatedAt    int64                   `json:"submission_created_at,omitempty"`
 }
 
 // Progress represents judge progress.

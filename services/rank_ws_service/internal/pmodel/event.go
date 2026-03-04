@@ -1,0 +1,13 @@
+package pmodel
+
+// LeaderboardSummary holds stored summary fields.
+type LeaderboardSummary struct {
+	MemberID   string `json:"member_id"`
+	SortScore  int64  `json:"sort_score"`
+	ScoreTotal int64  `json:"score_total"`
+	Penalty    int64  `json:"penalty_total"`
+	ACCount    int64  `json:"ac_count"`
+	DetailJSON string `json:"detail_json"`
+	UpdatedAt  int64  `json:"updated_at"`
+	Version    string `json:"version"`
+}

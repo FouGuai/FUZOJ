@@ -23,6 +23,8 @@ type Config struct {
 	Topics          TopicConfig           `json:"topics"`
 	Contest         ContestConfig         `json:"contest"`
 	ContestDispatch ContestDispatchConfig `json:"contestDispatch"`
+	JudgeFinal      JudgeFinalConfig      `json:"judgeFinal"`
+	RankUpdate      RankUpdateConfig      `json:"rankUpdate"`
 	Leaderboard     LeaderboardConfig     `json:"leaderboard"`
 	Timeouts        TimeoutConfig         `json:"timeouts"`
 }
@@ -69,6 +71,22 @@ type ContestDispatchConfig struct {
 	MessageTTL      time.Duration `json:"messageTTL"`
 	IdempotencyTTL  time.Duration `json:"idempotencyTTL"`
 	StatusTTL       time.Duration `json:"statusTTL"`
+}
+
+type JudgeFinalConfig struct {
+	Topic           string        `json:"topic"`
+	ConsumerGroup   string        `json:"consumerGroup"`
+	PrefetchCount   int           `json:"prefetchCount"`
+	Concurrency     int           `json:"concurrency"`
+	MaxRetries      int           `json:"maxRetries"`
+	RetryDelay      time.Duration `json:"retryDelay"`
+	DeadLetterTopic string        `json:"deadLetterTopic"`
+	MessageTTL      time.Duration `json:"messageTTL"`
+	IdempotencyTTL  time.Duration `json:"idempotencyTTL"`
+}
+
+type RankUpdateConfig struct {
+	Topic string `json:"topic"`
 }
 
 type LeaderboardConfig struct {

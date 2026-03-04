@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"fuzoj/pkg/handlerx"
-	"fuzoj/services/rank_service/internal/logic"
-	"fuzoj/services/rank_service/internal/svc"
-	"fuzoj/services/rank_service/internal/types"
-	"fuzoj/services/rank_service/internal/ws"
+	"fuzoj/services/rank_ws_service/internal/logic"
+	"fuzoj/services/rank_ws_service/internal/svc"
+	"fuzoj/services/rank_ws_service/internal/types"
+	"fuzoj/services/rank_ws_service/internal/ws"
 
 	"github.com/gorilla/websocket"
 	"github.com/zeromicro/go-zero/core/logx"

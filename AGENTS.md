@@ -61,7 +61,7 @@
 
 ## 性能要求
 
-该项目并发访问高，设计时应当极其注意性能
+该项目并发访问（qps 10w+）高，设计时应当极其注意性能
 
 ### 缓存优先原则
 
@@ -161,6 +161,7 @@
 ### 服务设计原则
 **因为该项目qps非常高，重要服务务必都要支持水平扩展**
 老服务使用 MVC 架构，新的服务使用 DDD 架构
+服务都要是无状态的
 
 ### 在 AGENTS.md 中的注册方式
 
@@ -186,5 +187,8 @@
 - **Registry Center**：`docs/registry_center.md` — 注册中心与配置中心格式说明（新增配置时需同步更新）
 - **Contest Submission Eligibility**：`docs/contest_submission_eligibility.md` — Submit→Contest 资格校验与缓存设计说明
 - **Contest Dispatch Kafka**：`docs/contest_dispatch_kafka.md` — Submit→Contest Kafka 分流与动态切换说明
+- **Contest Rank Pipeline**：`docs/contest_rank_pipeline.md` — Judge→Contest→Rank 计分链路与事务出站说明
 - **Status Service**：`docs/status_service.md` — 判题状态查询与缓存策略说明
 - **Rank Service**：`docs/rank_service.md` — 高性能排行榜存取与订阅服务说明
+- **Rank Update Reliability**：`docs/rank_update_reliability.md` — 排行榜更新消息不丢与一致性策略说明
+- **Rank WS Service**：`docs/rank_ws_service.md` — 排行榜 WebSocket 推送与水平扩展说明

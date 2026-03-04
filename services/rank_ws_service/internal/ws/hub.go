@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"fuzoj/services/rank_service/internal/repository"
-	"fuzoj/services/rank_service/internal/types"
+	"fuzoj/services/rank_ws_service/internal/repository"
+	"fuzoj/services/rank_ws_service/internal/types"
 
 	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
@@ -63,7 +63,8 @@ func (h *Hub) Close() {
 
 // Subscribe registers a new websocket subscription.
 func (h *Hub) Subscribe(ctx context.Context, contestID string, page, pageSize int, mode string, sender sender) {
-	sub := newSubscription(contestID, page, pageSize, mode, sender, h.repo, h.debounce, func() {
+	var sub *subscription
+	sub = newSubscription(contestID, page, pageSize, mode, sender, h.repo, h.debounce, func() {
 		h.removeSub(contestID, sub)
 	})
 	h.addSub(contestID, sub)

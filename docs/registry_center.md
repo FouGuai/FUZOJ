@@ -190,7 +190,7 @@ Value：`host:port`
 ### Contest Service
 必需字段：
 - `name` `host` `port`（RestConf）
-- `mysql` `cache` `redis` `kafka` `contest` `leaderboard` `timeouts`
+- `mysql` `cache` `redis` `kafka` `contest` `contestDispatch` `judgeFinal` `rankUpdate` `leaderboard` `timeouts`
 示例：
 ```json
 {
@@ -201,9 +201,14 @@ Value：`host:port`
   "cache":[{"host":"127.0.0.1:6379","type":"node"}],
   "redis":{"host":"127.0.0.1:6379","type":"node"},
   "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"contest-service","minBytes":10240,"maxBytes":10485760,
-    "topics":["judge.status.final","contest.leaderboard.rebuild","contest.hack.finished"]},
+    "topics":["judge.status.final","contest.leaderboard.rebuild","contest.hack.finished","contest.rank.updates","contest.judge.final.dead"]},
   "contest":{"idempotencyTTL":"10m","resultPersistAfter":"1h","maxParticipantsPerTeam":3,"defaultPageSize":50,"maxPageSize":200,
     "eligibilityCacheTTL":"30m","eligibilityEmptyTTL":"5m","eligibilityLocalCacheSize":2048,"eligibilityLocalCacheTTL":"10s"},
+  "contestDispatch":{"topic":"contest.submit.validate","consumerGroup":"contest-dispatch","prefetchCount":1,"concurrency":4,"maxRetries":3,
+    "retryDelay":"1s","deadLetterTopic":"contest.submit.validate.dead","messageTTL":"10m","idempotencyTTL":"30m","statusTTL":"24h"},
+  "judgeFinal":{"topic":"judge.status.final","consumerGroup":"contest-judge-final","prefetchCount":1,"concurrency":4,"maxRetries":3,
+    "retryDelay":"1s","deadLetterTopic":"contest.judge.final.dead","messageTTL":"10m","idempotencyTTL":"30m"},
+  "rankUpdate":{"topic":"contest.rank.updates"},
   "leaderboard":{"hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","frozenCacheTTL":"10m","snapshotInterval":"5m"},
   "timeouts":{"db":"3s","cache":"1s","mq":"3s"}
 }
@@ -262,6 +267,23 @@ RPC 运行时（`problem.rpc.runtime`）：
   "rank":{"updateTopic":"contest.rank.updates","consumerGroup":"rank-service","prefetchCount":1,"concurrency":8,
     "batchSize":200,"batchInterval":"100ms","hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","wsDebounce":"100ms"},
   "timeouts":{"cache":"1s","mq":"3s"}
+}
+```
+
+### Rank WS Service
+必需字段：
+- `name` `host` `port`（RestConf）
+- `cache` `redis` `rank` `timeouts`
+示例：
+```json
+{
+  "name":"rank-ws",
+  "host":"0.0.0.0",
+  "port":8092,
+  "cache":[{"host":"127.0.0.1:6379","type":"node"}],
+  "redis":{"host":"127.0.0.1:6379","type":"node"},
+  "rank":{"pageCacheTTL":"5s","emptyTTL":"5m","wsDebounce":"100ms"},
+  "timeouts":{"cache":"1s","ws":"3s"}
 }
 ```
 

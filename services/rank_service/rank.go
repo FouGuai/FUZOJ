@@ -100,9 +100,6 @@ func main() {
 		go ctx.UpdateQueue.Start()
 		defer ctx.UpdateQueue.Stop()
 	}
-	if ctx.Hub != nil {
-		defer ctx.Hub.Close()
-	}
 
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)
 	server.Start()

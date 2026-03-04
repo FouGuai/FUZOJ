@@ -275,7 +275,13 @@ upstreams:
         path: "/api/v1/contests/:id/leaderboard"
         auth:
           mode: "public"
-      - name: "rank.leaderboard.ws"
+
+  - name: "rank-ws"
+    http:
+      target: "127.0.0.1:8092"
+      timeout: 0
+    mappings:
+      - name: "rank.ws.leaderboard"
         method: "GET"
         path: "/api/v1/contests/:id/leaderboard/ws"
         auth:

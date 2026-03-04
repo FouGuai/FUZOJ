@@ -1,14 +1,12 @@
 package svc
 
 import (
-	"fuzoj/services/rank_service/internal/config"
-	"fuzoj/services/rank_service/internal/consumer"
-	"fuzoj/services/rank_service/internal/repository"
+	"fuzoj/services/rank_ws_service/internal/config"
+	"fuzoj/services/rank_ws_service/internal/repository"
+	"fuzoj/services/rank_ws_service/internal/ws"
 
 	red "github.com/redis/go-redis/v9"
-	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
-	"github.com/zeromicro/go-zero/core/queue"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
@@ -17,30 +15,21 @@ type ServiceContext struct {
 	Redis           *redis.Redis
 	PubSubClient    *red.Client
 	LeaderboardRepo *repository.LeaderboardRepository
-	UpdateBatcher   *consumer.UpdateBatcher
-	UpdateQueue     queue.MessageQueue
+	Hub             *ws.Hub
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
 	redisClient := redis.MustNewRedis(c.Redis)
 	pubsubClient := newPubSubClient(c.Redis)
 	repo := repository.NewLeaderboardRepository(redisClient, c.Rank.PageCacheTTL, c.Rank.EmptyTTL)
-	batcher := consumer.NewUpdateBatcher(repo, pubsubClient, c.Rank.BatchSize, c.Rank.BatchInterval, c.Timeouts.MQ)
-
-	var updateQueue queue.MessageQueue
-	if len(c.Kafka.Brokers) > 0 && c.Rank.UpdateTopic != "" {
-		updateConsumer := consumer.NewRankUpdateConsumer(batcher, c.Timeouts.MQ)
-		kqConf := consumer.BuildRankUpdateKqConf(c)
-		updateQueue = kq.MustNewQueue(kqConf, updateConsumer)
-	}
+	hub := ws.NewHub(repo, pubsubClient, c.Rank.WSDebounce)
 
 	return &ServiceContext{
 		Config:          c,
 		Redis:           redisClient,
 		PubSubClient:    pubsubClient,
 		LeaderboardRepo: repo,
-		UpdateBatcher:   batcher,
-		UpdateQueue:     updateQueue,
+		Hub:             hub,
 	}
 }
 
@@ -54,8 +43,8 @@ func newPubSubClient(conf redis.RedisConf) *red.Client {
 	}
 	opt := &red.Options{
 		Addr:     conf.Host,
+		Username: conf.User,
 		Password: conf.Pass,
-		DB:       conf.DB,
 	}
 	return red.NewClient(opt)
 }

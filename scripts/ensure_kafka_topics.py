@@ -101,10 +101,22 @@ def collect_topics(cfg):
         append_topic(topics, seen, contest_dispatch_cfg.get("deadLetterTopic"))
         append_topic(topics, seen, contest_dispatch_cfg.get("DeadLetterTopic"))
 
+    judge_final_cfg = pick_cfg(cfg, "judgeFinal", "JudgeFinal")
+    if judge_final_cfg:
+        append_topic(topics, seen, judge_final_cfg.get("topic"))
+        append_topic(topics, seen, judge_final_cfg.get("Topic"))
+        append_topic(topics, seen, judge_final_cfg.get("deadLetterTopic"))
+        append_topic(topics, seen, judge_final_cfg.get("DeadLetterTopic"))
+
     rank_cfg = pick_cfg(cfg, "rank", "Rank")
     if rank_cfg:
         append_topic(topics, seen, rank_cfg.get("updateTopic"))
         append_topic(topics, seen, rank_cfg.get("UpdateTopic"))
+
+    rank_update_cfg = pick_cfg(cfg, "rankUpdate", "RankUpdate")
+    if rank_update_cfg:
+        append_topic(topics, seen, rank_update_cfg.get("topic"))
+        append_topic(topics, seen, rank_update_cfg.get("Topic"))
 
     ban_event_cfg = pick_cfg(cfg, "banEvent", "BanEvent")
     if ban_event_cfg:

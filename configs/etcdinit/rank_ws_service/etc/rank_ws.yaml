@@ -1,0 +1,25 @@
+Name: rank-ws
+Host: 0.0.0.0
+Port: 8092
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: rank.ws.config
+    runtime: rank.ws.rest.runtime
+    log: rank.ws.log
+Cache:
+  - host: 127.0.0.1:6379
+    type: node
+Redis:
+  host: 127.0.0.1:6379
+  type: node
+Rank:
+  pageCacheTTL: 5s
+  emptyTTL: 5m
+  wsDebounce: 100ms
+Timeouts:
+  cache: 1s
+  ws: 3s

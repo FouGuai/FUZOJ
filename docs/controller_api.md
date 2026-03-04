@@ -198,6 +198,24 @@
   - Query：`include`（string，可选，取值 `details`/`log`）
   - 响应体：`JudgeStatusResponse`
     - 默认仅返回摘要字段（不包含 `compile`/`tests`）
+
+## Rank Service
+
+### RankController
+
+- **Leaderboard**：获取排行榜分页数据
+  - 路径参数：`id`（contest_id）
+  - Query：`page`、`page_size`、`mode`（`live`/`frozen`）
+  - 响应体：`LeaderboardResponse`
+
+## Rank WS Service
+
+### RankWSController
+
+- **LeaderboardWS**：订阅排行榜刷新推送
+  - 路径参数：`id`（contest_id）
+  - Query：`page`、`page_size`、`mode`（`live`/`frozen`）
+  - 协议：WebSocket（首次 snapshot + refresh 推送）
     - `include=details` 时返回 `compile`/`tests`
     - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
     - `tests[].RuntimeLog`（string）：运行日志文本（最大 64KB，超出截断）
