@@ -34,19 +34,24 @@ type KafkaConfig struct {
 }
 
 type RankConfig struct {
-	UpdateTopic   string        `json:"updateTopic"`
-	ConsumerGroup string        `json:"consumerGroup"`
-	PrefetchCount int           `json:"prefetchCount"`
-	Concurrency   int           `json:"concurrency"`
-	BatchSize     int           `json:"batchSize"`
-	BatchInterval time.Duration `json:"batchInterval"`
-	HotCacheTTL   time.Duration `json:"hotCacheTTL"`
-	PageCacheTTL  time.Duration `json:"pageCacheTTL"`
-	EmptyTTL      time.Duration `json:"emptyTTL"`
-	WSDebounce    time.Duration `json:"wsDebounce"`
+	UpdateTopic      string        `json:"updateTopic"`
+	ConsumerGroup    string        `json:"consumerGroup"`
+	PrefetchCount    int           `json:"prefetchCount"`
+	Concurrency      int           `json:"concurrency"`
+	BatchSize        int           `json:"batchSize"`
+	BatchInterval    time.Duration `json:"batchInterval"`
+	HotCacheTTL      time.Duration `json:"hotCacheTTL"`
+	PageCacheTTL     time.Duration `json:"pageCacheTTL"`
+	EmptyTTL         time.Duration `json:"emptyTTL"`
+	WSDebounce       time.Duration `json:"wsDebounce"`
+	SnapshotInterval time.Duration `json:"snapshotInterval"`
+	SnapshotPageSize int           `json:"snapshotPageSize"`
+	SnapshotBatch    int           `json:"snapshotBatch"`
+	RecoverOnStart   bool          `json:"recoverOnStart"`
 }
 
 type TimeoutConfig struct {
 	Cache time.Duration `json:"cache"`
+	DB    time.Duration `json:"db"`
 	MQ    time.Duration `json:"mq"`
 }

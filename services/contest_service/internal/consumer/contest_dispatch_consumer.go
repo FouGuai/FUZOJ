@@ -30,7 +30,8 @@ type DispatchOptions struct {
 }
 
 type TimeoutConfig struct {
-	MQ time.Duration
+	MQ    time.Duration
+	Cache time.Duration
 }
 
 // ContestDispatchConsumer validates contest submissions and forwards to judge queue.

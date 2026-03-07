@@ -11,6 +11,7 @@ type RankUpdateEvent struct {
 	ACCount    int64  `json:"ac_count"`
 	DetailJSON string `json:"detail_json"`
 	Version    string `json:"version"`
+	ResultID   int64  `json:"result_id"`
 	UpdatedAt  int64  `json:"updated_at"`
 }
 

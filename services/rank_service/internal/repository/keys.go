@@ -1,0 +1,21 @@
+package repository
+
+// MetaKey exposes the rank meta key.
+func MetaKey(contestID string) string {
+	return metaKey(contestID)
+}
+
+// MetaPrefix exposes the meta key prefix.
+func MetaPrefix() string {
+	return metaPrefix
+}
+
+// LeaderboardKey exposes the leaderboard zset key.
+func LeaderboardKey(contestID string) string {
+	return leaderboardKey(contestID)
+}
+
+// DetailKey exposes the detail hash key.
+func DetailKey(contestID, memberID string) string {
+	return detailKey(contestID, memberID)
+}

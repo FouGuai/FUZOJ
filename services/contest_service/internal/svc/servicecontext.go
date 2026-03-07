@@ -29,6 +29,7 @@ type ServiceContext struct {
 	Cache                   cache.Cache
 	Redis                   *redis.Redis
 	ContestRepo             contestRepo.ContestRepository
+	ContestStore            rankRepo.ContestRepository
 	ProblemRepo             contestRepo.ContestProblemRepository
 	ParticipantRepo         contestRepo.ContestParticipantRepository
 	EligibilityService      *eligibility.Service
@@ -71,10 +72,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		localSize = 1024
 	}
 
-	contestRepo := contestRepo.NewContestRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	contestRepository := contestRepo.NewContestRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
+	contestStoreRepo := rankRepo.NewContestRepository(conn, cacheClient, ttl, emptyTTL)
 	problemRepo := contestRepo.NewContestProblemRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
 	participantRepo := contestRepo.NewContestParticipantRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
-	eligibilityService := eligibility.NewService(contestRepo, problemRepo, participantRepo)
+	eligibilityService := eligibility.NewService(contestRepository, problemRepo, participantRepo)
 
 	statusWriter := statuswriter.NewFinalStatusWriter(conn, redisClient, c.ContestDispatch.StatusTTL)
 	memberProblemRepo := rankRepo.NewMemberProblemRepository(conn)
@@ -113,7 +115,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			MaxRetries:      c.ContestDispatch.MaxRetries,
 			RetryDelay:      c.ContestDispatch.RetryDelay,
 			DeadLetterTopic: c.ContestDispatch.DeadLetterTopic,
-		}, consumer.TimeoutConfig{MQ: c.Timeouts.MQ})
+		}, consumer.TimeoutConfig{MQ: c.Timeouts.MQ, Cache: c.Timeouts.Cache})
 		if c.ContestDispatch.DeadLetterTopic != "" {
 			deadLetterPusher = kq.NewPusher(c.Kafka.Brokers, c.ContestDispatch.DeadLetterTopic, kq.WithSyncPush())
 			dispatchConsumer.SetDeadLetterPusher(deadLetterPusher)
@@ -131,7 +133,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		judgeFinalConsumer = consumer.NewJudgeFinalConsumer(
 			conn,
 			redisClient,
-			contestRepo,
+			contestRepository,
 			eligibilityService,
 			memberProblemRepo,
 			memberSummaryRepo,
@@ -143,7 +145,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 				RetryDelay:      c.JudgeFinal.RetryDelay,
 				DeadLetterTopic: c.JudgeFinal.DeadLetterTopic,
 			},
-			consumer.TimeoutConfig{MQ: c.Timeouts.MQ},
+			consumer.TimeoutConfig{MQ: c.Timeouts.MQ, Cache: c.Timeouts.Cache},
 		)
 		if c.JudgeFinal.DeadLetterTopic != "" {
 			judgeFinalDeadLetter = kq.NewPusher(c.Kafka.Brokers, c.JudgeFinal.DeadLetterTopic, kq.WithSyncPush())
@@ -165,7 +167,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		Conn:                    conn,
 		Cache:                   cacheClient,
 		Redis:                   redisClient,
-		ContestRepo:             contestRepo,
+		ContestRepo:             contestRepository,
+		ContestStore:            contestStoreRepo,
 		ProblemRepo:             problemRepo,
 		ParticipantRepo:         participantRepo,
 		EligibilityService:      eligibilityService,

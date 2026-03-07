@@ -23,6 +23,7 @@ import (
 
 const (
 	rankIdemKeyPrefix = "contest:rank:idem:"
+	rankResultIDKey   = "contest:rank:result:id:"
 )
 
 // JudgeFinalConsumer processes final judge status messages for contest ranking.
@@ -180,6 +181,12 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 		return err
 	}
 
+	resultID, err := c.nextResultID(ctx, status.ContestID)
+	if err != nil {
+		logger.Errorf("generate contest result id failed: %v", err)
+		return err
+	}
+
 	return c.conn.TransactCtx(ctx, func(ctx context.Context, session sqlx.Session) error {
 		memberProblemRepo := repository.NewMemberProblemRepository(session)
 		memberSummaryRepo := repository.NewMemberSummaryRepository(session)
@@ -271,6 +278,7 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 			ACCount:    summary.ACCount,
 			DetailJSON: summary.DetailJSON,
 			Version:    fmt.Sprint(summary.Version),
+			ResultID:   resultID,
 			UpdatedAt:  summary.UpdatedAt.Unix(),
 		}
 		payload, err := json.Marshal(update)
@@ -278,7 +286,7 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 			return fmt.Errorf("marshal rank update failed: %w", err)
 		}
 		eventKey := status.ContestID + ":" + memberID + ":" + update.Version
-		kafkaKey := status.ContestID + ":" + memberID
+		kafkaKey := status.ContestID
 		if err := outboxRepo.Enqueue(ctx, repository.RankOutboxEvent{
 			EventKey: eventKey,
 			KafkaKey: kafkaKey,
@@ -288,6 +296,22 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 		}
 		return nil
 	})
+}
+
+func (c *JudgeFinalConsumer) nextResultID(ctx context.Context, contestID string) (int64, error) {
+	if contestID == "" {
+		return 0, appErr.ValidationError("contest_id", "required")
+	}
+	if c.redis == nil {
+		return 0, appErr.New(appErr.ServiceUnavailable).WithMessage("redis is not configured")
+	}
+	ctxCache := withTimeout(ctx, c.timeouts.Cache)
+	defer ctxCache.cancel()
+	id, err := c.redis.IncrCtx(ctxCache.ctx, rankResultIDKey+contestID)
+	if err != nil {
+		return 0, appErr.Wrapf(err, appErr.CacheError, "increment contest result id failed")
+	}
+	return id, nil
 }
 
 // ProblemDetail holds per-problem detail for a member.

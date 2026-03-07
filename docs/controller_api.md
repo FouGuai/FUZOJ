@@ -228,19 +228,23 @@
 - **Create**：创建比赛
   - 请求体：`CreateContestRequest`
     - `title`（string，必填）
+    - `start_at`（RFC3339 string，必填）
+    - `end_at`（RFC3339 string，必填）
     - `description`（string）
     - `visibility`（string）
     - `owner_id`（int64）
     - `org_id`（int64）
-    - `start_at`（RFC3339 string）
-    - `end_at`（RFC3339 string）
     - `rule`（ContestRulePayload）
+  - 校验：
+    - `start_at` 必须早于 `end_at`
   - 响应体：`CreateContestResponse`
     - `contest_id`（string）
 
 - **Update**：更新比赛
   - 路径参数：`id`（contest_id）
   - 请求体：`UpdateContestRequest`
+  - 说明：Patch 更新，仅提交的字段会被覆盖；未提交字段保持不变
+  - 校验：若更新 `start_at`/`end_at`，依然要求 `start_at` 早于 `end_at`
 
 - **Publish**：发布比赛
   - 路径参数：`id`（contest_id）
@@ -255,6 +259,7 @@
 - **List**：分页查询比赛列表
   - 请求参数：`page`、`page_size`、`status`、`owner_id`、`org_id`
   - 响应体：`ListContestsResponse`
+  - 说明：`page_size` 超过上限会被截断到配置上限
 
 - **Register**：报名参赛
   - 路径参数：`id`（contest_id）

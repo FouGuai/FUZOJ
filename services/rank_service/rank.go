@@ -92,6 +92,11 @@ func main() {
 	ctx := svc.NewServiceContext(c)
 	handler.RegisterHandlers(server, ctx)
 
+	if ctx.Snapshotter != nil {
+		ctx.Snapshotter.Recover(context.Background())
+		go ctx.Snapshotter.Start(context.Background())
+		defer ctx.Snapshotter.Stop()
+	}
 	if ctx.UpdateBatcher != nil {
 		go ctx.UpdateBatcher.Start(context.Background())
 		defer ctx.UpdateBatcher.Stop()

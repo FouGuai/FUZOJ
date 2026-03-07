@@ -6,6 +6,7 @@ package handler
 import (
 	"net/http"
 
+	"fuzoj/pkg/handlerx"
 	"fuzoj/services/contest_service/internal/logic"
 	"fuzoj/services/contest_service/internal/svc"
 	"fuzoj/services/contest_service/internal/types"
@@ -16,14 +17,14 @@ func CreateHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req types.CreateContestRequest
 		if err := httpx.Parse(r, &req); err != nil {
-			httpx.ErrorCtx(r.Context(), w, err)
+			handlerx.WriteError(w, r, handlerx.BadRequestError())
 			return
 		}
 
 		l := logic.NewCreateLogic(r.Context(), svcCtx)
 		resp, err := l.Create(&req)
 		if err != nil {
-			httpx.ErrorCtx(r.Context(), w, err)
+			handlerx.WriteError(w, r, err)
 		} else {
 			httpx.OkJsonCtx(r.Context(), w, resp)
 		}

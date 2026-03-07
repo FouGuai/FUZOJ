@@ -265,8 +265,9 @@ RPC 运行时（`problem.rpc.runtime`）：
   "redis":{"host":"127.0.0.1:6379","type":"node"},
   "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"rank-service","minBytes":10240,"maxBytes":10485760},
   "rank":{"updateTopic":"contest.rank.updates","consumerGroup":"rank-service","prefetchCount":1,"concurrency":8,
-    "batchSize":200,"batchInterval":"100ms","hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","wsDebounce":"100ms"},
-  "timeouts":{"cache":"1s","mq":"3s"}
+    "batchSize":200,"batchInterval":"100ms","hotCacheTTL":"3s","pageCacheTTL":"5s","emptyTTL":"5m","wsDebounce":"100ms",
+    "snapshotInterval":"5m","snapshotPageSize":500,"snapshotBatch":500,"recoverOnStart":true},
+  "timeouts":{"cache":"1s","db":"3s","mq":"3s"}
 }
 ```
 
