@@ -89,9 +89,13 @@ func main() {
 		{Name: "user", Path: "user_service/etc/user.yaml"},
 		{Name: "problem", Path: "problem_service/etc/problem.yaml"},
 		{Name: "submit", Path: "submit_service/etc/submit.yaml"},
+		{Name: "status", Path: "status_service/etc/status.yaml"},
 		{Name: "judge", Path: "judge_service/etc/judge.yaml"},
 		{Name: "contest", Path: "contest_service/etc/contest.yaml"},
 		{Name: "contest.rpc", Path: "contest_rpc_service/etc/contest.yaml"},
+		{Name: "rank", Path: "rank_service/etc/rank.yaml"},
+		{Name: "rank-ws", Path: "rank_ws_service/etc/rank_ws.yaml"},
+		{Name: "rank-rpc", Path: "rank_rpc_service/etc/rank.yaml"},
 	}
 
 	onlySet := map[string]bool{}
@@ -159,13 +163,17 @@ func main() {
 			fail(err)
 		}
 
-		if keys.Switch != "" {
-			if payload, ok := raw["switch"]; ok {
-				if err := writer.putJSON(keys.Switch, payload, dryRun); err != nil {
-					fail(err)
+			if keys.Switch != "" {
+				if payload, ok := raw["switch"]; ok {
+					switchPayload, ok := payload.(map[string]any)
+					if !ok {
+						fail(fmt.Errorf("switch config must be an object, got %T", payload))
+					}
+					if err := writer.putJSON(keys.Switch, switchPayload, dryRun); err != nil {
+						fail(err)
+					}
 				}
 			}
-		}
 
 		_ = cli.Close()
 	}

@@ -281,6 +281,20 @@ def wait_for_http(url: str, timeout_s: int = 60, interval_s: float = 1.0) -> Non
     raise SystemExit(f"http check failed for {url}")
 
 
+def probe_http_ready(url: str, timeout_s: float = 2.0) -> bool:
+    import urllib.request
+    import urllib.error
+
+    try:
+        with urllib.request.urlopen(url, timeout=timeout_s) as resp:
+            return 200 <= resp.status < 500
+    except urllib.error.HTTPError as exc:
+        # 404/405 means route is missing, but service is already accepting HTTP traffic.
+        return 400 <= exc.code < 500
+    except Exception:
+        return False
+
+
 def wait_for_mysql(base_cmd: List[str], env: Dict[str, str]) -> None:
     cmd = base_cmd + ["exec", "-T", "mysql", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
     for _ in range(180):
@@ -399,6 +413,97 @@ def read_etcd_runtime(base_cmd: List[str], env: Dict[str, str], key: str) -> Opt
         return json.loads(raw)
     except json.JSONDecodeError:
         return None
+
+
+def get_value_ci(data: Dict, key: str):
+    if not isinstance(data, dict):
+        return None
+    for k, v in data.items():
+        if str(k).lower() == key.lower():
+            return v
+    return None
+
+
+def get_nested_ci(data: Dict, *keys: str):
+    current = data
+    for key in keys:
+        current = get_value_ci(current, key)
+        if current is None:
+            return None
+    return current
+
+
+def resolve_runtime_key(config_path: Path) -> Optional[str]:
+    if not config_path.exists():
+        return None
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    runtime_key = get_nested_ci(data, "bootstrap", "keys", "runtime")
+    if isinstance(runtime_key, str) and runtime_key.strip():
+        return runtime_key.strip()
+    return None
+
+
+def resolve_host_port_from_config(config_path: Path) -> tuple[Optional[str], Optional[int]]:
+    if not config_path.exists():
+        return None, None
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    host = get_value_ci(data, "host")
+    port = get_value_ci(data, "port")
+    if host is None or port is None:
+        return None, None
+    try:
+        return str(host), int(port)
+    except (TypeError, ValueError):
+        return None, None
+
+
+def normalize_host(host: str) -> str:
+    value = str(host).strip()
+    if value in ("0.0.0.0", "::", ""):
+        return "127.0.0.1"
+    return value
+
+
+def wait_for_service_ready(base_cmd: List[str], env: Dict[str, str], root: Path, log_dir: Path, service: Dict, timeout_s: int = 90) -> None:
+    config_path = root / service["config"]
+    runtime_key = resolve_runtime_key(config_path)
+    fallback_host, fallback_port = resolve_host_port_from_config(config_path)
+    deadline = time.time() + timeout_s
+    service_name = service["name"]
+    log_path = log_dir / f"{service_name}.log"
+    last_target = ""
+
+    while time.time() < deadline:
+        host = None
+        port = None
+        if runtime_key:
+            runtime = read_etcd_runtime(base_cmd, env, runtime_key)
+            if isinstance(runtime, dict):
+                runtime_host = get_value_ci(runtime, "host")
+                runtime_port = get_value_ci(runtime, "port")
+                if runtime_host is not None and runtime_port is not None:
+                    try:
+                        host = str(runtime_host)
+                        port = int(runtime_port)
+                    except (TypeError, ValueError):
+                        host = None
+                        port = None
+        if host is None or port is None or port <= 0:
+            host = fallback_host
+            port = fallback_port
+        if host is None or port is None or port <= 0:
+            time.sleep(1)
+            continue
+
+        base = f"http://{normalize_host(host)}:{port}"
+        health_urls = [f"{base}/healthz", f"{base}/readyz", f"{base}/"]
+        for target in health_urls:
+            last_target = target
+            if probe_http_ready(target):
+                return
+        time.sleep(1)
+
+    raise SystemExit(f"service readiness check failed: {service_name}, target={last_target}, log={log_path}")
 
 
 def update_cli_config(root: Path, base_cmd: List[str], env: Dict[str, str], gateway_cfg: Path) -> None:
@@ -625,6 +730,11 @@ def main() -> None:
         if only_set and svc["name"] not in only_set:
             continue
         start_service(root, log_dir, bin_dir, svc, allow_rootless=cgroup_root is not None)
+
+    for svc in services:
+        if only_set and svc["name"] not in only_set:
+            continue
+        wait_for_service_ready(base_cmd, env, root, log_dir, svc)
 
     gateway_config = None
     for svc in services:

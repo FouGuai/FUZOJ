@@ -5,7 +5,6 @@ package svc
 
 import (
 	"database/sql"
-	"time"
 
 	"fuzoj/pkg/contest/eligibility"
 	contestRepo "fuzoj/pkg/contest/repository"
@@ -30,6 +29,8 @@ type ServiceContext struct {
 	Redis                   *redis.Redis
 	ContestRepo             contestRepo.ContestRepository
 	ContestStore            rankRepo.ContestRepository
+	ContestProblemStore     rankRepo.ContestProblemStore
+	ContestParticipantStore rankRepo.ContestParticipantStore
 	ProblemRepo             contestRepo.ContestProblemRepository
 	ParticipantRepo         contestRepo.ContestParticipantRepository
 	EligibilityService      *eligibility.Service
@@ -74,6 +75,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 
 	contestRepository := contestRepo.NewContestRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
 	contestStoreRepo := rankRepo.NewContestRepository(conn, cacheClient, ttl, emptyTTL)
+	contestProblemStore := rankRepo.NewContestProblemStore(conn)
+	contestParticipantStore := rankRepo.NewContestParticipantStore(conn)
 	problemRepo := contestRepo.NewContestProblemRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
 	participantRepo := contestRepo.NewContestParticipantRepository(conn, cacheClient, ttl, emptyTTL, localSize, localTTL)
 	eligibilityService := eligibility.NewService(contestRepository, problemRepo, participantRepo)
@@ -159,7 +162,21 @@ func NewServiceContext(c config.Config) *ServiceContext {
 
 	var rankOutboxRelay *consumer.RankOutboxRelay
 	if rankOutboxRepo != nil && rankUpdatePusher != nil {
-		rankOutboxRelay = consumer.NewRankOutboxRelay(rankOutboxRepo, rankUpdatePusher, time.Second, 200)
+		rankOutboxRelay = consumer.NewRankOutboxRelay(rankOutboxRepo, rankUpdatePusher, consumer.RankOutboxRelayOptions{
+			ContestScanInterval: c.RankOutbox.ContestScanInterval,
+			ContestScanBatch:    c.RankOutbox.ContestScanBatch,
+			ClaimBatchSize:      c.RankOutbox.ClaimBatchSize,
+			LeaseDuration:       c.RankOutbox.LeaseDuration,
+			LeaseRenewInterval:  c.RankOutbox.LeaseRenewInterval,
+			RetryBaseDelay:      c.RankOutbox.RetryBaseDelay,
+			RetryMaxDelay:       c.RankOutbox.RetryMaxDelay,
+			CleanupInterval:     c.RankOutbox.CleanupInterval,
+			SentRetention:       c.RankOutbox.SentRetention,
+			CleanupBatchSize:    c.RankOutbox.CleanupBatchSize,
+			RequeueBatchSize:    c.RankOutbox.RequeueBatchSize,
+			DBTimeout:           c.Timeouts.DB,
+			MQTimeout:           c.Timeouts.MQ,
+		})
 	}
 
 	return &ServiceContext{
@@ -169,6 +186,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		Redis:                   redisClient,
 		ContestRepo:             contestRepository,
 		ContestStore:            contestStoreRepo,
+		ContestProblemStore:     contestProblemStore,
+		ContestParticipantStore: contestParticipantStore,
 		ProblemRepo:             problemRepo,
 		ParticipantRepo:         participantRepo,
 		EligibilityService:      eligibilityService,

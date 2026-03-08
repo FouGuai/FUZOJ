@@ -25,6 +25,7 @@ type Config struct {
 	ContestDispatch ContestDispatchConfig `json:"contestDispatch"`
 	JudgeFinal      JudgeFinalConfig      `json:"judgeFinal"`
 	RankUpdate      RankUpdateConfig      `json:"rankUpdate"`
+	RankOutbox      RankOutboxConfig      `json:"rankOutbox"`
 	Leaderboard     LeaderboardConfig     `json:"leaderboard"`
 	Timeouts        TimeoutConfig         `json:"timeouts"`
 }
@@ -87,6 +88,20 @@ type JudgeFinalConfig struct {
 
 type RankUpdateConfig struct {
 	Topic string `json:"topic"`
+}
+
+type RankOutboxConfig struct {
+	ContestScanInterval time.Duration `json:"contestScanInterval"`
+	ContestScanBatch    int           `json:"contestScanBatch"`
+	ClaimBatchSize      int           `json:"claimBatchSize"`
+	LeaseDuration       time.Duration `json:"leaseDuration"`
+	LeaseRenewInterval  time.Duration `json:"leaseRenewInterval"`
+	RetryBaseDelay      time.Duration `json:"retryBaseDelay"`
+	RetryMaxDelay       time.Duration `json:"retryMaxDelay"`
+	CleanupInterval     time.Duration `json:"cleanupInterval"`
+	SentRetention       time.Duration `json:"sentRetention"`
+	CleanupBatchSize    int           `json:"cleanupBatchSize"`
+	RequeueBatchSize    int           `json:"requeueBatchSize"`
 }
 
 type LeaderboardConfig struct {

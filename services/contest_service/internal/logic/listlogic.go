@@ -5,6 +5,7 @@ package logic
 
 import (
 	"context"
+	"time"
 
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/contest_service/internal/repository"
@@ -67,11 +68,15 @@ func (l *ListLogic) List(req *types.ListContestsRequest) (resp *types.ListContes
 	}
 	summaries := make([]types.ContestSummary, 0, len(items))
 	for _, item := range items {
+		rule, err := parseRuleJSON(item.RuleJSON)
+		if err != nil {
+			l.Logger.Errorf("parse contest rule failed contest_id=%s err=%v", item.ContestID, err)
+		}
 		summaries = append(summaries, types.ContestSummary{
 			ContestId: item.ContestID,
 			Title:     item.Title,
-			Status:    item.Status,
-			RuleType:  ruleTypeFromJSON(item.RuleJSON),
+			Status:    deriveContestStatus(item.Status, time.Now(), item.StartAt, item.EndAt, rule.FreezeMinutesBeforeEnd),
+			RuleType:  rule.RuleType,
 			StartAt:   formatTime(item.StartAt),
 			EndAt:     formatTime(item.EndAt),
 		})

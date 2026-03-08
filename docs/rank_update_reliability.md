@@ -4,4 +4,6 @@
 
 批处理落库失败时不会丢弃批次，而是保留并使用退避重试，直到成功；同时记录关键错误日志用于排查。为防止乱序或重复投递导致排行榜回退，事件要求携带 Contest 级别的递增 Version。落库前会按 Contest 分组并排序，只应用版本大于当前 meta 版本的更新，并写回最新版本与更新时间；因此即使消息重复或重放，也不会覆盖新数据。
 
+Contest Service 的 outbox relay 在多实例部署下使用 `contest_id` 维度租约锁：同一时刻同一 contest 只允许一个实例发送。实例先抢占 `contest_rank_outbox_lock`，再从 `contest_rank_outbox` claim `processing` 批次并按 `id asc` 串行发送。若实例异常退出，租约超时后由其他实例接管，同时过期 `processing` 事件会回收为 `pending`，继续重试。
+
 监控层面需关注：批处理重试次数、更新延迟、Kafka 消费堆积、以及应用失败日志。极端情况下可通过权威数据源进行全量重建作为兜底，但不替代实时更新链路的可靠性保障。

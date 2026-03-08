@@ -71,6 +71,7 @@ func TestEligibilityService_Check(t *testing.T) {
 	now := time.Now()
 	baseMeta := repository.ContestMeta{
 		ContestID: "c1",
+		Status:    "published",
 		StartAt:   now.Add(-time.Minute),
 		EndAt:     now.Add(time.Minute),
 	}
@@ -91,18 +92,23 @@ func TestEligibilityService_Check(t *testing.T) {
 		},
 		{
 			name:     "not_started",
-			meta:     repository.ContestMeta{ContestID: "c1", StartAt: now.Add(time.Minute), EndAt: now.Add(2 * time.Minute)},
+			meta:     repository.ContestMeta{ContestID: "c1", Status: "published", StartAt: now.Add(time.Minute), EndAt: now.Add(2 * time.Minute)},
 			expected: appErr.ContestNotStarted,
 		},
 		{
 			name:     "ended",
-			meta:     repository.ContestMeta{ContestID: "c1", StartAt: now.Add(-2 * time.Minute), EndAt: now.Add(-time.Minute)},
+			meta:     repository.ContestMeta{ContestID: "c1", Status: "published", StartAt: now.Add(-2 * time.Minute), EndAt: now.Add(-time.Minute)},
 			expected: appErr.ContestEnded,
 		},
 		{
 			name:     "problem_not_found",
 			meta:     baseMeta,
 			expected: appErr.ProblemNotFound,
+		},
+		{
+			name:     "status_denied",
+			meta:     repository.ContestMeta{ContestID: "c1", Status: "draft", StartAt: now.Add(-time.Minute), EndAt: now.Add(time.Minute)},
+			expected: appErr.ContestAccessDenied,
 		},
 		{
 			name:      "not_registered",

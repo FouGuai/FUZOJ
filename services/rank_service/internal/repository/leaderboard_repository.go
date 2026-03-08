@@ -26,6 +26,85 @@ const (
 	metaPrefix        = "contest:lb:meta:"
 )
 
+var rankApplyScript = redis.NewScript(`
+local leaderboardKey = KEYS[1]
+local metaKey = KEYS[2]
+
+local eventCount = tonumber(ARGV[1]) or 0
+local applyMeta = tonumber(ARGV[2]) or 0
+local forceApply = tonumber(ARGV[3]) or 0
+local maxResultId = tonumber(ARGV[4]) or 0
+local maxVersion = tonumber(ARGV[5]) or 0
+local maxUpdatedAt = tonumber(ARGV[6]) or 0
+local snapshotAt = tonumber(ARGV[7]) or 0
+local detailPrefix = ARGV[8] or ""
+
+local currentResultId = tonumber(redis.call("HGET", metaKey, "result_id") or "0") or 0
+local currentVersion = tonumber(redis.call("HGET", metaKey, "version") or "0") or 0
+
+local offset = 8
+local stride = 7
+local applied = 0
+
+for i = 0, eventCount - 1 do
+	local base = offset + i * stride
+	local memberId = ARGV[base + 1] or ""
+	local sortScore = tonumber(ARGV[base + 2]) or 0
+	local summaryJSON = ARGV[base + 3] or ""
+	local problemId = ARGV[base + 4] or ""
+	local detailJSON = ARGV[base + 5] or ""
+	local resultId = tonumber(ARGV[base + 6]) or 0
+	local version = tonumber(ARGV[base + 7]) or 0
+
+	local shouldApply = forceApply == 1
+	if not shouldApply then
+		if resultId > 0 then
+			shouldApply = resultId > currentResultId
+		elseif version > 0 then
+			shouldApply = version > currentVersion
+		end
+	end
+
+	if shouldApply and memberId ~= "" then
+		redis.call("ZADD", leaderboardKey, sortScore, memberId)
+		redis.call("HSET", detailPrefix .. memberId, "summary", summaryJSON)
+		if problemId ~= "" and detailJSON ~= "" then
+			redis.call("HSET", detailPrefix .. memberId, "p:" .. problemId, detailJSON)
+		end
+		if resultId > currentResultId then
+			currentResultId = resultId
+		end
+		if version > currentVersion then
+			currentVersion = version
+		end
+		applied = applied + 1
+	end
+end
+
+if applyMeta == 1 then
+	if maxResultId > currentResultId then
+		currentResultId = maxResultId
+	end
+	if maxVersion > currentVersion then
+		currentVersion = maxVersion
+	end
+	if currentResultId > 0 then
+		redis.call("HSET", metaKey, "result_id", tostring(currentResultId))
+	end
+	if currentVersion > 0 then
+		redis.call("HSET", metaKey, "version", tostring(currentVersion))
+	end
+	if maxUpdatedAt > 0 then
+		redis.call("HSET", metaKey, "updated_at", tostring(maxUpdatedAt))
+	end
+	if snapshotAt > 0 then
+		redis.call("HSET", metaKey, "snapshot_at", tostring(snapshotAt))
+	end
+end
+
+return applied
+`)
+
 // LeaderboardRepository handles leaderboard storage.
 type LeaderboardRepository struct {
 	redis    *redis.Redis
@@ -107,51 +186,21 @@ func (r *LeaderboardRepository) ApplyUpdates(ctx context.Context, events []pmode
 	if len(filtered) == 0 {
 		return nil
 	}
-	return r.redis.PipelinedCtx(ctx, func(pipe redis.Pipeliner) error {
-		for _, event := range filtered {
-			if event.ContestID == "" || event.MemberID == "" {
-				logger.Error("contest_id and member_id are required")
-				return appErr.ValidationError("contest_id", "required")
-			}
-			summary := pmodel.LeaderboardSummary{
-				MemberID:   event.MemberID,
-				SortScore:  event.SortScore,
-				ScoreTotal: event.ScoreTotal,
-				Penalty:    event.Penalty,
-				ACCount:    event.ACCount,
-				DetailJSON: event.DetailJSON,
-				UpdatedAt:  event.UpdatedAt,
-				Version:    event.Version,
-			}
-			payload, err := json.Marshal(summary)
-			if err != nil {
-				logger.Errorf("marshal summary failed: %v", err)
-				return fmt.Errorf("marshal summary failed: %w", err)
-			}
-			leaderboardKey := leaderboardKey(event.ContestID)
-			detailKey := detailKey(event.ContestID, event.MemberID)
-			pipe.ZAdd(ctx, leaderboardKey, red.Z{
-				Score:  float64(event.SortScore),
-				Member: event.MemberID,
-			})
-			pipe.HSet(ctx, detailKey, "summary", string(payload))
-			if event.ProblemID != "" && event.DetailJSON != "" {
-				pipe.HSet(ctx, detailKey, problemField(event.ProblemID), event.DetailJSON)
-			}
+	grouped := make(map[string][]pmodel.RankUpdateEvent)
+	for _, event := range filtered {
+		if event.ContestID == "" || event.MemberID == "" {
+			logger.Error("contest_id and member_id are required")
+			return appErr.ValidationError("contest_id", "required")
 		}
-		for contestID, meta := range metaInfo {
-			if meta.MaxVersion > 0 {
-				pipe.HSet(ctx, metaKey(contestID), "version", fmt.Sprint(meta.MaxVersion))
-			}
-			if meta.MaxResultID > 0 {
-				pipe.HSet(ctx, metaKey(contestID), "result_id", fmt.Sprint(meta.MaxResultID))
-			}
-			if meta.MaxUpdatedAt > 0 {
-				pipe.HSet(ctx, metaKey(contestID), "updated_at", fmt.Sprint(meta.MaxUpdatedAt))
-			}
+		grouped[event.ContestID] = append(grouped[event.ContestID], event)
+	}
+	for contestID, groupedEvents := range grouped {
+		if err := r.applyContestEvents(ctx, contestID, groupedEvents, metaInfo[contestID], true, false, 0); err != nil {
+			logger.Errorf("apply contest updates failed: %v", err)
+			return err
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 // SortAndFilterRankUpdates sorts events by result id (preferred) or version per contest and filters out stale updates.
@@ -221,6 +270,13 @@ func SortAndFilterRankUpdates(events []pmodel.RankUpdateEvent, currentVersion ma
 			meta := metaInfo[contestID]
 			if item.resultID > meta.MaxResultID {
 				meta.MaxResultID = item.resultID
+			}
+			versionValue, err := strconv.ParseInt(item.event.Version, 10, 64)
+			if err == nil && versionValue > meta.MaxVersion {
+				meta.MaxVersion = versionValue
+			}
+			if meta.MaxVersion < meta.MaxResultID {
+				meta.MaxVersion = meta.MaxResultID
 			}
 			if item.event.UpdatedAt > meta.MaxUpdatedAt {
 				meta.MaxUpdatedAt = item.event.UpdatedAt
@@ -424,8 +480,126 @@ func pageCacheKey(contestID, mode string, page, pageSize int) string {
 	return fmt.Sprintf("%s%s:%s:%d:%d", pageCachePrefix, contestID, mode, page, pageSize)
 }
 
-func problemField(problemID string) string {
-	return "p:" + problemID
+// RestoreSnapshotEntries writes snapshot entries into Redis atomically in script mode without advancing meta.
+func (r *LeaderboardRepository) RestoreSnapshotEntries(ctx context.Context, contestID string, entries []SnapshotEntry) error {
+	if r == nil || r.redis == nil {
+		return appErr.New(appErr.ServiceUnavailable).WithMessage("redis is not configured")
+	}
+	if contestID == "" {
+		return appErr.ValidationError("contest_id", "required")
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	events := make([]pmodel.RankUpdateEvent, 0, len(entries))
+	filteredEntries := make([]SnapshotEntry, 0, len(entries))
+	for idx, entry := range entries {
+		if entry.MemberID == "" || entry.SummaryJSON == "" {
+			continue
+		}
+		filteredEntries = append(filteredEntries, entry)
+		events = append(events, pmodel.RankUpdateEvent{
+			ContestID:  contestID,
+			MemberID:   entry.MemberID,
+			SortScore:  entry.SortScore,
+			DetailJSON: entry.DetailJSON,
+			// Force mode ignores ordering gates, but keep ResultID unique for deterministic script state.
+			ResultID:  int64(idx + 1),
+			Version:   "0",
+			UpdatedAt: 0,
+		})
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	return r.applyContestEventsWithSummary(ctx, contestID, events, filteredEntries, RankUpdateMeta{}, false, true, 0)
+}
+
+// FinalizeSnapshotMeta updates snapshot-related meta fields after all entries are restored.
+func (r *LeaderboardRepository) FinalizeSnapshotMeta(ctx context.Context, contestID string, maxResultID, maxVersion, updatedAt, snapshotAt int64) error {
+	if r == nil || r.redis == nil {
+		return appErr.New(appErr.ServiceUnavailable).WithMessage("redis is not configured")
+	}
+	if contestID == "" {
+		return appErr.ValidationError("contest_id", "required")
+	}
+	return r.applyContestEvents(ctx, contestID, nil, RankUpdateMeta{
+		MaxResultID:  maxResultID,
+		MaxVersion:   maxVersion,
+		MaxUpdatedAt: updatedAt,
+	}, true, false, snapshotAt)
+}
+
+func (r *LeaderboardRepository) applyContestEvents(ctx context.Context, contestID string, events []pmodel.RankUpdateEvent, meta RankUpdateMeta, applyMeta, forceApply bool, snapshotAt int64) error {
+	return r.applyContestEventsWithSummary(ctx, contestID, events, nil, meta, applyMeta, forceApply, snapshotAt)
+}
+
+func (r *LeaderboardRepository) applyContestEventsWithSummary(ctx context.Context, contestID string, events []pmodel.RankUpdateEvent, snapshotEntries []SnapshotEntry, meta RankUpdateMeta, applyMeta, forceApply bool, snapshotAt int64) error {
+	if r.redis == nil {
+		return appErr.New(appErr.ServiceUnavailable).WithMessage("redis is not configured")
+	}
+	keys := []string{leaderboardKey(contestID), metaKey(contestID)}
+	args := make([]any, 0, 8+len(events)*7)
+	args = append(args,
+		len(events),
+		boolToInt(applyMeta),
+		boolToInt(forceApply),
+		meta.MaxResultID,
+		meta.MaxVersion,
+		meta.MaxUpdatedAt,
+		snapshotAt,
+		detailPrefix+contestID+":",
+	)
+	for i, event := range events {
+		if event.MemberID == "" {
+			continue
+		}
+		summaryJSON := ""
+		if i < len(snapshotEntries) && snapshotEntries[i].SummaryJSON != "" {
+			summaryJSON = snapshotEntries[i].SummaryJSON
+		} else {
+			summary := pmodel.LeaderboardSummary{
+				MemberID:   event.MemberID,
+				SortScore:  event.SortScore,
+				ScoreTotal: event.ScoreTotal,
+				Penalty:    event.Penalty,
+				ACCount:    event.ACCount,
+				DetailJSON: event.DetailJSON,
+				UpdatedAt:  event.UpdatedAt,
+				Version:    event.Version,
+			}
+			payload, err := json.Marshal(summary)
+			if err != nil {
+				return fmt.Errorf("marshal summary failed: %w", err)
+			}
+			summaryJSON = string(payload)
+		}
+		versionValue, err := strconv.ParseInt(event.Version, 10, 64)
+		if err != nil {
+			versionValue = 0
+		}
+		args = append(args,
+			event.MemberID,
+			event.SortScore,
+			summaryJSON,
+			event.ProblemID,
+			event.DetailJSON,
+			event.ResultID,
+			versionValue,
+		)
+	}
+	_, err := r.redis.ScriptRunCtx(ctx, rankApplyScript, keys, args...)
+	if err != nil {
+		return appErr.Wrapf(err, appErr.CacheError, "apply rank updates with script failed")
+	}
+	return nil
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func ttlSeconds(ttl time.Duration) int {

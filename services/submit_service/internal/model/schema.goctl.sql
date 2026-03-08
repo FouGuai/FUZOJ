@@ -1,4 +1,4 @@
-CREATE TABLE submission_logs (
+CREATE TABLE IF NOT EXISTS submission_logs (
   submission_id VARCHAR(64) NOT NULL,
   log_type VARCHAR(32) NOT NULL,
   test_id VARCHAR(64) NOT NULL DEFAULT '',

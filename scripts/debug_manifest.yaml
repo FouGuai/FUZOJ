@@ -10,6 +10,10 @@ deps:
     schemas:
       - "services/user_service/schema.sql"
       - "services/problem_service/internal/model/schema.goctl.sql"
+      - "services/submit_service/internal/model/schema.goctl.sql"
+      - "services/contest_service/schema_contest.sql"
+      - "services/contest_service/schema_rank.sql"
+      - "services/rank_service/schema_rank.sql"
   redis:
     addr: "127.0.0.1:6379"
   kafka:

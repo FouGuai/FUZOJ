@@ -96,7 +96,7 @@ func (r *SnapshotRepository) InsertSnapshotEntries(ctx context.Context, entries 
 		return nil
 	}
 	query := "insert into " + rankSnapshotEntryTable +
-		" (snapshot_id, member_id, rank, sort_score, score_total, penalty_total, ac_count, detail_json, summary_json) values "
+		" (snapshot_id, member_id, `rank`, sort_score, score_total, penalty_total, ac_count, detail_json, summary_json) values "
 	args := make([]any, 0, len(entries)*9)
 	for i, entry := range entries {
 		if i > 0 {
@@ -187,9 +187,9 @@ func (r *SnapshotRepository) ListSnapshotEntriesAfterRank(ctx context.Context, s
 		limit = 200
 	}
 	var resp []SnapshotEntry
-	query := "select snapshot_id, member_id, rank, sort_score, score_total, penalty_total, ac_count, detail_json, summary_json " +
-		"from " + rankSnapshotEntryTable + " where snapshot_id = ? and rank > ? " +
-		"order by rank asc limit ?"
+	query := "select snapshot_id, member_id, `rank`, sort_score, score_total, penalty_total, ac_count, detail_json, summary_json " +
+		"from " + rankSnapshotEntryTable + " where snapshot_id = ? and `rank` > ? " +
+		"order by `rank` asc limit ?"
 	if err := r.conn.QueryRowsCtx(ctx, &resp, query, snapshotID, lastRank, limit); err != nil {
 		if err == sqlx.ErrNotFound {
 			return nil, nil
@@ -198,4 +198,3 @@ func (r *SnapshotRepository) ListSnapshotEntriesAfterRank(ctx context.Context, s
 	}
 	return resp, nil
 }
-

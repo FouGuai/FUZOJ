@@ -1,4 +1,4 @@
-CREATE TABLE contest_member_problem_state (
+CREATE TABLE IF NOT EXISTS contest_member_problem_state (
   contest_id VARCHAR(64) NOT NULL,
   member_id VARCHAR(64) NOT NULL,
   problem_id BIGINT NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE contest_member_problem_state (
   KEY contest_problem_idx (contest_id, problem_id)
 );
 
-CREATE TABLE contest_member_summary_snapshot (
+CREATE TABLE IF NOT EXISTS contest_member_summary_snapshot (
   contest_id VARCHAR(64) NOT NULL,
   member_id VARCHAR(64) NOT NULL,
   score_total BIGINT NOT NULL DEFAULT 0,
@@ -28,17 +28,32 @@ CREATE TABLE contest_member_summary_snapshot (
   KEY contest_member_summary_idx (contest_id, member_id)
 );
 
-CREATE TABLE contest_rank_outbox (
+CREATE TABLE IF NOT EXISTS contest_rank_outbox (
   id BIGINT NOT NULL AUTO_INCREMENT,
+  contest_id VARCHAR(64) NOT NULL,
   event_key VARCHAR(128) NOT NULL,
   kafka_key VARCHAR(128) NOT NULL,
   payload MEDIUMTEXT NOT NULL,
   status VARCHAR(16) NOT NULL DEFAULT 'pending',
   retry_count INT NOT NULL DEFAULT 0,
-  next_retry_at DATETIME(3) NULL,
+  next_retry_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  owner_id VARCHAR(64) NULL,
+  lease_until DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
   UNIQUE KEY contest_rank_outbox_event_key_uq (event_key),
-  KEY contest_rank_outbox_status_idx (status, next_retry_at)
+  KEY contest_rank_outbox_dispatch_idx (status, contest_id, next_retry_at, id),
+  KEY contest_rank_outbox_pending_idx (status, next_retry_at, id),
+  KEY contest_rank_outbox_lease_idx (status, lease_until),
+  KEY contest_rank_outbox_gc_idx (status, updated_at)
+);
+
+CREATE TABLE IF NOT EXISTS contest_rank_outbox_lock (
+  contest_id VARCHAR(64) NOT NULL,
+  owner_id VARCHAR(64) NOT NULL,
+  lease_until DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (contest_id),
+  KEY contest_rank_outbox_lock_lease_idx (lease_until)
 );

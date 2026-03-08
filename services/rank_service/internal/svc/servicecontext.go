@@ -1,6 +1,7 @@
 package svc
 
 import (
+	"crypto/tls"
 	"fuzoj/services/rank_service/internal/config"
 	"fuzoj/services/rank_service/internal/consumer"
 	"fuzoj/services/rank_service/internal/repository"
@@ -35,6 +36,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	snapshotRepo := repository.NewSnapshotRepository(conn)
 	snapshotter := worker.NewSnapshotter(
 		snapshotRepo,
+		repo,
 		redisClient,
 		c.Rank.SnapshotInterval,
 		c.Rank.SnapshotPageSize,
@@ -74,8 +76,14 @@ func newPubSubClient(conf redis.RedisConf) *red.Client {
 	}
 	opt := &red.Options{
 		Addr:     conf.Host,
+		Username: conf.User,
 		Password: conf.Pass,
-		DB:       conf.DB,
+		TLSConfig: func() *tls.Config {
+			if !conf.Tls {
+				return nil
+			}
+			return &tls.Config{}
+		}(),
 	}
 	return red.NewClient(opt)
 }

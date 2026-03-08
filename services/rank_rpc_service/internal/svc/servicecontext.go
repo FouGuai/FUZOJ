@@ -14,7 +14,7 @@ type ServiceContext struct {
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
-	redisClient := redis.MustNewRedis(c.Redis)
+	redisClient := redis.MustNewRedis(c.RankRedis)
 	repo := repository.NewLeaderboardRepository(redisClient, c.Rank.PageCacheTTL, c.Rank.EmptyTTL)
 	return &ServiceContext{
 		Config:          c,

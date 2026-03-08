@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/contest_service/internal/repository"
@@ -56,11 +57,12 @@ func (l *GetLogic) Get(req *types.GetContestRequest) (resp *types.GetContestResp
 	if err != nil {
 		l.Logger.Errorf("parse contest rule failed contest_id=%s err=%v", req.Id, err)
 	}
+	status := deriveContestStatus(detail.Status, time.Now(), detail.StartAt, detail.EndAt, rule.FreezeMinutesBeforeEnd)
 	respDetail := types.ContestDetail{
 		ContestId:   detail.ContestID,
 		Title:       detail.Title,
 		Description: detail.Description,
-		Status:      detail.Status,
+		Status:      status,
 		Visibility:  detail.Visibility,
 		OwnerId:     detail.OwnerID,
 		OrgId:       detail.OrgID,

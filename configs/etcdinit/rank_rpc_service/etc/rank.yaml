@@ -1,5 +1,9 @@
 Name: rank-rpc
 ListenOn: 0.0.0.0:0
+Etcd:
+  Hosts:
+    - 127.0.0.1:2379
+  Key: rank.rpc
 bootstrap:
   etcd:
     hosts:
@@ -14,7 +18,7 @@ Mysql:
 Cache:
   - host: 127.0.0.1:6379
     type: node
-Redis:
+RankRedis:
   host: 127.0.0.1:6379
   type: node
 Rank:

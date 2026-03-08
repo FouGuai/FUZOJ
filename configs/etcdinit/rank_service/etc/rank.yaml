@@ -35,6 +35,11 @@ Rank:
   pageCacheTTL: 5s
   emptyTTL: 5m
   wsDebounce: 100ms
+  snapshotInterval: 5m
+  snapshotPageSize: 500
+  snapshotBatch: 500
+  recoverOnStart: true
 Timeouts:
   cache: 1s
+  db: 3s
   mq: 3s

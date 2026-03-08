@@ -56,10 +56,10 @@ func TestSortAndFilterRankUpdates(t *testing.T) {
 				maxVersion int64
 				maxResult  int64
 			}{
-				"c1": {maxVersion: 0, maxResult: 11},
+				"c1": {maxVersion: 11, maxResult: 11},
 			},
 			wantCount:      1,
-			wantMaxVersion: 0,
+			wantMaxVersion: 11,
 			wantMaxResult:  11,
 			wantErr:        false,
 		},
@@ -96,11 +96,11 @@ func TestSortAndFilterRankUpdates(t *testing.T) {
 				maxVersion int64
 				maxResult  int64
 			}{
-				"c1": {maxVersion: 0, maxResult: 1},
-				"c2": {maxVersion: 0, maxResult: 5},
+				"c1": {maxVersion: 1, maxResult: 1},
+				"c2": {maxVersion: 5, maxResult: 5},
 			},
 			wantCount:      2,
-			wantMaxVersion: 0,
+			wantMaxVersion: 5,
 			wantMaxResult:  5,
 			wantErr:        false,
 		},

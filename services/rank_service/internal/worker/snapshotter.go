@@ -19,6 +19,7 @@ import (
 // Snapshotter periodically persists rank snapshots.
 type Snapshotter struct {
 	repo           *repository.SnapshotRepository
+	leaderboard    *repository.LeaderboardRepository
 	redis          *redis.Redis
 	interval       time.Duration
 	pageSize       int
@@ -30,7 +31,7 @@ type Snapshotter struct {
 	running        int32
 }
 
-func NewSnapshotter(repo *repository.SnapshotRepository, redisClient *redis.Redis, interval time.Duration, pageSize, batchSize int, cacheTimeout, dbTimeout time.Duration, recoverOnStart bool) *Snapshotter {
+func NewSnapshotter(repo *repository.SnapshotRepository, leaderboard *repository.LeaderboardRepository, redisClient *redis.Redis, interval time.Duration, pageSize, batchSize int, cacheTimeout, dbTimeout time.Duration, recoverOnStart bool) *Snapshotter {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -42,6 +43,7 @@ func NewSnapshotter(repo *repository.SnapshotRepository, redisClient *redis.Redi
 	}
 	return &Snapshotter{
 		repo:           repo,
+		leaderboard:    leaderboard,
 		redis:          redisClient,
 		interval:       interval,
 		pageSize:       pageSize,
@@ -175,6 +177,7 @@ func (s *Snapshotter) snapshotContest(ctx context.Context, contestID string) err
 		return nil
 	}
 
+	total64 := int64(total)
 	snapshotAt := time.Now()
 	ctxDB := withTimeout(ctx, s.dbTimeout)
 	snapshotID, err := s.repo.CreateSnapshotMeta(ctxDB.ctx, repository.SnapshotMeta{
@@ -182,7 +185,7 @@ func (s *Snapshotter) snapshotContest(ctx context.Context, contestID string) err
 		SnapshotAt:   snapshotAt,
 		LastResultID: lastResultID,
 		LastVersion:  lastVersion,
-		Total:        total,
+		Total:        total64,
 		Status:       "writing",
 	})
 	ctxDB.cancel()
@@ -191,7 +194,7 @@ func (s *Snapshotter) snapshotContest(ctx context.Context, contestID string) err
 	}
 
 	var start int64 = 0
-	for start < total {
+	for start < total64 {
 		stop := start + int64(s.pageSize) - 1
 		ctxCache = withTimeout(ctx, s.cacheTimeout)
 		pairs, err := s.redis.ZrevrangeWithScoresCtx(ctxCache.ctx, repository.LeaderboardKey(contestID), start, stop)
@@ -207,8 +210,8 @@ func (s *Snapshotter) snapshotContest(ctx context.Context, contestID string) err
 		ctxCache = withTimeout(ctx, s.cacheTimeout)
 		err = s.redis.PipelinedCtx(ctxCache.ctx, func(pipe redis.Pipeliner) error {
 			for i, pair := range pairs {
-				memberID, ok := pair.Member.(string)
-				if !ok || memberID == "" {
+				memberID := pair.Key
+				if memberID == "" {
 					continue
 				}
 				summaries[i] = pipe.HGet(ctxCache.ctx, repository.DetailKey(contestID, memberID), "summary")
@@ -222,8 +225,8 @@ func (s *Snapshotter) snapshotContest(ctx context.Context, contestID string) err
 
 		entries := make([]repository.SnapshotEntry, 0, len(pairs))
 		for i, pair := range pairs {
-			memberID, ok := pair.Member.(string)
-			if !ok || memberID == "" {
+			memberID := pair.Key
+			if memberID == "" {
 				continue
 			}
 			cmd := summaries[i]
@@ -296,6 +299,9 @@ func (s *Snapshotter) insertEntries(ctx context.Context, entries []repository.Sn
 
 func (s *Snapshotter) restoreSnapshot(ctx context.Context, meta repository.SnapshotMeta) error {
 	logger := logx.WithContext(ctx)
+	if s.leaderboard == nil {
+		return nil
+	}
 	var lastRank int64 = 0
 	for {
 		ctxDB := withTimeout(ctx, s.dbTimeout)
@@ -308,35 +314,23 @@ func (s *Snapshotter) restoreSnapshot(ctx context.Context, meta repository.Snaps
 			break
 		}
 		ctxCache := withTimeout(ctx, s.cacheTimeout)
-		err = s.redis.PipelinedCtx(ctxCache.ctx, func(pipe redis.Pipeliner) error {
-			for _, entry := range entries {
-				pipe.ZAdd(ctxCache.ctx, repository.LeaderboardKey(meta.ContestID), red.Z{
-					Score:  float64(entry.SortScore),
-					Member: entry.MemberID,
-				})
-				pipe.HSet(ctxCache.ctx, repository.DetailKey(meta.ContestID, entry.MemberID), "summary", entry.SummaryJSON)
-				if entry.Rank > lastRank {
-					lastRank = entry.Rank
-				}
-			}
-			return nil
-		})
-		ctxCache.cancel()
-		if err != nil {
+		if err := s.leaderboard.RestoreSnapshotEntries(ctxCache.ctx, meta.ContestID, entries); err != nil {
+			ctxCache.cancel()
 			return err
 		}
+		ctxCache.cancel()
+		lastRank = entries[len(entries)-1].Rank
 	}
 
 	ctxCache := withTimeout(ctx, s.cacheTimeout)
-	_ = s.redis.PipelinedCtx(ctxCache.ctx, func(pipe redis.Pipeliner) error {
-		pipe.HSet(ctxCache.ctx, repository.MetaKey(meta.ContestID), "result_id", strconv.FormatInt(meta.LastResultID, 10))
-		if meta.LastVersion > 0 {
-			pipe.HSet(ctxCache.ctx, repository.MetaKey(meta.ContestID), "version", strconv.FormatInt(meta.LastVersion, 10))
-		}
-		pipe.HSet(ctxCache.ctx, repository.MetaKey(meta.ContestID), "updated_at", strconv.FormatInt(meta.SnapshotAt.Unix(), 10))
-		pipe.HSet(ctxCache.ctx, repository.MetaKey(meta.ContestID), "snapshot_at", strconv.FormatInt(meta.SnapshotAt.Unix(), 10))
-		return nil
-	})
+	_ = s.leaderboard.FinalizeSnapshotMeta(
+		ctxCache.ctx,
+		meta.ContestID,
+		meta.LastResultID,
+		meta.LastVersion,
+		meta.SnapshotAt.Unix(),
+		meta.SnapshotAt.Unix(),
+	)
 	ctxCache.cancel()
 
 	logger.Infof("rank snapshot restored contest_id=%s", meta.ContestID)
@@ -369,4 +363,3 @@ func parseInt64(values []string, idx int) int64 {
 	}
 	return val
 }
-

@@ -31,6 +31,9 @@ Kafka:
     - contest.rank.updates
 Topics:
   level0: judge.level0
+  level1: judge.level1
+  level2: judge.level2
+  level3: judge.level3
 Contest:
   idempotencyTTL: 10m
   resultPersistAfter: 1h
@@ -64,6 +67,18 @@ JudgeFinal:
   idempotencyTTL: 30m
 RankUpdate:
   topic: contest.rank.updates
+RankOutbox:
+  contestScanInterval: 1s
+  contestScanBatch: 32
+  claimBatchSize: 200
+  leaseDuration: 3s
+  leaseRenewInterval: 1s
+  retryBaseDelay: 1s
+  retryMaxDelay: 30s
+  cleanupInterval: 1m
+  sentRetention: 15m
+  cleanupBatchSize: 200
+  requeueBatchSize: 200
 Leaderboard:
   hotCacheTTL: 3s
   pageCacheTTL: 5s

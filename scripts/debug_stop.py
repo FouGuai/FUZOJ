@@ -121,11 +121,9 @@ def main() -> None:
         services = manifest.get("services", [])
         if not isinstance(services, list):
             raise SystemExit("manifest services must be a list")
-        for svc in services:
-            name = svc["name"]
-            if only_set and name not in only_set:
-                continue
-            stop_service(log_dir, name, args.grace_seconds)
+        selected = [svc for svc in services if not only_set or svc["name"] in only_set]
+        for svc in reversed(selected):
+            stop_service(log_dir, svc["name"], args.grace_seconds)
 
     if args.services_only:
         return

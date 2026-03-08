@@ -136,7 +136,7 @@ type eligibilityRepos struct {
 
 func newEligibilityRepos(problemExists bool, participantStatus string) eligibilityRepos {
 	return eligibilityRepos{
-		contest:     fakeContestRepo{meta: contestRepo.ContestMeta{ContestID: "contest-1", StartAt: time.Now().Add(-time.Hour), EndAt: time.Now().Add(time.Hour)}},
+		contest:     fakeContestRepo{meta: contestRepo.ContestMeta{ContestID: "contest-1", Status: "published", StartAt: time.Now().Add(-time.Hour), EndAt: time.Now().Add(time.Hour)}},
 		problem:     fakeProblemRepo{exists: problemExists},
 		participant: fakeParticipantRepo{status: participantStatus},
 	}

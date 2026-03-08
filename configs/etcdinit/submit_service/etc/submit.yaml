@@ -45,6 +45,10 @@ Submit:
   SourceBucket: fuzoj
   SourceKeyPrefix: submissions
   MaxCodeBytes: 262144
+  LogBucket: fuzoj
+  LogKeyPrefix: submit-logs
+  LogMaxInlineBytes: 32768
+  LogCacheTTL: 30m
   IdempotencyTTL: 10m
   BatchLimit: 200
   StatusTTL: 24h

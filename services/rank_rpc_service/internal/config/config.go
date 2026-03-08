@@ -19,10 +19,10 @@ type Config struct {
 	Mysql     struct {
 		DataSource string `json:"dataSource"`
 	} `json:"mysql"`
-	Cache    cache.CacheConf `json:"cache"`
-	Redis    redis.RedisConf `json:"redis"`
-	Rank     RankConfig      `json:"rank"`
-	Timeouts TimeoutConfig   `json:"timeouts"`
+	Cache     cache.CacheConf `json:"cache"`
+	RankRedis redis.RedisConf `json:"rankRedis"`
+	Rank      RankConfig      `json:"rank"`
+	Timeouts  TimeoutConfig   `json:"timeouts"`
 }
 
 type RankConfig struct {

@@ -64,6 +64,7 @@ type ContestCreateInput struct {
 }
 
 type ContestUpdate struct {
+	Status      *string
 	Title       *string
 	Description *string
 	Visibility  *string
@@ -201,6 +202,10 @@ func (r *MySQLContestRepository) Update(ctx context.Context, contestID string, u
 	}
 	setParts := make([]string, 0, 8)
 	args := make([]any, 0, 8)
+	if update.Status != nil {
+		setParts = append(setParts, "status = ?")
+		args = append(args, *update.Status)
+	}
 	if update.Title != nil {
 		setParts = append(setParts, "title = ?")
 		args = append(args, *update.Title)

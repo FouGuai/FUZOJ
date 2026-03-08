@@ -3,22 +3,27 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
 const contestRankOutboxTable = "`contest_rank_outbox`"
+const contestRankOutboxLockTable = "`contest_rank_outbox_lock`"
 
 // RankOutboxEvent stores pending rank updates for MQ publishing.
 type RankOutboxEvent struct {
 	ID          int64
+	ContestID   string
 	EventKey    string
 	KafkaKey    string
 	Payload     string
 	Status      string
 	RetryCount  int
 	NextRetryAt time.Time
+	OwnerID     string
+	LeaseUntil  time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -36,6 +41,9 @@ func (r *RankOutboxRepository) Enqueue(ctx context.Context, event RankOutboxEven
 	if r == nil || r.conn == nil {
 		return errors.New("rank outbox repository is not configured")
 	}
+	if event.ContestID == "" {
+		return errors.New("contest id is required")
+	}
 	now := time.Now()
 	if event.CreatedAt.IsZero() {
 		event.CreatedAt = now
@@ -46,15 +54,18 @@ func (r *RankOutboxRepository) Enqueue(ctx context.Context, event RankOutboxEven
 	if event.Status == "" {
 		event.Status = "pending"
 	}
-	query := "insert into " + contestRankOutboxTable + " (event_key, kafka_key, payload, status, retry_count, next_retry_at, created_at, updated_at) " +
-		"values (?, ?, ?, ?, ?, ?, ?, ?)"
+	query := "insert into " + contestRankOutboxTable + " (contest_id, event_key, kafka_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at) " +
+		"values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	_, err := r.conn.ExecCtx(ctx, query,
+		event.ContestID,
 		event.EventKey,
 		event.KafkaKey,
 		event.Payload,
 		event.Status,
 		event.RetryCount,
 		nullTime(event.NextRetryAt),
+		nullString(event.OwnerID),
+		nullTime(event.LeaseUntil),
 		event.CreatedAt,
 		event.UpdatedAt,
 	)
@@ -69,7 +80,7 @@ func (r *RankOutboxRepository) ListPending(ctx context.Context, limit int) ([]Ra
 		limit = 100
 	}
 	var resp []RankOutboxEvent
-	query := "select id, event_key, kafka_key, payload, status, retry_count, next_retry_at, created_at, updated_at " +
+	query := "select id, contest_id, event_key, kafka_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at " +
 		"from " + contestRankOutboxTable + " where status = 'pending' and (next_retry_at is null or next_retry_at <= ?) " +
 		"order by id asc limit ?"
 	if err := r.conn.QueryRowsCtx(ctx, &resp, query, time.Now(), limit); err != nil {
@@ -82,15 +93,25 @@ func (r *RankOutboxRepository) ListPending(ctx context.Context, limit int) ([]Ra
 }
 
 func (r *RankOutboxRepository) MarkSent(ctx context.Context, ids []int64) error {
+	return r.MarkSentByOwner(ctx, "", ids)
+}
+
+func (r *RankOutboxRepository) MarkSentByOwner(ctx context.Context, ownerID string, ids []int64) error {
 	if r == nil || r.conn == nil {
 		return errors.New("rank outbox repository is not configured")
 	}
 	if len(ids) == 0 {
 		return nil
 	}
-	query := "update " + contestRankOutboxTable + " set status = 'sent', updated_at = ? where id in (" + placeholders(len(ids)) + ")"
-	args := make([]any, 0, len(ids)+1)
+	query := "update " + contestRankOutboxTable + " set status = 'sent', owner_id = null, lease_until = null, updated_at = ? " +
+		"where status = 'processing'"
+	args := make([]any, 0, len(ids)+2)
 	args = append(args, time.Now())
+	if ownerID != "" {
+		query += " and owner_id = ?"
+		args = append(args, ownerID)
+	}
+	query += " and id in (" + placeholders(len(ids)) + ")"
 	for _, id := range ids {
 		args = append(args, id)
 	}
@@ -99,12 +120,178 @@ func (r *RankOutboxRepository) MarkSent(ctx context.Context, ids []int64) error 
 }
 
 func (r *RankOutboxRepository) MarkFailed(ctx context.Context, event RankOutboxEvent, nextRetry time.Time) error {
+	return r.MarkFailedWithRetry(ctx, "", event.RetryCount, []int64{event.ID}, nextRetry)
+}
+
+func (r *RankOutboxRepository) MarkFailedWithRetry(ctx context.Context, ownerID string, retryCount int, ids []int64, nextRetry time.Time) error {
 	if r == nil || r.conn == nil {
 		return errors.New("rank outbox repository is not configured")
 	}
-	query := "update " + contestRankOutboxTable + " set retry_count = ?, next_retry_at = ?, updated_at = ? where id = ?"
-	_, err := r.conn.ExecCtx(ctx, query, event.RetryCount+1, nullTime(nextRetry), time.Now(), event.ID)
+	if len(ids) == 0 {
+		return nil
+	}
+	query := "update " + contestRankOutboxTable + " set status = 'pending', retry_count = ?, next_retry_at = ?, owner_id = null, lease_until = null, updated_at = ? " +
+		"where status = 'processing' and retry_count = ?"
+	args := make([]any, 0, len(ids)+5)
+	args = append(args, retryCount+1, nullTime(nextRetry), time.Now(), retryCount)
+	if ownerID != "" {
+		query += " and owner_id = ?"
+		args = append(args, ownerID)
+	}
+	query += " and id in (" + placeholders(len(ids)) + ")"
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	_, err := r.conn.ExecCtx(ctx, query, args...)
 	return err
+}
+
+func (r *RankOutboxRepository) ListPendingContests(ctx context.Context, now time.Time, limit int) ([]string, error) {
+	if r == nil || r.conn == nil {
+		return nil, errors.New("rank outbox repository is not configured")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	var contests []string
+	query := "select distinct contest_id from " + contestRankOutboxTable +
+		" where status = 'pending' and (next_retry_at is null or next_retry_at <= ?) order by contest_id asc limit ?"
+	if err := r.conn.QueryRowsCtx(ctx, &contests, query, now, limit); err != nil {
+		if err == sqlx.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return contests, nil
+}
+
+func (r *RankOutboxRepository) AcquireContestLease(ctx context.Context, contestID, ownerID string, leaseDuration time.Duration) (bool, error) {
+	if r == nil || r.conn == nil {
+		return false, errors.New("rank outbox repository is not configured")
+	}
+	if contestID == "" || ownerID == "" {
+		return false, errors.New("contest id and owner id are required")
+	}
+	if leaseDuration <= 0 {
+		leaseDuration = 5 * time.Second
+	}
+	now := time.Now()
+	leaseUntil := now.Add(leaseDuration)
+	insertQuery := "insert ignore into " + contestRankOutboxLockTable + " (contest_id, owner_id, lease_until, updated_at) values (?, ?, ?, ?)"
+	if _, err := r.conn.ExecCtx(ctx, insertQuery, contestID, ownerID, leaseUntil, now); err != nil {
+		return false, err
+	}
+	updateQuery := "update " + contestRankOutboxLockTable + " set owner_id = ?, lease_until = ?, updated_at = ? " +
+		"where contest_id = ? and (owner_id = ? or lease_until <= ?)"
+	res, err := r.conn.ExecCtx(ctx, updateQuery, ownerID, leaseUntil, now, contestID, ownerID, now)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+func (r *RankOutboxRepository) RenewContestLease(ctx context.Context, contestID, ownerID string, leaseDuration time.Duration) error {
+	if r == nil || r.conn == nil {
+		return errors.New("rank outbox repository is not configured")
+	}
+	if contestID == "" || ownerID == "" {
+		return errors.New("contest id and owner id are required")
+	}
+	if leaseDuration <= 0 {
+		leaseDuration = 5 * time.Second
+	}
+	now := time.Now()
+	query := "update " + contestRankOutboxLockTable + " set lease_until = ?, updated_at = ? where contest_id = ? and owner_id = ?"
+	_, err := r.conn.ExecCtx(ctx, query, now.Add(leaseDuration), now, contestID, ownerID)
+	return err
+}
+
+func (r *RankOutboxRepository) ReleaseContestLease(ctx context.Context, contestID, ownerID string) error {
+	if r == nil || r.conn == nil {
+		return errors.New("rank outbox repository is not configured")
+	}
+	if contestID == "" || ownerID == "" {
+		return errors.New("contest id and owner id are required")
+	}
+	now := time.Now()
+	query := "update " + contestRankOutboxLockTable + " set lease_until = ?, updated_at = ? where contest_id = ? and owner_id = ?"
+	_, err := r.conn.ExecCtx(ctx, query, now, now, contestID, ownerID)
+	return err
+}
+
+func (r *RankOutboxRepository) ClaimByContest(ctx context.Context, contestID, ownerID string, limit int, leaseDuration time.Duration) ([]RankOutboxEvent, error) {
+	if r == nil || r.conn == nil {
+		return nil, errors.New("rank outbox repository is not configured")
+	}
+	if contestID == "" || ownerID == "" {
+		return nil, errors.New("contest id and owner id are required")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if leaseDuration <= 0 {
+		leaseDuration = 5 * time.Second
+	}
+	now := time.Now()
+	leaseUntil := now.Add(leaseDuration)
+	updateQuery := "update " + contestRankOutboxTable + " set status = 'processing', owner_id = ?, lease_until = ?, updated_at = ? " +
+		"where contest_id = ? and status = 'pending' and (next_retry_at is null or next_retry_at <= ?) order by id asc limit ?"
+	if _, err := r.conn.ExecCtx(ctx, updateQuery, ownerID, leaseUntil, now, contestID, now, limit); err != nil {
+		return nil, err
+	}
+	var events []RankOutboxEvent
+	selectQuery := "select id, contest_id, event_key, kafka_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at " +
+		"from " + contestRankOutboxTable + " where contest_id = ? and status = 'processing' and owner_id = ? order by id asc limit ?"
+	if err := r.conn.QueryRowsCtx(ctx, &events, selectQuery, contestID, ownerID, limit); err != nil {
+		if err == sqlx.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return events, nil
+}
+
+func (r *RankOutboxRepository) RequeueExpiredProcessing(ctx context.Context, now time.Time, limit int) (int64, error) {
+	if r == nil || r.conn == nil {
+		return 0, errors.New("rank outbox repository is not configured")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	query := "update " + contestRankOutboxTable + " set status = 'pending', owner_id = null, lease_until = null, updated_at = ? " +
+		"where status = 'processing' and lease_until <= ? order by lease_until asc limit ?"
+	res, err := r.conn.ExecCtx(ctx, query, now, now, limit)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
+}
+
+func (r *RankOutboxRepository) DeleteSentBefore(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	if r == nil || r.conn == nil {
+		return 0, errors.New("rank outbox repository is not configured")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	query := "delete from " + contestRankOutboxTable + " where status = 'sent' and updated_at < ? order by updated_at asc limit ?"
+	res, err := r.conn.ExecCtx(ctx, query, cutoff, limit)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
 }
 
 func placeholders(n int) string {
@@ -119,4 +306,14 @@ func placeholders(n int) string {
 		buf = append(buf, '?')
 	}
 	return string(buf)
+}
+
+func (e RankOutboxEvent) ValidateForClaim(contestID, ownerID string) error {
+	if e.ContestID != contestID {
+		return fmt.Errorf("unexpected contest id: %s", e.ContestID)
+	}
+	if e.OwnerID != ownerID {
+		return fmt.Errorf("unexpected owner id: %s", e.OwnerID)
+	}
+	return nil
 }

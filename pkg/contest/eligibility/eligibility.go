@@ -62,6 +62,9 @@ func (s *Service) Check(ctx context.Context, req Request) (Result, error) {
 	if now.After(meta.EndAt) {
 		return resultFromCode(appErr.ContestEnded), nil
 	}
+	if !canSubmitByContestStatus(meta.Status) {
+		return resultFromCode(appErr.ContestAccessDenied), nil
+	}
 
 	if _, err := s.problemRepo.HasProblem(ctx, req.ContestID, req.ProblemID); err != nil {
 		if errors.Is(err, repository.ErrContestProblemNotFound) {
@@ -86,6 +89,15 @@ func (s *Service) Check(ctx context.Context, req Request) (Result, error) {
 func isParticipantEligible(status string) bool {
 	switch status {
 	case "registered", "approved":
+		return true
+	default:
+		return false
+	}
+}
+
+func canSubmitByContestStatus(status string) bool {
+	switch status {
+	case "published", "running", "frozen":
 		return true
 	default:
 		return false

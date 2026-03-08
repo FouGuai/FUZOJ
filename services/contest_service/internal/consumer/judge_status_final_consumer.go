@@ -288,9 +288,10 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 		eventKey := status.ContestID + ":" + memberID + ":" + update.Version
 		kafkaKey := status.ContestID
 		if err := outboxRepo.Enqueue(ctx, repository.RankOutboxEvent{
-			EventKey: eventKey,
-			KafkaKey: kafkaKey,
-			Payload:  string(payload),
+			ContestID: status.ContestID,
+			EventKey:  eventKey,
+			KafkaKey:  kafkaKey,
+			Payload:   string(payload),
 		}); err != nil {
 			return err
 		}
