@@ -188,6 +188,12 @@ upstreams:
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "submit.status"
+        method: "GET"
+        path: "/api/v1/submissions/:id"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
       - name: "submit.source"
         method: "GET"
         path: "/api/v1/submissions/:id/source"
@@ -208,7 +214,7 @@ upstreams:
     mappings:
       - name: "status.get"
         method: "GET"
-        path: "/api/v1/status/*any"
+        path: "/api/v1/status/:resource/:id"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
@@ -220,7 +226,7 @@ upstreams:
     mappings:
       - name: "judge.status"
         method: "GET"
-        path: "/api/v1/judge/*any"
+        path: "/api/v1/judge/:resource/:id"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
@@ -232,24 +238,58 @@ upstreams:
     mappings:
       - name: "contest.public"
         method: "GET"
-        path: "/api/v1/contests/*any"
+        path: "/api/v1/contests"
+        auth:
+          mode: "public"
+      - name: "contest.public.detail"
+        method: "GET"
+        path: "/api/v1/contests/:id"
+        auth:
+          mode: "public"
+      - name: "contest.public.action"
+        method: "GET"
+        path: "/api/v1/contests/:id/:action"
         auth:
           mode: "public"
       - name: "contest.manage"
         method: "POST"
-        path: "/api/v1/contests/*any"
+        path: "/api/v1/contests"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "POST"
+        path: "/api/v1/contests/:id"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "POST"
+        path: "/api/v1/contests/:id/:action"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
       - name: "contest.manage"
         method: "PUT"
-        path: "/api/v1/contests/*any"
+        path: "/api/v1/contests/:id"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "PUT"
+        path: "/api/v1/contests/:id/:action"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]
       - name: "contest.manage"
         method: "DELETE"
-        path: "/api/v1/contests/*any"
+        path: "/api/v1/contests/:id"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]
+      - name: "contest.manage"
+        method: "DELETE"
+        path: "/api/v1/contests/:id/:action"
         auth:
           mode: "protected"
           roles: ["user", "problem_setter", "admin", "super_admin"]

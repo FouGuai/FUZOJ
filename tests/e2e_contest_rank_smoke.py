@@ -2,6 +2,8 @@
 import argparse
 import hashlib
 import json
+import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -9,20 +11,65 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import yaml
 
 
+def is_http_reachable(base_url: str, timeout_s: float = 1.0) -> bool:
+    try:
+        parsed = requests.utils.urlparse(base_url)
+        host = parsed.hostname
+        port = parsed.port
+        if not host or not port:
+            return False
+        with socket.create_connection((host, port), timeout=timeout_s):
+            return True
+    except OSError:
+        return False
+
+
 def load_base_url(repo_root: Path, override: str) -> str:
+    default_url = "http://127.0.0.1:8080"
     if override:
         return override.rstrip("/")
     config_path = repo_root / "configs/cli.yaml"
     if not config_path.exists():
-        return "http://127.0.0.1:8080"
+        return default_url
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    base_url = data.get("baseURL") or "http://127.0.0.1:8080"
-    return str(base_url).rstrip("/")
+    base_url = str(data.get("baseURL") or default_url).rstrip("/")
+    if is_http_reachable(base_url):
+        return base_url
+    return default_url
+
+
+def discover_service_base_url(repo_root: Path, service_name: str) -> str:
+    try:
+        proc = subprocess.run(
+            ["python3", "scripts/status_services.py"],
+            cwd=str(repo_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    pattern = re.compile(rf"^{re.escape(service_name)}:.*rest ([^,\s\)]+)")
+    for line in proc.stdout.splitlines():
+        match = pattern.search(line.strip())
+        if not match:
+            continue
+        host_port = match.group(1)
+        if ":" not in host_port:
+            continue
+        host, port = host_port.rsplit(":", 1)
+        host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+        return f"http://{host}:{port}"
+    return ""
 
 
 def sha256_file(path: Path) -> str:
@@ -79,6 +126,26 @@ def request_json(session: requests.Session, method: str, url: str, *, headers=No
         raise RuntimeError("response is not json") from exc
 
 
+def try_request_json(session: requests.Session, method: str, url: str, *, headers=None, payload=None, timeout=10):
+    start = time.time()
+    resp = session.request(method, url, headers=headers, json=payload, timeout=timeout)
+    elapsed = time.time() - start
+    print(f"{method} {url} -> {resp.status_code} ({elapsed:.2f}s)")
+    print(pretty_body(resp))
+    if 200 <= resp.status_code < 300:
+        try:
+            return True, resp.json()
+        except ValueError as exc:
+            raise RuntimeError("response is not json") from exc
+    return False, {"status": resp.status_code, "body": pretty_body(resp)}
+
+
+def replace_base(url: str, new_base: str) -> str:
+    old = urlparse(url)
+    new = urlparse(new_base)
+    return f"{new.scheme}://{new.netloc}{old.path}" + (f"?{old.query}" if old.query else "")
+
+
 def upload_file(url: str, path: Path, timeout: int) -> str:
     with path.open("rb") as f:
         resp = requests.put(url, data=f, timeout=timeout)
@@ -105,6 +172,20 @@ def main() -> int:
 
     repo_root = Path(__file__).resolve().parents[1]
     base_url = load_base_url(repo_root, args.base)
+    if not is_http_reachable(base_url):
+        gateway_base_url = discover_service_base_url(repo_root, "gateway")
+        if gateway_base_url:
+            base_url = gateway_base_url
+            print(f"gateway direct base detected: {base_url}")
+    contest_base_url = discover_service_base_url(repo_root, "contest-service")
+    status_base_url = discover_service_base_url(repo_root, "status-service")
+    rank_base_url = discover_service_base_url(repo_root, "rank-service")
+    if contest_base_url:
+        print(f"contest direct base detected: {contest_base_url}")
+    if status_base_url:
+        print(f"status direct base detected: {status_base_url}")
+    if rank_base_url:
+        print(f"rank direct base detected: {rank_base_url}")
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
 
@@ -294,11 +375,8 @@ def main() -> int:
     contest_end = to_rfc3339(now + timedelta(minutes=30))
 
     print("== contest create ==")
-    contest_resp = request_json(
-        session,
-        "POST",
-        f"{base_url}/api/v1/contests",
-        payload={
+    contest_create_payloads = [
+        {
             "title": "Contest E2E Smoke",
             "description": "contest rank smoke",
             "visibility": "public",
@@ -306,33 +384,125 @@ def main() -> int:
             "org_id": 0,
             "start_at": contest_start,
             "end_at": contest_end,
-            "rule": {"rule_type": "icpc", "penalty_minutes": 20, "freeze_minutes_before_end": 0},
+            "rule": {
+                "rule_type": "icpc",
+                "penalty_minutes": 20,
+                "penalty_formula": "",
+                "penalty_cap_minutes": 0,
+                "freeze_minutes_before_end": 0,
+                "allow_hack": False,
+                "hack_reward": 0,
+                "hack_penalty": 0,
+                "max_submissions_per_problem": 0,
+                "score_mode": "sum",
+                "publish_solutions_after_end": False,
+                "virtual_participation_enabled": False,
+            },
         },
-        timeout=args.timeout,
-    )
+        {
+            "title": "Contest E2E Smoke",
+            "start_at": contest_start,
+            "end_at": contest_end,
+        },
+        {
+            "title": "Contest E2E Smoke",
+            "description": "contest rank smoke",
+            "visibility": "public",
+            "ownerId": int(user_id),
+            "orgId": 0,
+            "startAt": contest_start,
+            "endAt": contest_end,
+            "rule": {
+                "ruleType": "icpc",
+                "penaltyMinutes": 20,
+                "penaltyFormula": "",
+                "penaltyCapMinutes": 0,
+                "freezeMinutesBeforeEnd": 0,
+                "allowHack": False,
+                "hackReward": 0,
+                "hackPenalty": 0,
+                "maxSubmissionsPerProblem": 0,
+                "scoreMode": "sum",
+                "publishSolutionsAfterEnd": False,
+                "virtualParticipationEnabled": False,
+            },
+        },
+        {
+            "title": "Contest E2E Smoke",
+            "startAt": contest_start,
+            "endAt": contest_end,
+        },
+    ]
+    contest_resp = None
+    for idx, payload in enumerate(contest_create_payloads, start=1):
+        ok, result = try_request_json(
+            session,
+            "POST",
+            f"{base_url}/api/v1/contests",
+            payload=payload,
+            timeout=args.timeout,
+        )
+        if ok:
+            contest_resp = result
+            break
+        print(f"contest create attempt {idx} failed, trying next payload")
+    if contest_resp is None:
+        raise RuntimeError("contest create failed for all payload variants")
+
     contest_id = pick(contest_resp, "data", "contest_id")
     require(contest_id, "contest_id not found")
 
     print("== contest problem add ==")
-    request_json(
+    contest_problem_url = f"{base_url}/api/v1/contests/{contest_id}/problems"
+    ok, _ = try_request_json(
         session,
         "POST",
-        f"{base_url}/api/v1/contests/{contest_id}/problems",
+        contest_problem_url,
         payload={"problem_id": int(problem_id), "order": 1, "score": 100, "visible": True, "version": int(version)},
         timeout=args.timeout,
     )
+    if not ok:
+        if contest_base_url:
+            request_json(
+                session,
+                "POST",
+                replace_base(contest_problem_url, contest_base_url),
+                payload={"problem_id": int(problem_id), "order": 1, "score": 100, "visible": True, "version": int(version)},
+                timeout=args.timeout,
+            )
+        else:
+            raise RuntimeError(f"request failed: POST {contest_problem_url}")
 
     print("== contest publish ==")
-    request_json(session, "POST", f"{base_url}/api/v1/contests/{contest_id}/publish", timeout=args.timeout)
+    contest_publish_url = f"{base_url}/api/v1/contests/{contest_id}/publish"
+    ok, _ = try_request_json(session, "POST", contest_publish_url, timeout=args.timeout)
+    if not ok:
+        if contest_base_url:
+            request_json(session, "POST", replace_base(contest_publish_url, contest_base_url), timeout=args.timeout)
+        else:
+            raise RuntimeError(f"request failed: POST {contest_publish_url}")
 
     print("== contest register ==")
-    request_json(
+    contest_register_url = f"{base_url}/api/v1/contests/{contest_id}/register"
+    register_payload = {"user_id": int(user_id), "team_id": "", "invite_code": ""}
+    ok, _ = try_request_json(
         session,
         "POST",
-        f"{base_url}/api/v1/contests/{contest_id}/register",
-        payload={"user_id": int(user_id), "team_id": "", "invite_code": ""},
+        contest_register_url,
+        payload=register_payload,
         timeout=args.timeout,
     )
+    if not ok:
+        if contest_base_url:
+            request_json(
+                session,
+                "POST",
+                replace_base(contest_register_url, contest_base_url),
+                payload=register_payload,
+                timeout=args.timeout,
+            )
+        else:
+            raise RuntimeError(f"request failed: POST {contest_register_url}")
 
     source_path = repo_root / "tests/main.cpp"
     require(source_path.exists(), "tests/main.cpp not found")
@@ -360,8 +530,24 @@ def main() -> int:
 
     print("== contest submit status ==")
     final_status = ""
+    status_urls = []
+    gateway_status_urls = [
+        f"{base_url}/api/v1/submissions/{submission_id}",
+        f"{base_url}/api/v1/status/submissions/{submission_id}",
+    ]
+    status_urls.extend(gateway_status_urls)
+    if status_base_url:
+        status_urls.append(f"{status_base_url}/api/v1/status/submissions/{submission_id}")
     for _ in range(args.poll_times):
-        status_resp = request_json(session, "GET", f"{base_url}/api/v1/submissions/{submission_id}", timeout=args.timeout)
+        status_resp = None
+        for url in status_urls:
+            ok, result = try_request_json(session, "GET", url, timeout=args.timeout)
+            if ok:
+                status_resp = result
+                break
+        if status_resp is None:
+            time.sleep(args.poll_interval)
+            continue
         final_status = pick(status_resp, "data", "status") or status_resp.get("status") or ""
         if final_status.lower() in {"finished", "failed"}:
             break
@@ -371,13 +557,21 @@ def main() -> int:
     print("== leaderboard poll ==")
     rank_found = False
     rank_value = None
-    for _ in range(args.rank_poll_times):
-        lb_resp = request_json(
-            session,
-            "GET",
-            f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size=50&mode=live",
-            timeout=args.timeout,
+    leaderboard_urls = [f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size=50&mode=live"]
+    if rank_base_url:
+        leaderboard_urls.append(
+            f"{rank_base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size=50&mode=live"
         )
+    for _ in range(args.rank_poll_times):
+        lb_resp = None
+        for lb_url in leaderboard_urls:
+            ok, result = try_request_json(session, "GET", lb_url, timeout=args.timeout)
+            if ok:
+                lb_resp = result
+                break
+        if lb_resp is None:
+            time.sleep(args.poll_interval)
+            continue
         items = pick(lb_resp, "data", "items") or []
         for item in items:
             member_id = str(item.get("member_id", ""))

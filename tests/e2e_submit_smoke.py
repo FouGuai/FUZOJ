@@ -3,6 +3,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -14,15 +16,59 @@ import requests
 import yaml
 
 
+def is_http_reachable(base_url: str, timeout_s: float = 1.0) -> bool:
+    try:
+        parsed = requests.utils.urlparse(base_url)
+        host = parsed.hostname
+        port = parsed.port
+        if not host or not port:
+            return False
+        with socket.create_connection((host, port), timeout=timeout_s):
+            return True
+    except OSError:
+        return False
+
+
 def load_base_url(repo_root: Path, override: str) -> str:
+    default_url = "http://127.0.0.1:8080"
     if override:
         return override.rstrip("/")
     config_path = repo_root / "configs/cli.yaml"
     if not config_path.exists():
-        return "http://127.0.0.1:8080"
+        return default_url
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    base_url = data.get("baseURL") or "http://127.0.0.1:8080"
-    return str(base_url).rstrip("/")
+    base_url = str(data.get("baseURL") or default_url).rstrip("/")
+    if is_http_reachable(base_url):
+        return base_url
+    return default_url
+
+
+def discover_service_base_url(repo_root: Path, service_name: str) -> str:
+    try:
+        proc = subprocess.run(
+            ["python3", "scripts/status_services.py"],
+            cwd=str(repo_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    pattern = re.compile(rf"^{re.escape(service_name)}:.*rest ([^,\s\)]+)")
+    for line in proc.stdout.splitlines():
+        match = pattern.search(line.strip())
+        if not match:
+            continue
+        host_port = match.group(1)
+        if ":" not in host_port:
+            continue
+        host, port = host_port.rsplit(":", 1)
+        host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+        return f"http://{host}:{port}"
+    return ""
 
 
 def sha256_file(path: Path) -> str:
@@ -80,6 +126,20 @@ def request_json(session: requests.Session, method: str, url: str, *, headers=No
         raise RuntimeError("response is not json") from exc
 
 
+def try_request_json(session: requests.Session, method: str, url: str, *, headers=None, payload=None, timeout=10):
+    start = time.time()
+    resp = session.request(method, url, headers=headers, json=payload, timeout=timeout)
+    elapsed = time.time() - start
+    print(f"{method} {url} -> {resp.status_code} ({elapsed:.2f}s)")
+    print(pretty_body(resp))
+    if 200 <= resp.status_code < 300:
+        try:
+            return True, resp.json()
+        except ValueError as exc:
+            raise RuntimeError("response is not json") from exc
+    return False, {"status": resp.status_code, "body": pretty_body(resp)}
+
+
 def upload_file(url: str, path: Path, timeout: int) -> str:
     with path.open("rb") as f:
         resp = requests.put(url, data=f, timeout=timeout)
@@ -101,6 +161,11 @@ def main() -> int:
 
     repo_root = Path(__file__).resolve().parents[1]
     base_url = load_base_url(repo_root, args.base)
+    if not is_http_reachable(base_url):
+        gateway_base_url = discover_service_base_url(repo_root, "gateway")
+        if gateway_base_url:
+            base_url = gateway_base_url
+            print(f"gateway direct base detected: {base_url}")
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
 
@@ -373,12 +438,16 @@ def main() -> int:
     status = ""
     status_resp = {}
     for _ in range(args.poll_times):
-        status_resp = request_json(
+        ok, polled = try_request_json(
             session,
             "GET",
-            f"{base_url}/api/v1/submissions/{submission_id}",
+            f"{base_url}/api/v1/status/submissions/{submission_id}",
             timeout=args.timeout,
         )
+        if not ok:
+            time.sleep(args.poll_interval)
+            continue
+        status_resp = polled
         status = pick(status_resp, "data", "status") or status_resp.get("status") or ""
         if status.lower() in {"finished", "failed"}:
             break
@@ -388,12 +457,16 @@ def main() -> int:
     print("== submit status details ==")
     details_resp = {}
     for _ in range(10):
-        details_resp = request_json(
+        ok, polled = try_request_json(
             session,
             "GET",
-            f"{base_url}/api/v1/submissions/{submission_id}?include=details",
+            f"{base_url}/api/v1/status/submissions/{submission_id}?include=details",
             timeout=args.timeout,
         )
+        if not ok:
+            time.sleep(args.poll_interval)
+            continue
+        details_resp = polled
         details_data = pick(details_resp, "data") or {}
         tests = details_data.get("tests") or []
         if tests:
