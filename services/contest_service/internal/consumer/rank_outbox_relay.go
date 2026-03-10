@@ -40,6 +40,11 @@ type RankOutboxRelay struct {
 	once    sync.Once
 }
 
+const (
+	rankOutboxBacklogWarnThreshold = 2 * time.Second
+	rankOutboxPublishWarnThreshold = 500 * time.Millisecond
+)
+
 func NewRankOutboxRelay(repo *repository.RankOutboxRepository, pusher *kq.Pusher, options RankOutboxRelayOptions) *RankOutboxRelay {
 	if options.OwnerID == "" {
 		host, _ := os.Hostname()
@@ -182,10 +187,15 @@ func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string) 
 		}
 
 		processedAny = true
+		batchStart := time.Now()
 		sentIDs := make([]int64, 0, len(events))
 		failedIDs := make(map[int][]int64)
 		sort.Slice(events, func(i, j int) bool { return events[i].ID < events[j].ID })
+		var oldestCreatedAt time.Time
 		for _, event := range events {
+			if oldestCreatedAt.IsZero() || event.CreatedAt.Before(oldestCreatedAt) {
+				oldestCreatedAt = event.CreatedAt
+			}
 			if err := event.ValidateForClaim(contestID, r.options.OwnerID); err != nil {
 				logger.Errorf("invalid claimed event, contest=%s id=%d err=%v", contestID, event.ID, err)
 				failedIDs[event.RetryCount] = append(failedIDs[event.RetryCount], event.ID)
@@ -226,6 +236,15 @@ func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string) 
 					logger.Errorf("mark failed batch failed, contest=%s retry=%d count=%d err=%v", contestID, retryCount, len(failedIDs[retryCount]), err)
 				}
 			}
+		}
+		processCost := time.Since(batchStart)
+		backlogAge := time.Duration(0)
+		if !oldestCreatedAt.IsZero() {
+			backlogAge = time.Since(oldestCreatedAt)
+		}
+		if backlogAge >= rankOutboxBacklogWarnThreshold || processCost >= rankOutboxPublishWarnThreshold || len(failedIDs) > 0 {
+			logger.Infof("rank outbox relay stats contest=%s claimed=%d sent=%d failed=%d backlog_age=%s process_cost=%s",
+				contestID, len(events), len(sentIDs), countFailed(failedIDs), backlogAge, processCost)
 		}
 
 		if len(events) < r.options.ClaimBatchSize {
@@ -313,4 +332,15 @@ func sortedRetryCounts(groups map[int][]int64) []int {
 	}
 	sort.Ints(levels)
 	return levels
+}
+
+func countFailed(groups map[int][]int64) int {
+	if len(groups) == 0 {
+		return 0
+	}
+	total := 0
+	for _, ids := range groups {
+		total += len(ids)
+	}
+	return total
 }

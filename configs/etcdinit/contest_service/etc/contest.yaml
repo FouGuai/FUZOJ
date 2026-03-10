@@ -47,8 +47,8 @@ Contest:
 ContestDispatch:
   topic: contest.submit.validate
   consumerGroup: contest-dispatch
-  prefetchCount: 1
-  concurrency: 4
+  prefetchCount: 8
+  concurrency: 32
   maxRetries: 3
   retryDelay: 1s
   deadLetterTopic: contest.submit.validate.dead
@@ -58,8 +58,8 @@ ContestDispatch:
 JudgeFinal:
   topic: judge.status.final
   consumerGroup: contest-judge-final
-  prefetchCount: 1
-  concurrency: 4
+  prefetchCount: 8
+  concurrency: 32
   maxRetries: 3
   retryDelay: 1s
   deadLetterTopic: contest.judge.final.dead
@@ -68,17 +68,17 @@ JudgeFinal:
 RankUpdate:
   topic: contest.rank.updates
 RankOutbox:
-  contestScanInterval: 1s
-  contestScanBatch: 32
-  claimBatchSize: 200
-  leaseDuration: 3s
-  leaseRenewInterval: 1s
+  contestScanInterval: 50ms
+  contestScanBatch: 512
+  claimBatchSize: 2000
+  leaseDuration: 10s
+  leaseRenewInterval: 3s
   retryBaseDelay: 1s
   retryMaxDelay: 30s
   cleanupInterval: 1m
   sentRetention: 15m
-  cleanupBatchSize: 200
-  requeueBatchSize: 200
+  cleanupBatchSize: 1000
+  requeueBatchSize: 1000
 Leaderboard:
   hotCacheTTL: 3s
   pageCacheTTL: 5s

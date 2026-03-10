@@ -8,18 +8,13 @@ import (
 
 	"fuzoj/internal/common/cache_helper"
 	appErr "fuzoj/pkg/errors"
+	"fuzoj/pkg/submit/statuscache"
 	"fuzoj/services/status_service/internal/domain"
 	"fuzoj/services/status_service/internal/model"
 
-	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"golang.org/x/sync/singleflight"
-)
-
-const (
-	statusKeyPrefix = "judge:status:"
-	nullCacheValue  = "$NULL$"
 )
 
 const (
@@ -64,18 +59,13 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (domain
 		return r.getFinalStatusFromDB(ctx, submissionID)
 	}
 
-	cacheKey := statusKeyPrefix + submissionID
-	cached, err := r.cache.GetCtx(ctx, cacheKey)
+	cached, hit, err := statuscache.Get(ctx, r.cache, submissionID)
 	if err != nil {
-		if errors.Is(err, red.Nil) {
-			cached = ""
-		} else {
-			logger.Errorf("get status cache failed: %v", err)
-			return domain.JudgeStatusPayload{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
-		}
+		logger.Errorf("get status cache failed: %v", err)
+		return domain.JudgeStatusPayload{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
 	}
-	if cached != "" {
-		if cached == nullCacheValue {
+	if hit {
+		if cached == statuscache.NullValue {
 			return domain.JudgeStatusPayload{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 		}
 		status, err := unmarshalStatus(cached)
@@ -90,7 +80,7 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (domain
 	})
 	if err != nil {
 		if appErr.Is(err, appErr.NotFound) {
-			_ = setWithTTL(ctx, r.cache, cacheKey, nullCacheValue, cache_helper.JitterTTL(r.emptyTTL))
+			_ = statuscache.Set(ctx, r.cache, submissionID, statuscache.NullValue, durationSeconds(cache_helper.JitterTTL(r.emptyTTL)))
 			return domain.JudgeStatusPayload{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 		}
 		return domain.JudgeStatusPayload{}, err
@@ -101,7 +91,7 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (domain
 	}
 	payload := mustMarshalStatus(statusSummary(status))
 	if payload != "" {
-		_ = setWithTTL(ctx, r.cache, cacheKey, payload, cache_helper.JitterTTL(r.ttl))
+		_ = statuscache.Set(ctx, r.cache, submissionID, payload, durationSeconds(cache_helper.JitterTTL(r.ttl)))
 	}
 	return statusSummary(status), nil
 }
@@ -153,16 +143,6 @@ func statusSummary(status domain.JudgeStatusPayload) domain.JudgeStatusPayload {
 	summary.Compile = nil
 	summary.Tests = nil
 	return summary
-}
-
-func setWithTTL(ctx context.Context, cacheClient *redis.Redis, key, value string, ttl time.Duration) error {
-	if cacheClient == nil {
-		return errors.New("cache client is nil")
-	}
-	if ttl > 0 {
-		return cacheClient.SetexCtx(ctx, key, value, durationSeconds(ttl))
-	}
-	return cacheClient.SetCtx(ctx, key, value)
 }
 
 func durationSeconds(ttl time.Duration) int {

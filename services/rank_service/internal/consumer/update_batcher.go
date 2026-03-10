@@ -19,9 +19,20 @@ type UpdateBatcher struct {
 	size         int
 	interval     time.Duration
 	applyTimeout time.Duration
-	ch           chan pmodel.RankUpdateEvent
+	ch           chan queuedRankUpdate
 	stop         chan struct{}
 }
+
+type queuedRankUpdate struct {
+	event      pmodel.RankUpdateEvent
+	enqueuedAt time.Time
+}
+
+const (
+	rankBatcherDiagnosticsInterval = 5 * time.Second
+	rankQueueWarnThreshold         = time.Second
+	rankApplyWarnThreshold         = 500 * time.Millisecond
+)
 
 func NewUpdateBatcher(repo repository.UpdateApplier, pubsub *red.Client, size int, interval, applyTimeout time.Duration) *UpdateBatcher {
 	if size <= 0 {
@@ -39,7 +50,7 @@ func NewUpdateBatcher(repo repository.UpdateApplier, pubsub *red.Client, size in
 		size:         size,
 		interval:     interval,
 		applyTimeout: applyTimeout,
-		ch:           make(chan pmodel.RankUpdateEvent, size*4),
+		ch:           make(chan queuedRankUpdate, size*4),
 		stop:         make(chan struct{}),
 	}
 }
@@ -48,9 +59,11 @@ func (b *UpdateBatcher) Start(ctx context.Context) {
 	logger := logx.WithContext(ctx)
 	logger.Info("rank update batcher started")
 	ticker := time.NewTicker(b.interval)
+	diagTicker := time.NewTicker(rankBatcherDiagnosticsInterval)
 	defer ticker.Stop()
-	buffer := make([]pmodel.RankUpdateEvent, 0, b.size)
-	var pending []pmodel.RankUpdateEvent
+	defer diagTicker.Stop()
+	buffer := make([]queuedRankUpdate, 0, b.size)
+	var pending []queuedRankUpdate
 	retryDelay := 100 * time.Millisecond
 	nextRetry := time.Time{}
 	flush := func() {
@@ -60,21 +73,24 @@ func (b *UpdateBatcher) Start(ctx context.Context) {
 		if len(pending) > 0 && !nextRetry.IsZero() && time.Now().Before(nextRetry) {
 			return
 		}
-		var batch []pmodel.RankUpdateEvent
+		var batch []queuedRankUpdate
 		if len(pending) > 0 {
 			batch = pending
 		} else {
-			batch = make([]pmodel.RankUpdateEvent, len(buffer))
+			batch = make([]queuedRankUpdate, len(buffer))
 			copy(batch, buffer)
 			buffer = buffer[:0]
 		}
+		applyStart := time.Now()
+		maxQueueWait, avgQueueWait := queueWaitStats(batch, applyStart)
+		events := unwrapQueuedEvents(batch)
 		applyCtx := ctx
 		if b.applyTimeout > 0 {
 			var cancel context.CancelFunc
 			applyCtx, cancel = context.WithTimeout(ctx, b.applyTimeout)
 			defer cancel()
 		}
-		if err := b.repo.ApplyUpdates(applyCtx, batch); err != nil {
+		if err := b.repo.ApplyUpdates(applyCtx, events); err != nil {
 			logger.Errorf("apply rank updates failed: %v", err)
 			pending = batch
 			if retryDelay < 2*time.Second {
@@ -86,7 +102,12 @@ func (b *UpdateBatcher) Start(ctx context.Context) {
 		pending = nil
 		retryDelay = 100 * time.Millisecond
 		nextRetry = time.Time{}
-		b.publish(ctx, batch)
+		applyCost := time.Since(applyStart)
+		if maxQueueWait >= rankQueueWarnThreshold || applyCost >= rankApplyWarnThreshold {
+			logger.Infof("rank batch flush stats size=%d queue_wait_max=%s queue_wait_avg=%s apply_cost=%s",
+				len(events), maxQueueWait, avgQueueWait, applyCost)
+		}
+		b.publish(ctx, events)
 	}
 
 	for {
@@ -104,6 +125,16 @@ func (b *UpdateBatcher) Start(ctx context.Context) {
 			}
 		case <-ticker.C:
 			flush()
+		case <-diagTicker.C:
+			queued := len(b.ch)
+			if queued == 0 && len(buffer) == 0 && len(pending) == 0 {
+				continue
+			}
+			if queued >= cap(b.ch)*8/10 {
+				logger.Errorf("rank batcher queue pressure high queued=%d capacity=%d buffer=%d pending=%d", queued, cap(b.ch), len(buffer), len(pending))
+				continue
+			}
+			logger.Infof("rank batcher queue snapshot queued=%d capacity=%d buffer=%d pending=%d", queued, cap(b.ch), len(buffer), len(pending))
 		case event := <-b.ch:
 			buffer = append(buffer, event)
 			if len(buffer) >= b.size {
@@ -118,8 +149,12 @@ func (b *UpdateBatcher) Stop() {
 }
 
 func (b *UpdateBatcher) Add(ctx context.Context, event pmodel.RankUpdateEvent) error {
+	item := queuedRankUpdate{
+		event:      event,
+		enqueuedAt: time.Now(),
+	}
 	select {
-	case b.ch <- event:
+	case b.ch <- item:
 		return nil
 	case <-ctx.Done():
 		return appErr.New(appErr.Timeout).WithMessage("rank update enqueue timeout")
@@ -145,4 +180,31 @@ func (b *UpdateBatcher) publish(ctx context.Context, events []pmodel.RankUpdateE
 			logger.Errorf("publish rank update failed: %v", err)
 		}
 	}
+}
+
+func unwrapQueuedEvents(items []queuedRankUpdate) []pmodel.RankUpdateEvent {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]pmodel.RankUpdateEvent, 0, len(items))
+	for _, item := range items {
+		out = append(out, item.event)
+	}
+	return out
+}
+
+func queueWaitStats(items []queuedRankUpdate, now time.Time) (time.Duration, time.Duration) {
+	if len(items) == 0 {
+		return 0, 0
+	}
+	var maxWait time.Duration
+	var total time.Duration
+	for _, item := range items {
+		wait := now.Sub(item.enqueuedAt)
+		if wait > maxWait {
+			maxWait = wait
+		}
+		total += wait
+	}
+	return maxWait, total / time.Duration(len(items))
 }

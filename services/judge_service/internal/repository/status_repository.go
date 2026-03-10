@@ -9,17 +9,15 @@ import (
 
 	"fuzoj/internal/common/cache_helper"
 	appErr "fuzoj/pkg/errors"
+	"fuzoj/pkg/submit/statuscache"
 	dbmodel "fuzoj/services/judge_service/internal/model"
 	"fuzoj/services/judge_service/internal/pmodel"
 	"fuzoj/services/judge_service/internal/sandbox/result"
 
-	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
-const statusKeyPrefix = "judge:status:"
-const nullCacheValue = "$NULL$"
 const (
 	defaultStatusCacheTTL      = 30 * time.Minute
 	defaultStatusCacheEmptyTTL = 5 * time.Minute
@@ -68,18 +66,13 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (pmodel
 		return r.getFinalStatusFromDB(ctx, submissionID)
 	}
 
-	cacheKey := statusKeyPrefix + submissionID
-	cached, err := r.cache.GetCtx(ctx, cacheKey)
+	cached, hit, err := statuscache.Get(ctx, r.cache, submissionID)
 	if err != nil {
-		if errors.Is(err, red.Nil) {
-			cached = ""
-		} else {
-			logger.Errorf("get status cache failed: %v", err)
-			return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
-		}
+		logger.Errorf("get status cache failed: %v", err)
+		return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
 	}
-	if cached != "" {
-		if cached == nullCacheValue {
+	if hit {
+		if cached == statuscache.NullValue {
 			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 		}
 		status, err := unmarshalStatus(cached)
@@ -92,14 +85,14 @@ func (r *StatusRepository) Get(ctx context.Context, submissionID string) (pmodel
 	status, err := r.getFinalStatusFromDB(ctx, submissionID)
 	if err != nil {
 		if appErr.Is(err, appErr.NotFound) {
-			_ = setWithTTL(ctx, r.cache, cacheKey, nullCacheValue, cache_helper.JitterTTL(r.emptyTTL))
+			_ = statuscache.Set(ctx, r.cache, submissionID, statuscache.NullValue, durationSeconds(cache_helper.JitterTTL(r.emptyTTL)))
 			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 		}
 		return pmodel.JudgeStatusResponse{}, err
 	}
 	payload := mustMarshalStatus(status)
 	if payload != "" {
-		_ = setWithTTL(ctx, r.cache, cacheKey, payload, cache_helper.JitterTTL(r.ttl))
+		_ = statuscache.Set(ctx, r.cache, submissionID, payload, durationSeconds(cache_helper.JitterTTL(r.ttl)))
 	}
 	return status, nil
 }
@@ -121,7 +114,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 				logger.Error("submission_id is required")
 				return nil, nil, appErr.ValidationError("submission_id", "required")
 			}
-			keys = append(keys, statusKeyPrefix+submissionID)
+			keys = append(keys, statuscache.PrimaryKey(submissionID))
 		}
 		values, err := r.cache.Mget(keys...)
 		if err != nil {
@@ -133,7 +126,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 				missing = append(missing, submissionIDs[i])
 				continue
 			}
-			if raw == nullCacheValue {
+			if raw == statuscache.NullValue {
 				continue
 			}
 			var resp pmodel.JudgeStatusResponse
@@ -164,7 +157,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 		if r.cache != nil {
 			for _, st := range dbStatuses {
 				if payload := mustMarshalStatus(st); payload != "" {
-					_ = setWithTTL(ctx, r.cache, statusKeyPrefix+st.SubmissionID, payload, cache_helper.JitterTTL(r.ttl))
+					_ = statuscache.Set(ctx, r.cache, st.SubmissionID, payload, durationSeconds(cache_helper.JitterTTL(r.ttl)))
 				}
 			}
 		}
@@ -174,7 +167,7 @@ func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string)
 			if id == "" {
 				continue
 			}
-			_ = setWithTTL(ctx, r.cache, statusKeyPrefix+id, nullCacheValue, cache_helper.JitterTTL(r.emptyTTL))
+			_ = statuscache.Set(ctx, r.cache, id, statuscache.NullValue, durationSeconds(cache_helper.JitterTTL(r.emptyTTL)))
 		}
 	}
 	return statuses, dbMissing, nil
@@ -201,7 +194,7 @@ func (r *StatusRepository) Save(ctx context.Context, status pmodel.JudgeStatusRe
 			logger.Errorf("marshal status failed: %v", err)
 			return fmt.Errorf("marshal status failed: %w", err)
 		}
-		if err := setWithTTL(ctx, r.cache, statusKeyPrefix+status.SubmissionID, string(data), cache_helper.JitterTTL(r.ttl)); err != nil {
+		if err := statuscache.Set(ctx, r.cache, status.SubmissionID, string(data), durationSeconds(cache_helper.JitterTTL(r.ttl))); err != nil {
 			logger.Errorf("store status failed: %v", err)
 			return appErr.Wrapf(err, appErr.CacheError, "store status failed")
 		}
@@ -343,16 +336,6 @@ func unmarshalStatus(data string) (*pmodel.JudgeStatusResponse, error) {
 		return nil, err
 	}
 	return &resp, nil
-}
-
-func setWithTTL(ctx context.Context, cacheClient *redis.Redis, key, value string, ttl time.Duration) error {
-	if cacheClient == nil {
-		return errors.New("cache client is nil")
-	}
-	if ttl > 0 {
-		return cacheClient.SetexCtx(ctx, key, value, durationSeconds(ttl))
-	}
-	return cacheClient.SetCtx(ctx, key, value)
 }
 
 func durationSeconds(ttl time.Duration) int {

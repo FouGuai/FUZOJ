@@ -320,7 +320,8 @@ func (r *LeaderboardRepository) GetPage(ctx context.Context, contestID string, p
 	if pageSize <= 0 {
 		pageSize = 50
 	}
-	cacheKey := pageCacheKey(contestID, mode, page, pageSize)
+	version := r.loadVersion(ctx, contestID)
+	cacheKey := pageCacheKey(contestID, mode, page, pageSize, version)
 	cached, err := r.redis.GetCtx(ctx, cacheKey)
 	if err != nil && !errors.Is(err, red.Nil) {
 		logger.Errorf("load leaderboard cache failed: %v", err)
@@ -361,7 +362,6 @@ func (r *LeaderboardRepository) GetPage(ctx context.Context, contestID string, p
 			Detail:   summary.DetailJSON,
 		})
 	}
-	version := r.loadVersion(ctx, contestID)
 	payload := types.LeaderboardPayload{
 		Items: entries,
 		Page: types.PageInfo{
@@ -473,11 +473,14 @@ func metaKey(contestID string) string {
 	return metaPrefix + contestID
 }
 
-func pageCacheKey(contestID, mode string, page, pageSize int) string {
+func pageCacheKey(contestID, mode string, page, pageSize int, version string) string {
 	if mode == "" {
 		mode = "live"
 	}
-	return fmt.Sprintf("%s%s:%s:%d:%d", pageCachePrefix, contestID, mode, page, pageSize)
+	if version == "" {
+		version = "0"
+	}
+	return fmt.Sprintf("%s%s:%s:%d:%d:v%s", pageCachePrefix, contestID, mode, page, pageSize, version)
 }
 
 // RestoreSnapshotEntries writes snapshot entries into Redis atomically in script mode without advancing meta.

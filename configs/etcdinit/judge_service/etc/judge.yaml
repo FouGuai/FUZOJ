@@ -69,7 +69,7 @@ CacheConfig:
   MaxEntries: 256
   MaxBytes: 10737418240
 Worker:
-  PoolSize: 4
+  PoolSize: 64
   Timeout: 30s
 Source:
   Bucket: fuzoj
@@ -87,7 +87,7 @@ Status:
   Timeout: 2s
   FinalTopic: judge.status.final
   FinalBatchSize: 100
-  FinalBatchInterval: 1s
+  FinalBatchInterval: 100ms
   FinalBatchTimeout: 3s
 Judge:
   WorkRoot: /home/foushen.zhan/fuzoj/tmp/work

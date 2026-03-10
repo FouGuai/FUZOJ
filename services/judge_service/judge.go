@@ -283,7 +283,7 @@ func applyDefaults(c *config.Config) {
 		c.Status.FinalBatchSize = 100
 	}
 	if c.Status.FinalBatchInterval <= 0 {
-		c.Status.FinalBatchInterval = time.Second
+		c.Status.FinalBatchInterval = 100 * time.Millisecond
 	}
 	if c.Status.FinalBatchTimeout <= 0 {
 		c.Status.FinalBatchTimeout = 3 * time.Second

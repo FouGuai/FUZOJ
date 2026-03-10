@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -146,6 +147,38 @@ def replace_base(url: str, new_base: str) -> str:
     return f"{new.scheme}://{new.netloc}{old.path}" + (f"?{old.query}" if old.query else "")
 
 
+def create_authenticated_user(base_url: str, timeout: int, username_prefix: str) -> tuple[requests.Session, int, str]:
+    session = requests.Session()
+    session.headers.update({"Content-Type": "application/json"})
+    username = f"{username_prefix}_{uuid.uuid4().hex[:8]}"
+    password = f"Demo!{uuid.uuid4().hex[:8]}A1"
+
+    try:
+        request_json(
+            session,
+            "POST",
+            f"{base_url}/api/v1/user/register",
+            payload={"username": username, "password": password},
+            timeout=timeout,
+        )
+    except RuntimeError as err:
+        print(f"register failed, continue to login: {err}")
+
+    login_resp = request_json(
+        session,
+        "POST",
+        f"{base_url}/api/v1/user/login",
+        payload={"username": username, "password": password},
+        timeout=timeout,
+    )
+    access_token = pick(login_resp, "data", "access_token") or login_resp.get("access_token")
+    user_id = pick(login_resp, "data", "user", "id") or pick(login_resp, "user", "id")
+    require(access_token, "access_token not found in login response")
+    require(user_id, "user_id not found in login response")
+    session.headers.update({"Authorization": f"Bearer {access_token}"})
+    return session, int(user_id), username
+
+
 def upload_file(url: str, path: Path, timeout: int) -> str:
     with path.open("rb") as f:
         resp = requests.put(url, data=f, timeout=timeout)
@@ -168,6 +201,8 @@ def main() -> int:
     parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
     parser.add_argument("--poll-times", type=int, default=60, help="Polling attempts for submit status")
     parser.add_argument("--rank-poll-times", type=int, default=90, help="Polling attempts for leaderboard")
+    parser.add_argument("--concurrent-users", type=int, default=5, help="Total contest users for concurrent submit")
+    parser.add_argument("--submit-workers", type=int, default=5, help="Worker count for concurrent submit/poll")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -186,37 +221,9 @@ def main() -> int:
         print(f"status direct base detected: {status_base_url}")
     if rank_base_url:
         print(f"rank direct base detected: {rank_base_url}")
-    session = requests.Session()
-    session.headers.update({"Content-Type": "application/json"})
-
-    username = f"contest_e2e_{uuid.uuid4().hex[:8]}"
-    password = f"Demo!{uuid.uuid4().hex[:8]}A1"
-
     print("== register ==")
-    try:
-        request_json(
-            session,
-            "POST",
-            f"{base_url}/api/v1/user/register",
-            payload={"username": username, "password": password},
-            timeout=args.timeout,
-        )
-    except RuntimeError as err:
-        print(f"register failed, continue to login: {err}")
-
     print("== login ==")
-    login_resp = request_json(
-        session,
-        "POST",
-        f"{base_url}/api/v1/user/login",
-        payload={"username": username, "password": password},
-        timeout=args.timeout,
-    )
-    access_token = pick(login_resp, "data", "access_token") or login_resp.get("access_token")
-    user_id = pick(login_resp, "data", "user", "id") or pick(login_resp, "user", "id")
-    require(access_token, "access_token not found in login response")
-    require(user_id, "user_id not found in login response")
-    session.headers.update({"Authorization": f"Bearer {access_token}"})
+    session, user_id, _ = create_authenticated_user(base_url, args.timeout, "contest_e2e_owner")
 
     print("== problem create ==")
     problem_resp = request_json(
@@ -508,60 +515,102 @@ def main() -> int:
     require(source_path.exists(), "tests/main.cpp not found")
     source_code = source_path.read_text(encoding="utf-8")
 
-    print("== contest submit create ==")
-    submit_resp = request_json(
-        session,
-        "POST",
-        f"{base_url}/api/v1/submissions",
-        headers={"Idempotency-Key": str(uuid.uuid4())},
-        payload={
-            "problem_id": int(problem_id),
-            "user_id": int(user_id),
-            "language_id": "cpp",
-            "source_code": source_code,
-            "contest_id": contest_id,
-            "scene": "contest",
-            "extra_compile_flags": [],
-        },
-        timeout=args.timeout,
-    )
-    submission_id = pick(submit_resp, "data", "submission_id") or pick(submit_resp, "submission_id")
-    require(submission_id, "submission_id not found")
+    print("== build concurrent users ==")
+    require(args.concurrent_users > 0, "concurrent-users must be positive")
+    participants = [{"session": session, "user_id": int(user_id)}]
+    while len(participants) < args.concurrent_users:
+        u_session, u_id, _ = create_authenticated_user(base_url, args.timeout, "contest_e2e_member")
+        participants.append({"session": u_session, "user_id": int(u_id)})
 
-    print("== contest submit status ==")
-    final_status = ""
-    status_urls = []
-    gateway_status_urls = [
-        f"{base_url}/api/v1/submissions/{submission_id}",
-        f"{base_url}/api/v1/status/submissions/{submission_id}",
-    ]
-    status_urls.extend(gateway_status_urls)
-    if status_base_url:
-        status_urls.append(f"{status_base_url}/api/v1/status/submissions/{submission_id}")
-    for _ in range(args.poll_times):
-        status_resp = None
-        for url in status_urls:
-            ok, result = try_request_json(session, "GET", url, timeout=args.timeout)
-            if ok:
-                status_resp = result
+    print("== contest register all users ==")
+    for participant in participants:
+        participant_session = participant["session"]
+        participant_id = participant["user_id"]
+        register_payload = {"user_id": int(participant_id), "team_id": "", "invite_code": ""}
+        ok, _ = try_request_json(
+            participant_session,
+            "POST",
+            contest_register_url,
+            payload=register_payload,
+            timeout=args.timeout,
+        )
+        if not ok:
+            if contest_base_url:
+                request_json(
+                    participant_session,
+                    "POST",
+                    replace_base(contest_register_url, contest_base_url),
+                    payload=register_payload,
+                    timeout=args.timeout,
+                )
+            else:
+                raise RuntimeError(f"request failed: POST {contest_register_url}")
+
+    def submit_and_wait(participant: dict) -> dict:
+        participant_session = participant["session"]
+        participant_id = participant["user_id"]
+        submit_resp = request_json(
+            participant_session,
+            "POST",
+            f"{base_url}/api/v1/submissions",
+            headers={"Idempotency-Key": str(uuid.uuid4())},
+            payload={
+                "problem_id": int(problem_id),
+                "user_id": int(participant_id),
+                "language_id": "cpp",
+                "source_code": source_code,
+                "contest_id": contest_id,
+                "scene": "contest",
+                "extra_compile_flags": [],
+            },
+            timeout=args.timeout,
+        )
+        submission_id = pick(submit_resp, "data", "submission_id") or pick(submit_resp, "submission_id")
+        require(submission_id, f"submission_id not found for user={participant_id}")
+
+        user_status_urls = [f"{base_url}/api/v1/status/submissions/{submission_id}"]
+        if status_base_url:
+            user_status_urls.append(f"{status_base_url}/api/v1/status/submissions/{submission_id}")
+        final_status = ""
+        for _ in range(args.poll_times):
+            status_resp = None
+            for url in user_status_urls:
+                ok, result = try_request_json(participant_session, "GET", url, timeout=args.timeout)
+                if ok:
+                    status_resp = result
+                    break
+            if status_resp is None:
+                time.sleep(args.poll_interval)
+                continue
+            final_status = pick(status_resp, "data", "status") or status_resp.get("status") or ""
+            if final_status.lower() in {"finished", "failed"}:
                 break
-        if status_resp is None:
             time.sleep(args.poll_interval)
-            continue
-        final_status = pick(status_resp, "data", "status") or status_resp.get("status") or ""
-        if final_status.lower() in {"finished", "failed"}:
-            break
-        time.sleep(args.poll_interval)
-    require(final_status != "", "final status is empty")
+        require(final_status != "", f"final status is empty for user={participant_id}")
+        return {"user_id": participant_id, "submission_id": submission_id, "final_status": final_status}
 
-    print("== leaderboard poll ==")
-    rank_found = False
-    rank_value = None
-    leaderboard_urls = [f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size=50&mode=live"]
+    print("== concurrent contest submit & status poll ==")
+    submission_results = []
+    max_workers = max(1, min(args.submit_workers, len(participants)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(submit_and_wait, participant) for participant in participants]
+        for future in as_completed(futures):
+            submission_results.append(future.result())
+
+    require(len(submission_results) == len(participants), "not all concurrent submissions completed")
+    failed_status = [res for res in submission_results if res["final_status"].lower() != "finished"]
+    require(not failed_status, f"some submissions did not finish successfully: {failed_status}")
+
+    print("== leaderboard poll (all users) ==")
+    rank_found_all = False
+    page_size = max(50, len(participants) + 5)
+    leaderboard_urls = [f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"]
     if rank_base_url:
         leaderboard_urls.append(
-            f"{rank_base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size=50&mode=live"
+            f"{rank_base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"
         )
+    expected_member_ids = {str(participant["user_id"]) for participant in participants}
+    seen_member_ids = set()
     for _ in range(args.rank_poll_times):
         lb_resp = None
         for lb_url in leaderboard_urls:
@@ -573,25 +622,23 @@ def main() -> int:
             time.sleep(args.poll_interval)
             continue
         items = pick(lb_resp, "data", "items") or []
-        for item in items:
-            member_id = str(item.get("member_id", ""))
-            if member_id == str(user_id):
-                rank_found = True
-                rank_value = item.get("rank")
-                break
-        if rank_found:
+        seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
+        if expected_member_ids.issubset(seen_member_ids):
+            rank_found_all = True
             break
         time.sleep(args.poll_interval)
-    require(rank_found, "member not found in leaderboard within timeout")
+    require(rank_found_all, f"not all members found in leaderboard, expected={expected_member_ids}, seen={seen_member_ids}")
 
     print("== summary ==")
-    print(f"user_id={user_id}")
+    print(f"owner_user_id={user_id}")
+    print(f"participant_count={len(participants)}")
     print(f"problem_id={problem_id}")
     print(f"contest_id={contest_id}")
-    print(f"submission_id={submission_id}")
-    print(f"final_status={final_status}")
-    print(f"rank_seen={rank_found}")
-    print(f"rank={rank_value}")
+    for result in sorted(submission_results, key=lambda item: item["user_id"]):
+        print(
+            f"submission user_id={result['user_id']} submission_id={result['submission_id']} final_status={result['final_status']}"
+        )
+    print(f"leaderboard_all_seen={rank_found_all}")
     return 0
 
 

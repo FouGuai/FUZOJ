@@ -145,6 +145,44 @@ func TestLeaderboardRepository_RestoreSnapshotAndFinalizeMeta(t *testing.T) {
 	}
 }
 
+func TestLeaderboardRepository_GetPageBypassesStaleEmptyCacheAfterUpdate(t *testing.T) {
+	repo, _ := newLeaderboardRepoForTest(t)
+	ctx := context.Background()
+
+	initial, err := repo.GetPage(ctx, "c1", 1, 50, "")
+	if err != nil {
+		t.Fatalf("get initial page failed: %v", err)
+	}
+	if initial.Page.Total != 0 {
+		t.Fatalf("expected empty leaderboard, got total=%d", initial.Page.Total)
+	}
+
+	if err := repo.ApplyUpdates(ctx, []pmodel.RankUpdateEvent{
+		{
+			ContestID:  "c1",
+			MemberID:   "m1",
+			SortScore:  10,
+			ScoreTotal: 1,
+			Version:    "1",
+			ResultID:   1,
+			UpdatedAt:  100,
+		},
+	}); err != nil {
+		t.Fatalf("apply updates failed: %v", err)
+	}
+
+	updated, err := repo.GetPage(ctx, "c1", 1, 50, "")
+	if err != nil {
+		t.Fatalf("get updated page failed: %v", err)
+	}
+	if updated.Page.Total != 1 {
+		t.Fatalf("expected total=1 after update, got %d", updated.Page.Total)
+	}
+	if len(updated.Items) != 1 || updated.Items[0].MemberId != "m1" {
+		t.Fatalf("unexpected leaderboard items: %+v", updated.Items)
+	}
+}
+
 func newLeaderboardRepoForTest(t *testing.T) (*repository.LeaderboardRepository, *redis.Redis) {
 	t.Helper()
 	mini := miniredis.RunT(t)

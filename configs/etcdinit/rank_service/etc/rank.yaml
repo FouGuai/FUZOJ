@@ -27,10 +27,10 @@ Kafka:
 Rank:
   updateTopic: contest.rank.updates
   consumerGroup: rank-service
-  prefetchCount: 1
-  concurrency: 8
-  batchSize: 200
-  batchInterval: 100ms
+  prefetchCount: 8
+  concurrency: 32
+  batchSize: 1000
+  batchInterval: 50ms
   hotCacheTTL: 3s
   pageCacheTTL: 5s
   emptyTTL: 5m

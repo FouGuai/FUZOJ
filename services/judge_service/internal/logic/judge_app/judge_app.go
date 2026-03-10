@@ -155,11 +155,14 @@ func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessag
 		return err
 	}
 
-	if !s.tryAcquireSlot() {
-		if err := s.requeueForPoolFull(ctx, payload); err != nil {
-			return err
+	if err := s.acquireSlot(ctx, payload.SubmissionID); err != nil {
+		if appErr.Is(err, appErr.JudgeQueueFull) {
+			if requeueErr := s.requeueForPoolFull(ctx, payload); requeueErr != nil {
+				return requeueErr
+			}
+			return nil
 		}
-		return nil
+		return err
 	}
 	defer s.releaseSlot()
 

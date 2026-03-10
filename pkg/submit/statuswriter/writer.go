@@ -2,13 +2,12 @@ package statuswriter
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	appErr "fuzoj/pkg/errors"
+	"fuzoj/pkg/submit/statuscache"
 
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
@@ -16,7 +15,6 @@ import (
 )
 
 const (
-	statusKeyPrefix     = "js:"
 	defaultStatusTTL    = 24 * time.Hour
 	statusFinishedValue = "Finished"
 	statusFailedValue   = "Failed"
@@ -81,8 +79,7 @@ func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusP
 		summary.Compile = nil
 		summary.Tests = nil
 		if data, err := json.Marshal(summary); err == nil {
-			key := statusKeyPrefix + hashKey(status.SubmissionID)
-			if err := w.redis.SetexCtx(ctx, key, string(data), ttlSeconds(w.ttl)); err != nil {
+			if err := statuscache.Set(ctx, w.redis, status.SubmissionID, string(data), ttlSeconds(w.ttl)); err != nil {
 				logger.Errorf("store status cache failed: %v", err)
 				return appErr.Wrapf(err, appErr.CacheError, "store status cache failed")
 			}
@@ -93,14 +90,6 @@ func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusP
 
 func isFinalStatus(status string) bool {
 	return status == statusFinishedValue || status == statusFailedValue
-}
-
-func hashKey(value string) string {
-	if value == "" {
-		return ""
-	}
-	sum := sha1.Sum([]byte(value))
-	return hex.EncodeToString(sum[:8])
 }
 
 func ttlSeconds(ttl time.Duration) int {
