@@ -154,7 +154,7 @@ Value：`host:port`
   "kafka":{"brokers":["127.0.0.1:9092"],"clientID":"judge-service","topics":["judge.task.high","judge.task.normal"],
     "topicWeights":{"judge.task.high":8,"judge.task.normal":4},
     "consumerGroup":"judge-service","prefetchCount":10,"concurrency":4,"maxRetries":3,"retryDelay":"1s",
-    "retryTopic":"judge.retry","poolRetryMax":5,"poolRetryBaseDelay":"1s","poolRetryMaxDelay":"30s","deadLetter":"judge.dead","messageTTL":"10m"},
+    "retryTopic":"judge.retry","retryMaxInFlight":1,"poolRetryMax":5,"poolRetryBaseDelay":"1s","poolRetryMaxDelay":"30s","deadLetter":"judge.dead","messageTTL":"10m"},
   "minio":{"endpoint":"127.0.0.1:9000","accessKey":"minioadmin","secretKey":"minioadmin","useSSL":false,"bucket":"judge-data","presignTTL":"15m"},
   "cacheConfig":{"rootDir":"/data/judge/cache","ttl":"30m","lockWait":"5s","maxEntries":256,"maxBytes":10737418240},
   "worker":{"poolSize":4,"timeout":"30s"},

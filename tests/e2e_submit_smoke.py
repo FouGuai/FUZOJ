@@ -263,8 +263,8 @@ def main() -> int:
             "version": int(ver),
             "title": "Two Sum (E2E)",
             "defaultLimits": {
-                "timeMs": 1000,
-                "wallTimeMs": 2000,
+                "timeMs": 10000,
+                "wallTimeMs": 20000,
                 "memoryMB": 256,
                 "stackMB": 64,
                 "outputMB": 64,

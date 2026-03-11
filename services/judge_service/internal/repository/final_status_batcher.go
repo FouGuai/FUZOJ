@@ -27,6 +27,11 @@ type FinalStatusBatcher struct {
 	signalCh chan struct{}
 	stopCh   chan struct{}
 	doneCh   chan struct{}
+
+	statsMu              sync.Mutex
+	publishAttempts      int64
+	publishFailures      int64
+	publishDurationNanos int64
 }
 
 type queuedFinalStatus struct {
@@ -38,6 +43,7 @@ const (
 	finalStatusDiagnosticsInterval = 5 * time.Second
 	finalStatusQueueWarnThreshold  = 500 * time.Millisecond
 	finalStatusFlushWarnThreshold  = 500 * time.Millisecond
+	finalStatusPublishConcurrency  = 128
 )
 
 func NewFinalStatusBatcher(submissionsModel model.SubmissionsModel, publisher StatusEventPublisher, batchSize int, interval, flushTimeout time.Duration) *FinalStatusBatcher {
@@ -118,6 +124,7 @@ func (b *FinalStatusBatcher) run() {
 			b.flush(context.Background())
 		case <-diagTicker.C:
 			b.logHealth(context.Background())
+			b.logPublishMetrics(context.Background(), finalStatusDiagnosticsInterval)
 		}
 	}
 }
@@ -176,30 +183,10 @@ func (b *FinalStatusBatcher) flush(ctx context.Context) {
 		return
 	}
 	dbDuration := time.Since(dbStart)
-	failedPublishes := make([]pmodel.JudgeStatusResponse, 0)
 	publishStart := time.Now()
-	for _, item := range items {
-		if b.publisher == nil {
-			continue
-		}
-		pubCtx := ctx
-		if b.flushTimeout > 0 {
-			var cancel context.CancelFunc
-			pubCtx, cancel = context.WithTimeout(context.Background(), b.flushTimeout)
-			err := b.publisher.PublishFinalStatus(pubCtx, item.status)
-			cancel()
-			if err != nil {
-				logx.WithContext(ctx).Errorf("publish final status failed: %v", err)
-				failedPublishes = append(failedPublishes, item.status)
-			}
-			continue
-		}
-		if err := b.publisher.PublishFinalStatus(pubCtx, item.status); err != nil {
-			logx.WithContext(ctx).Errorf("publish final status failed: %v", err)
-			failedPublishes = append(failedPublishes, item.status)
-		}
-	}
+	failedPublishes := b.publishBatch(ctx, items)
 	publishDuration := time.Since(publishStart)
+	b.recordPublishStats(len(items), len(failedPublishes), publishDuration)
 	if len(failedPublishes) > 0 {
 		b.requeue(wrapQueuedFinalStatuses(failedPublishes))
 		select {
@@ -216,6 +203,57 @@ func (b *FinalStatusBatcher) flush(ctx context.Context) {
 		logx.WithContext(ctx).Infof("final status flush stats size=%d failed=%d queue_wait_max=%s queue_wait_avg=%s db_cost=%s publish_cost=%s total_cost=%s",
 			len(items), len(failedPublishes), maxQueueWait, avgQueueWait, dbDuration, publishDuration, totalDuration)
 	}
+}
+
+func (b *FinalStatusBatcher) publishBatch(ctx context.Context, items []queuedFinalStatus) []pmodel.JudgeStatusResponse {
+	if b.publisher == nil || len(items) == 0 {
+		return nil
+	}
+	workers := len(items)
+	if workers > finalStatusPublishConcurrency {
+		workers = finalStatusPublishConcurrency
+	}
+	jobs := make(chan queuedFinalStatus, len(items))
+	failed := make(chan pmodel.JudgeStatusResponse, len(items))
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range jobs {
+				pubCtx := ctx
+				if b.flushTimeout > 0 {
+					var cancel context.CancelFunc
+					pubCtx, cancel = context.WithTimeout(context.Background(), b.flushTimeout)
+					err := b.publisher.PublishFinalStatus(pubCtx, item.status)
+					cancel()
+					if err != nil {
+						logx.WithContext(ctx).Errorf("publish final status failed: %v", err)
+						failed <- item.status
+					}
+					continue
+				}
+				if err := b.publisher.PublishFinalStatus(pubCtx, item.status); err != nil {
+					logx.WithContext(ctx).Errorf("publish final status failed: %v", err)
+					failed <- item.status
+				}
+			}
+		}()
+	}
+
+	for _, item := range items {
+		jobs <- item
+	}
+	close(jobs)
+	wg.Wait()
+	close(failed)
+
+	failedItems := make([]pmodel.JudgeStatusResponse, 0, len(failed))
+	for item := range failed {
+		failedItems = append(failedItems, item)
+	}
+	return failedItems
 }
 
 func (b *FinalStatusBatcher) drain() []queuedFinalStatus {
@@ -270,6 +308,48 @@ func wrapQueuedFinalStatuses(items []pmodel.JudgeStatusResponse) []queuedFinalSt
 		})
 	}
 	return out
+}
+
+func (b *FinalStatusBatcher) recordPublishStats(attempts, failures int, publishDuration time.Duration) {
+	if attempts <= 0 && failures <= 0 && publishDuration <= 0 {
+		return
+	}
+	b.statsMu.Lock()
+	b.publishAttempts += int64(attempts)
+	b.publishFailures += int64(failures)
+	b.publishDurationNanos += publishDuration.Nanoseconds()
+	b.statsMu.Unlock()
+}
+
+func (b *FinalStatusBatcher) logPublishMetrics(ctx context.Context, window time.Duration) {
+	if window <= 0 {
+		window = finalStatusDiagnosticsInterval
+	}
+	b.statsMu.Lock()
+	attempts := b.publishAttempts
+	failures := b.publishFailures
+	durationNanos := b.publishDurationNanos
+	b.publishAttempts = 0
+	b.publishFailures = 0
+	b.publishDurationNanos = 0
+	b.statsMu.Unlock()
+
+	successes := attempts - failures
+	if successes < 0 {
+		successes = 0
+	}
+	windowSeconds := window.Seconds()
+	if windowSeconds <= 0 {
+		windowSeconds = 1
+	}
+	successQPS := float64(successes) / windowSeconds
+	attemptQPS := float64(attempts) / windowSeconds
+	publishCost := time.Duration(durationNanos)
+
+	logx.WithContext(ctx).Infof(
+		"final status kafka publish metrics window=%s attempts=%d successes=%d failures=%d attempt_qps=%.2f success_qps=%.2f publish_cost_total=%s",
+		window, attempts, successes, failures, attemptQPS, successQPS, publishCost,
+	)
 }
 
 func stripStatusLogs(status pmodel.JudgeStatusResponse) pmodel.JudgeStatusResponse {

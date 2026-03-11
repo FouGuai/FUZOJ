@@ -141,6 +141,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			memberProblemRepo,
 			memberSummaryRepo,
 			rankOutboxRepo,
+			rankUpdatePusher,
 			consumer.JudgeFinalOptions{
 				IdempotencyTTL:  c.JudgeFinal.IdempotencyTTL,
 				MessageTTL:      c.JudgeFinal.MessageTTL,

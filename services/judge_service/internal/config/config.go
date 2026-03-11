@@ -40,31 +40,32 @@ type Config struct {
 
 // KafkaConfig holds Kafka settings.
 type KafkaConfig struct {
-	Brokers       []string       `json:"brokers"`
-	ClientID      string         `json:"clientID"`
-	MinBytes      int            `json:"minBytes"`
-	MaxBytes      int            `json:"maxBytes"`
-	MaxWait       time.Duration  `json:"maxWait"`
-	BatchSize     int            `json:"batchSize"`
-	BatchTimeout  time.Duration  `json:"batchTimeout"`
-	DialTimeout   time.Duration  `json:"dialTimeout"`
-	ReadTimeout   time.Duration  `json:"readTimeout"`
-	WriteTimeout  time.Duration  `json:"writeTimeout"`
-	RequiredAcks  int            `json:"requiredAcks"`
-	Compression   string         `json:"compression"`
-	Topics        []string       `json:"topics"`
-	ConsumerGroup string         `json:"consumerGroup"`
-	PrefetchCount int            `json:"prefetchCount"`
-	Concurrency   int            `json:"concurrency"`
-	MaxRetries    int            `json:"maxRetries"`
-	RetryDelay    time.Duration  `json:"retryDelay"`
-	RetryTopic    string         `json:"retryTopic"`
-	PoolRetryMax  int            `json:"poolRetryMax"`
-	PoolRetryBase time.Duration  `json:"poolRetryBaseDelay"`
-	PoolRetryMaxD time.Duration  `json:"poolRetryMaxDelay"`
-	DeadLetter    string         `json:"deadLetter"`
-	MessageTTL    time.Duration  `json:"messageTTL"`
-	TopicWeights  map[string]int `json:"topicWeights"`
+	Brokers          []string       `json:"brokers"`
+	ClientID         string         `json:"clientID"`
+	MinBytes         int            `json:"minBytes"`
+	MaxBytes         int            `json:"maxBytes"`
+	MaxWait          time.Duration  `json:"maxWait"`
+	BatchSize        int            `json:"batchSize"`
+	BatchTimeout     time.Duration  `json:"batchTimeout"`
+	DialTimeout      time.Duration  `json:"dialTimeout"`
+	ReadTimeout      time.Duration  `json:"readTimeout"`
+	WriteTimeout     time.Duration  `json:"writeTimeout"`
+	RequiredAcks     int            `json:"requiredAcks"`
+	Compression      string         `json:"compression"`
+	Topics           []string       `json:"topics"`
+	ConsumerGroup    string         `json:"consumerGroup"`
+	PrefetchCount    int            `json:"prefetchCount"`
+	Concurrency      int            `json:"concurrency"`
+	MaxRetries       int            `json:"maxRetries"`
+	RetryDelay       time.Duration  `json:"retryDelay"`
+	RetryTopic       string         `json:"retryTopic"`
+	RetryMaxInFlight int            `json:"retryMaxInFlight"`
+	PoolRetryMax     int            `json:"poolRetryMax"`
+	PoolRetryBase    time.Duration  `json:"poolRetryBaseDelay"`
+	PoolRetryMaxD    time.Duration  `json:"poolRetryMaxDelay"`
+	DeadLetter       string         `json:"deadLetter"`
+	MessageTTL       time.Duration  `json:"messageTTL"`
+	TopicWeights     map[string]int `json:"topicWeights"`
 }
 
 // MinIOConfig holds object storage settings.
@@ -107,12 +108,12 @@ type ProblemRpcConfig struct {
 
 // StatusConfig holds status persistence settings.
 type StatusConfig struct {
-	TTL               time.Duration `json:"ttl"`
-	Timeout           time.Duration `json:"timeout"`
-	FinalTopic        string        `json:"finalTopic"`
-	FinalBatchSize    int           `json:"finalBatchSize"`
+	TTL                time.Duration `json:"ttl"`
+	Timeout            time.Duration `json:"timeout"`
+	FinalTopic         string        `json:"finalTopic"`
+	FinalBatchSize     int           `json:"finalBatchSize"`
 	FinalBatchInterval time.Duration `json:"finalBatchInterval"`
-	FinalBatchTimeout time.Duration `json:"finalBatchTimeout"`
+	FinalBatchTimeout  time.Duration `json:"finalBatchTimeout"`
 }
 
 // JudgeConfig holds judge runtime settings.

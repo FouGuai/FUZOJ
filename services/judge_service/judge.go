@@ -212,17 +212,18 @@ func startConsumerLoop(ctx *svc.ServiceContext, c *config.Config) {
 	for {
 		consumer := logic.NewJudgeConsumerLogic(context.Background(), ctx)
 		confs, err := weighted_kq.BuildWeightedKqConfs(weighted_kq.WeightedKqOptions{
-			Brokers:         c.Kafka.Brokers,
-			Group:           c.Kafka.ConsumerGroup,
-			Topics:          c.Kafka.Topics,
-			TopicWeights:    c.Kafka.TopicWeights,
-			ConsumersTotal:  c.Kafka.PrefetchCount,
-			ProcessorsTotal: c.Kafka.Concurrency,
-			MinBytes:        c.Kafka.MinBytes,
-			MaxBytes:        c.Kafka.MaxBytes,
-			ServiceName:     c.Name,
-			RetryTopic:      c.Kafka.RetryTopic,
-			AutoAddRetry:    true,
+			Brokers:          c.Kafka.Brokers,
+			Group:            c.Kafka.ConsumerGroup,
+			Topics:           c.Kafka.Topics,
+			TopicWeights:     c.Kafka.TopicWeights,
+			ConsumersTotal:   c.Kafka.PrefetchCount,
+			ProcessorsTotal:  c.Kafka.Concurrency,
+			MinBytes:         c.Kafka.MinBytes,
+			MaxBytes:         c.Kafka.MaxBytes,
+			ServiceName:      c.Name,
+			RetryTopic:       c.Kafka.RetryTopic,
+			RetryMaxInFlight: c.Kafka.RetryMaxInFlight,
+			AutoAddRetry:     true,
 		})
 		if err != nil {
 			logx.Errorf("build weighted kq configs failed: %v", err)
@@ -230,7 +231,11 @@ func startConsumerLoop(ctx *svc.ServiceContext, c *config.Config) {
 			continue
 		}
 		logx.Infof("judge consumer config topics=%v group=%s brokers=%v", c.Kafka.Topics, c.Kafka.ConsumerGroup, c.Kafka.Brokers)
-		queueGroup, err := weighted_kq.NewWeightedKqQueues(confs, consumer)
+		queueGroup, err := weighted_kq.NewWeightedKqQueuesWithPolicy(confs, consumer, weighted_kq.WeightedQueuePolicy{
+			TopicWeights:     c.Kafka.TopicWeights,
+			RetryTopic:       c.Kafka.RetryTopic,
+			RetryMaxInFlight: c.Kafka.RetryMaxInFlight,
+		})
 		if err != nil {
 			logx.Errorf("init kq consumers failed: %v", err)
 			time.Sleep(consumerRetryDelay)

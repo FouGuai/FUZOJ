@@ -50,6 +50,7 @@ Kafka:
   MaxRetries: 3
   RetryDelay: 1s
   RetryTopic: judge.retry
+  RetryMaxInFlight: 16
   PoolRetryMax: 5
   PoolRetryBaseDelay: 1s
   PoolRetryMaxDelay: 30s

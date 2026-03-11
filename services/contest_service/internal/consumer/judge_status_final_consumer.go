@@ -32,9 +32,7 @@ type JudgeFinalConsumer struct {
 	redis             *redis.Redis
 	contestRepo       contestRepo.ContestRepository
 	eligibilitySvc    *eligibility.Service
-	memberProblemRepo *repository.MemberProblemRepository
-	memberSummaryRepo *repository.MemberSummaryRepository
-	outboxRepo        *repository.RankOutboxRepository
+	rankUpdatePusher  *kq.Pusher
 	deadLetterPusher  *kq.Pusher
 	opts              JudgeFinalOptions
 	timeouts          TimeoutConfig
@@ -55,9 +53,10 @@ func NewJudgeFinalConsumer(
 	redisClient *redis.Redis,
 	contestRepository contestRepo.ContestRepository,
 	eligibilityService *eligibility.Service,
-	memberProblemRepo *repository.MemberProblemRepository,
-	memberSummaryRepo *repository.MemberSummaryRepository,
-	outboxRepo *repository.RankOutboxRepository,
+	_ *repository.MemberProblemRepository,
+	_ *repository.MemberSummaryRepository,
+	_ *repository.RankOutboxRepository,
+	rankUpdatePusher *kq.Pusher,
 	opts JudgeFinalOptions,
 	timeouts TimeoutConfig,
 ) *JudgeFinalConsumer {
@@ -75,9 +74,7 @@ func NewJudgeFinalConsumer(
 		redis:             redisClient,
 		contestRepo:       contestRepository,
 		eligibilitySvc:    eligibilityService,
-		memberProblemRepo: memberProblemRepo,
-		memberSummaryRepo: memberSummaryRepo,
-		outboxRepo:        outboxRepo,
+		rankUpdatePusher:  rankUpdatePusher,
 		opts:              opts,
 		timeouts:          timeouts,
 	}
@@ -94,8 +91,7 @@ func (c *JudgeFinalConsumer) Consume(ctx context.Context, key, value string) err
 		return nil
 	}
 	logger := logx.WithContext(ctx)
-	if c == nil || c.conn == nil || c.contestRepo == nil || c.eligibilitySvc == nil ||
-		c.memberProblemRepo == nil || c.memberSummaryRepo == nil || c.outboxRepo == nil {
+	if c == nil || c.conn == nil || c.contestRepo == nil || c.eligibilitySvc == nil || c.rankUpdatePusher == nil {
 		logger.Error("judge final consumer is not configured")
 		return appErr.New(appErr.ServiceUnavailable).WithMessage("judge final consumer is not configured")
 	}
@@ -105,18 +101,38 @@ func (c *JudgeFinalConsumer) Consume(ctx context.Context, key, value string) err
 			return nil
 		} else if attempt >= c.opts.MaxRetries {
 			if c.opts.DeadLetterTopic != "" && c.deadLetterPusher != nil {
-				_ = c.deadLetterPusher.PushWithKey(ctx, key, value)
+				if dlqErr := c.deadLetterPusher.PushWithKey(ctx, key, value); dlqErr != nil {
+					logger.Errorf("judge final consume failed and dead-letter publish failed: consume_err=%v dlq_err=%v", err, dlqErr)
+					return err
+				}
+				logger.Errorf("judge final consume failed after retries, message moved to dead-letter: %v", err)
+				return nil
 			}
 			logger.Errorf("judge final consume failed after retries: %v", err)
-			return nil
+			return err
 		}
 		time.Sleep(c.opts.RetryDelay)
 	}
 	return nil
 }
 
-func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) error {
+func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (retErr error) {
 	logger := logx.WithContext(ctx)
+	var (
+		idemKey   string
+		idemKeyOk bool
+	)
+	defer func() {
+		if !idemKeyOk || retErr == nil || c.redis == nil {
+			return
+		}
+		ctxCache := withTimeout(context.Background(), c.timeouts.Cache)
+		if _, delErr := c.redis.DelCtx(ctxCache.ctx, idemKey); delErr != nil {
+			logger.Errorf("clear judge final idempotency key failed: key=%s err=%v", idemKey, delErr)
+		}
+		ctxCache.cancel()
+	}()
+
 	var event pmodel.StatusEvent
 	if err := json.Unmarshal([]byte(value), &event); err != nil {
 		logger.Errorf("decode judge final event failed: %v", err)
@@ -142,7 +158,7 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 		if finishedAt <= 0 {
 			finishedAt = event.CreatedAt
 		}
-		idemKey := rankIdemKeyPrefix + status.SubmissionID + ":" + fmt.Sprint(finishedAt)
+		idemKey = rankIdemKeyPrefix + status.SubmissionID + ":" + fmt.Sprint(finishedAt)
 		ok, err := c.redis.SetnxExCtx(ctx, idemKey, "1", ttlSeconds(c.opts.IdempotencyTTL))
 		if err != nil {
 			logger.Errorf("judge final idempotency failed: %v", err)
@@ -151,6 +167,7 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 		if !ok {
 			return nil
 		}
+		idemKeyOk = true
 	}
 
 	userID, err := strconv.ParseInt(status.UserID, 10, 64)
@@ -187,19 +204,40 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 		return err
 	}
 
-	return c.conn.TransactCtx(ctx, func(ctx context.Context, session sqlx.Session) error {
+	var update pmodel.RankUpdateEvent
+	err = c.conn.TransactCtx(ctx, func(ctx context.Context, session sqlx.Session) error {
 		memberProblemRepo := repository.NewMemberProblemRepository(session)
 		memberSummaryRepo := repository.NewMemberSummaryRepository(session)
-		outboxRepo := repository.NewRankOutboxRepository(session)
 
 		memberID := status.UserID
 		problemID := status.ProblemID
+		problemKey := fmt.Sprint(problemID)
 
 		state, found, err := memberProblemRepo.Get(ctx, status.ContestID, memberID, problemID)
 		if err != nil {
 			return err
 		}
 		if found && state.Solved {
+			summary, summaryFound, err := memberSummaryRepo.Get(ctx, status.ContestID, memberID)
+			if err != nil {
+				return err
+			}
+			if !summaryFound {
+				return fmt.Errorf("member summary not found for solved state, contest=%s member=%s", status.ContestID, memberID)
+			}
+			update = pmodel.RankUpdateEvent{
+				ContestID:  status.ContestID,
+				MemberID:   memberID,
+				ProblemID:  problemKey,
+				SortScore:  score.SortScore(summary.ScoreTotal, summary.PenaltyTotal),
+				ScoreTotal: summary.ScoreTotal,
+				Penalty:    summary.PenaltyTotal,
+				ACCount:    summary.ACCount,
+				DetailJSON: summary.DetailJSON,
+				Version:    fmt.Sprint(summary.Version),
+				ResultID:   resultID,
+				UpdatedAt:  summary.UpdatedAt.Unix(),
+			}
 			return nil
 		}
 
@@ -243,7 +281,6 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 		if detail.Problems == nil {
 			detail.Problems = make(map[string]ProblemDetail)
 		}
-		problemKey := fmt.Sprint(problemID)
 		detail.Problems[problemKey] = ProblemDetail{
 			Solved:           state.Solved,
 			WrongCount:       state.WrongCount,
@@ -268,7 +305,7 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 			return err
 		}
 
-		update := pmodel.RankUpdateEvent{
+		update = pmodel.RankUpdateEvent{
 			ContestID:  status.ContestID,
 			MemberID:   memberID,
 			ProblemID:  problemKey,
@@ -281,22 +318,24 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) erro
 			ResultID:   resultID,
 			UpdatedAt:  summary.UpdatedAt.Unix(),
 		}
-		payload, err := json.Marshal(update)
-		if err != nil {
-			return fmt.Errorf("marshal rank update failed: %w", err)
-		}
-		eventKey := status.ContestID + ":" + memberID + ":" + update.Version
-		kafkaKey := status.ContestID
-		if err := outboxRepo.Enqueue(ctx, repository.RankOutboxEvent{
-			ContestID: status.ContestID,
-			EventKey:  eventKey,
-			KafkaKey:  kafkaKey,
-			Payload:   string(payload),
-		}); err != nil {
-			return err
-		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	payload, err := json.Marshal(update)
+	if err != nil {
+		return fmt.Errorf("marshal rank update failed: %w", err)
+	}
+	ctxPush := withTimeout(ctx, c.timeouts.MQ)
+	defer ctxPush.cancel()
+	if err := c.rankUpdatePusher.PushWithKey(ctxPush.ctx, status.ContestID, string(payload)); err != nil {
+		logger.Errorf("push rank update failed contest=%s member=%s result_id=%d err=%v", status.ContestID, status.UserID, resultID, err)
+		return fmt.Errorf("push rank update failed: %w", err)
+	}
+
+	return nil
 }
 
 func (c *JudgeFinalConsumer) nextResultID(ctx context.Context, contestID string) (int64, error) {
