@@ -34,3 +34,33 @@ func TestRateLimitServiceAllow(t *testing.T) {
 		t.Fatalf("expected rate limit error, got %v", err)
 	}
 }
+
+func TestRateLimitServiceAllowRefill(t *testing.T) {
+	mini := miniredis.RunT(t)
+	redisClient, err := redis.NewRedis(redis.RedisConf{Host: mini.Addr(), Type: "node"})
+	if err != nil {
+		t.Fatalf("init redis failed: %v", err)
+	}
+	defer redisClient.Close()
+
+	svc := service.NewRateLimitService(redisClient, time.Second, time.Second)
+	key := "gateway:rate:route:refill"
+	if err := svc.Allow(context.Background(), key, 2, time.Second); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := svc.Allow(context.Background(), key, 2, time.Second); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := svc.Allow(context.Background(), key, 2, time.Second); err == nil {
+		t.Fatalf("expected rate limit error")
+	}
+
+	mini.FastForward(500 * time.Millisecond)
+	if err := svc.Allow(context.Background(), key, 2, time.Second); err == nil {
+		t.Fatalf("expected still limited before one token refilled")
+	}
+	mini.FastForward(500 * time.Millisecond)
+	if err := svc.Allow(context.Background(), key, 2, time.Second); err != nil {
+		t.Fatalf("expected request allowed after refill, got %v", err)
+	}
+}

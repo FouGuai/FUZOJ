@@ -40,7 +40,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	},
 		middleware.RoutePolicyMiddleware(matcher),
-		middleware.RateLimitMiddleware(rateService, time.Second),
+		middleware.RateLimitMiddleware(rateService, time.Second, 0, 0),
 	)
 
 	for i := 0; i < 2; i++ {
@@ -73,7 +73,7 @@ func TestRateLimitMiddlewareNilService(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	},
 		middleware.RoutePolicyMiddleware(matcher),
-		middleware.RateLimitMiddleware(nil, time.Second),
+		middleware.RateLimitMiddleware(nil, time.Second, 10000, 50000),
 	)
 
 	rec, _, err := performRequest(http.HandlerFunc(handler), http.MethodGet, "/open", nil)
@@ -96,7 +96,7 @@ func TestRateLimitServiceAllowCacheUnavailable(t *testing.T) {
 	}
 }
 
-func TestRateLimitServiceExpireRefresh(t *testing.T) {
+func TestRateLimitServiceTokenBucketRefill(t *testing.T) {
 	mini := miniredis.RunT(t)
 	redisClient, err := redis.NewRedis(redis.RedisConf{Host: mini.Addr(), Type: "node"})
 	if err != nil {
@@ -107,19 +107,59 @@ func TestRateLimitServiceExpireRefresh(t *testing.T) {
 	rateService := service.NewRateLimitService(redisClient, time.Second, time.Second)
 	key := fmt.Sprintf("gateway:rate:route:%d", time.Now().UnixNano())
 
-	if err := rateService.Allow(t.Context(), key, 2, time.Second); err != nil {
+	if err := rateService.AllowTokenBucket(t.Context(), key, 2, 2, 1); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := rateService.AllowTokenBucket(t.Context(), key, 2, 2, 1); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := rateService.AllowTokenBucket(t.Context(), key, 2, 2, 1); err == nil {
+		t.Fatalf("expected too many requests")
 	}
 	if ttl := mini.TTL(key); ttl <= 0 {
 		t.Fatalf("expected ttl to be set")
 	}
-
-	mini.Set(key, "1")
-	mini.Persist(key)
-	if err := rateService.Allow(t.Context(), key, 5, time.Second); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	mini.FastForward(500 * time.Millisecond)
+	if err := rateService.AllowTokenBucket(t.Context(), key, 2, 2, 1); err == nil {
+		t.Fatalf("expected still limited before full token refill")
 	}
-	if ttl := mini.TTL(key); ttl <= 0 {
-		t.Fatalf("expected ttl refresh, got %v", ttl)
+	mini.FastForward(500 * time.Millisecond)
+	if err := rateService.AllowTokenBucket(t.Context(), key, 2, 2, 1); err != nil {
+		t.Fatalf("expected token refill, got %v", err)
+	}
+}
+
+func TestRateLimitMiddlewareGlobalTokenBucket(t *testing.T) {
+	mini := miniredis.RunT(t)
+	redisClient, err := redis.NewRedis(redis.RedisConf{Host: mini.Addr(), Type: "node"})
+	if err != nil {
+		t.Fatalf("init redis failed: %v", err)
+	}
+	defer redisClient.Close()
+
+	rateService := service.NewRateLimitService(redisClient, time.Second, time.Second)
+	matcher := middleware.NewPolicyMatcher()
+	matcher.AddExact(http.MethodGet, "/global", middleware.RoutePolicy{Path: "/global"})
+	handler := applyMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	},
+		middleware.RoutePolicyMiddleware(matcher),
+		middleware.RateLimitMiddleware(rateService, time.Second, 2, 2),
+	)
+	for i := 0; i < 2; i++ {
+		rec, _, reqErr := performRequest(http.HandlerFunc(handler), http.MethodGet, "/global", nil)
+		if reqErr != nil {
+			t.Fatalf("decode response failed: %v", reqErr)
+		}
+		if rec.Code != http.StatusOK {
+			t.Fatalf("unexpected status on attempt %d: %d", i+1, rec.Code)
+		}
+	}
+	rec, _, reqErr := performRequest(http.HandlerFunc(handler), http.MethodGet, "/global", nil)
+	if reqErr != nil {
+		t.Fatalf("decode response failed: %v", reqErr)
+	}
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d", rec.Code)
 	}
 }

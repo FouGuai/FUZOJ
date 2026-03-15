@@ -76,10 +76,10 @@ func TestSortAndFilterRankUpdates(t *testing.T) {
 				maxVersion int64
 				maxResult  int64
 			}{
-				"c1": {maxVersion: 6, maxResult: 2},
+				"c1": {maxVersion: 2, maxResult: 2},
 			},
-			wantCount:      2,
-			wantMaxVersion: 6,
+			wantCount:      1,
+			wantMaxVersion: 2,
 			wantMaxResult:  2,
 			wantErr:        false,
 		},
@@ -125,11 +125,30 @@ func TestSortAndFilterRankUpdates(t *testing.T) {
 				maxVersion int64
 				maxResult  int64
 			}{
-				"c1": {maxVersion: 0, maxResult: 0},
+				"c1": {maxVersion: 3, maxResult: 3},
 			},
-			wantCount:      0,
-			wantMaxVersion: 0,
-			wantMaxResult:  0,
+			wantCount:      1,
+			wantMaxVersion: 3,
+			wantMaxResult:  3,
+			wantErr:        false,
+		},
+		{
+			name: "different members keep both even if result id out of order",
+			events: []pmodel.RankUpdateEvent{
+				{ContestID: "c1", MemberID: "m1", ResultID: 100, UpdatedAt: 200},
+				{ContestID: "c1", MemberID: "m2", ResultID: 99, UpdatedAt: 199},
+			},
+			currentVersion: map[string]int64{"c1": 0},
+			currentResult:  map[string]int64{"c1": 100},
+			expectMeta: map[string]struct {
+				maxVersion int64
+				maxResult  int64
+			}{
+				"c1": {maxVersion: 100, maxResult: 100},
+			},
+			wantCount:      2,
+			wantMaxVersion: 100,
+			wantMaxResult:  100,
 			wantErr:        false,
 		},
 		{

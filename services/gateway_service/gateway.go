@@ -111,7 +111,7 @@ func main() {
 	server.Use(middleware.CORSMiddleware(buildCORSConfig(cfg.CORS)))
 	server.Use(middleware.RoutePolicyMiddleware(matcher))
 	server.Use(middleware.AuthMiddleware(ctx.AuthService))
-	server.Use(middleware.RateLimitMiddleware(ctx.RateService, cfg.Rate.Window))
+	server.Use(middleware.RateLimitMiddleware(ctx.RateService, cfg.Rate.Window, cfg.Rate.GlobalRefillPerSec, cfg.Rate.GlobalCapacity))
 	server.Use(middleware.RouteMiddleware())
 	server.Use(middleware.RequestLogger())
 	server.AddRoutes(routes)

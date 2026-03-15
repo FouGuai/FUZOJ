@@ -10,12 +10,18 @@ import (
 )
 
 // RateLimitMiddleware enforces per-route rate limiting.
-func RateLimitMiddleware(rateService *service.RateLimitService, defaultWindow time.Duration) func(http.HandlerFunc) http.HandlerFunc {
+func RateLimitMiddleware(rateService *service.RateLimitService, defaultWindow time.Duration, globalRefillPerSec int, globalCapacity int) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if rateService == nil {
 				next(w, r)
 				return
+			}
+			if globalRefillPerSec > 0 && globalCapacity > 0 {
+				if err := rateService.AllowTokenBucket(r.Context(), "gateway:rate:global", float64(globalRefillPerSec), float64(globalCapacity), 1); err != nil {
+					WriteError(w, r, err)
+					return
+				}
 			}
 
 			policy := getRoutePolicy(r.Context())

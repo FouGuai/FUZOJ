@@ -99,6 +99,49 @@ func TestLeaderboardRepository_ApplyUpdates_IgnoresStaleResultID(t *testing.T) {
 	}
 }
 
+func TestLeaderboardRepository_ApplyUpdates_OutOfOrderDifferentMembersNotDropped(t *testing.T) {
+	repo, _ := newLeaderboardRepoForTest(t)
+	ctx := context.Background()
+
+	if err := repo.ApplyUpdates(ctx, []pmodel.RankUpdateEvent{
+		{
+			ContestID:  "c1",
+			MemberID:   "m1",
+			SortScore:  100,
+			ScoreTotal: 10,
+			Version:    "10",
+			ResultID:   100,
+			UpdatedAt:  200,
+		},
+		{
+			ContestID:  "c1",
+			MemberID:   "m2",
+			SortScore:  90,
+			ScoreTotal: 9,
+			Version:    "9",
+			ResultID:   99,
+			UpdatedAt:  199,
+		},
+	}); err != nil {
+		t.Fatalf("apply updates failed: %v", err)
+	}
+
+	first, _, err := repo.GetMember(ctx, "c1", "m1", "")
+	if err != nil {
+		t.Fatalf("get member m1 failed: %v", err)
+	}
+	second, _, err := repo.GetMember(ctx, "c1", "m2", "")
+	if err != nil {
+		t.Fatalf("get member m2 failed: %v", err)
+	}
+	if first.Score != 10 {
+		t.Fatalf("expected m1 score=10, got %d", first.Score)
+	}
+	if second.Score != 9 {
+		t.Fatalf("expected m2 score=9, got %d", second.Score)
+	}
+}
+
 func TestLeaderboardRepository_RestoreSnapshotAndFinalizeMeta(t *testing.T) {
 	repo, cache := newLeaderboardRepoForTest(t)
 	ctx := context.Background()

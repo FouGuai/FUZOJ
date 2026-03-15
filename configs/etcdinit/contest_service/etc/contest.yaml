@@ -58,8 +58,8 @@ ContestDispatch:
 JudgeFinal:
   topic: judge.status.final
   consumerGroup: contest-judge-final
-  prefetchCount: 8
-  concurrency: 32
+  prefetchCount: 32
+  concurrency: 64
   maxRetries: 3
   retryDelay: 1s
   deadLetterTopic: contest.judge.final.dead
@@ -88,4 +88,4 @@ Leaderboard:
 Timeouts:
   db: 3s
   cache: 1s
-  mq: 3s
+  mq: 8s

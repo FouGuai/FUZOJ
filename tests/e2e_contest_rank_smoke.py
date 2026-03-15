@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import random
 import re
 import socket
 import subprocess
@@ -203,7 +204,26 @@ def main() -> int:
     parser.add_argument("--rank-poll-times", type=int, default=90, help="Polling attempts for leaderboard")
     parser.add_argument("--concurrent-users", type=int, default=5, help="Total contest users for concurrent submit")
     parser.add_argument("--submit-workers", type=int, default=5, help="Worker count for concurrent submit/poll")
+    parser.add_argument("--multi-submit-ratio", type=float, default=0.4, help="Ratio of users with multi-submit attempts")
+    parser.add_argument("--multi-submit-min", type=int, default=2, help="Minimum attempts for multi-submit users")
+    parser.add_argument("--multi-submit-max", type=int, default=4, help="Maximum attempts for multi-submit users")
+    parser.add_argument("--submit-gap-min-ms", type=int, default=150, help="Minimum delay between user attempts in ms")
+    parser.add_argument("--submit-gap-max-ms", type=int, default=1200, help="Maximum delay between user attempts in ms")
+    parser.add_argument("--submit-seed", type=int, default=0, help="Random seed for submit behavior (0 means time-based)")
+    parser.add_argument(
+        "--throughput-only",
+        action="store_true",
+        help="Measure submit throughput only: skip status wait and leaderboard convergence checks",
+    )
     args = parser.parse_args()
+    require(0.0 <= args.multi_submit_ratio <= 1.0, "multi-submit-ratio must be between 0 and 1")
+    require(args.multi_submit_min >= 2, "multi-submit-min must be at least 2")
+    require(args.multi_submit_max >= args.multi_submit_min, "multi-submit-max must be >= multi-submit-min")
+    require(args.submit_gap_min_ms >= 0, "submit-gap-min-ms must be non-negative")
+    require(args.submit_gap_max_ms >= args.submit_gap_min_ms, "submit-gap-max-ms must be >= submit-gap-min-ms")
+    behavior_seed = args.submit_seed if args.submit_seed != 0 else time.time_ns()
+    rng = random.Random(behavior_seed)
+    print(f"submit behavior seed={behavior_seed}")
 
     repo_root = Path(__file__).resolve().parents[1]
     base_url = load_base_url(repo_root, args.base)
@@ -514,13 +534,31 @@ def main() -> int:
     source_path = repo_root / "tests/main.cpp"
     require(source_path.exists(), "tests/main.cpp not found")
     source_code = source_path.read_text(encoding="utf-8")
+    wrong_source_code = """
+#include <bits/stdc++.h>
+using namespace std;
+int main() {
+    long long a = 0, b = 0;
+    if (!(cin >> a >> b)) return 0;
+    cout << (a - b) << "\\n";
+    return 0;
+}
+""".strip()
 
     print("== build concurrent users ==")
     require(args.concurrent_users > 0, "concurrent-users must be positive")
     participants = [{"session": session, "user_id": int(user_id)}]
-    while len(participants) < args.concurrent_users:
-        u_session, u_id, _ = create_authenticated_user(base_url, args.timeout, "contest_e2e_member")
-        participants.append({"session": u_session, "user_id": int(u_id)})
+    remaining_users = args.concurrent_users - 1
+    if remaining_users > 0:
+        create_workers = max(1, min(args.submit_workers, remaining_users))
+        with ThreadPoolExecutor(max_workers=create_workers) as executor:
+            futures = [
+                executor.submit(create_authenticated_user, base_url, args.timeout, "contest_e2e_member")
+                for _ in range(remaining_users)
+            ]
+            for future in as_completed(futures):
+                u_session, u_id, _ = future.result()
+                participants.append({"session": u_session, "user_id": int(u_id)})
 
     print("== contest register all users ==")
     for participant in participants:
@@ -546,7 +584,24 @@ def main() -> int:
             else:
                 raise RuntimeError(f"request failed: POST {contest_register_url}")
 
-    def submit_and_wait(participant: dict) -> dict:
+    print("== build submit behavior ==")
+    total_users = len(participants)
+    multi_user_count = 0
+    if total_users > 0 and args.multi_submit_ratio > 0:
+        multi_user_count = max(1, int(round(total_users * args.multi_submit_ratio)))
+        multi_user_count = min(total_users, multi_user_count)
+    multi_user_indexes = set(rng.sample(range(total_users), multi_user_count)) if multi_user_count > 0 else set()
+    total_attempts = 0
+    for idx, participant in enumerate(participants):
+        submit_count = 1
+        if idx in multi_user_indexes:
+            submit_count = rng.randint(args.multi_submit_min, args.multi_submit_max)
+        participant["planned_submit_count"] = submit_count
+        participant["attempt_gaps_ms"] = [rng.randint(args.submit_gap_min_ms, args.submit_gap_max_ms) for _ in range(submit_count - 1)]
+        total_attempts += submit_count
+    print(f"participants={total_users} multi_submit_users={multi_user_count} total_planned_attempts={total_attempts}")
+
+    def submit_once(participant: dict, code_text: str) -> dict:
         participant_session = participant["session"]
         participant_id = participant["user_id"]
         submit_resp = request_json(
@@ -558,7 +613,7 @@ def main() -> int:
                 "problem_id": int(problem_id),
                 "user_id": int(participant_id),
                 "language_id": "cpp",
-                "source_code": source_code,
+                "source_code": code_text,
                 "contest_id": contest_id,
                 "scene": "contest",
                 "extra_compile_flags": [],
@@ -567,7 +622,9 @@ def main() -> int:
         )
         submission_id = pick(submit_resp, "data", "submission_id") or pick(submit_resp, "submission_id")
         require(submission_id, f"submission_id not found for user={participant_id}")
+        return {"user_id": participant_id, "submission_id": submission_id}
 
+    def wait_submission_final(participant_session: requests.Session, participant_id: int, submission_id: str) -> str:
         user_status_urls = [f"{base_url}/api/v1/status/submissions/{submission_id}"]
         if status_base_url:
             user_status_urls.append(f"{status_base_url}/api/v1/status/submissions/{submission_id}")
@@ -587,57 +644,110 @@ def main() -> int:
                 break
             time.sleep(args.poll_interval)
         require(final_status != "", f"final status is empty for user={participant_id}")
-        return {"user_id": participant_id, "submission_id": submission_id, "final_status": final_status}
+        return final_status
+
+    def submit_user_session(participant: dict) -> dict:
+        submit_count = int(participant.get("planned_submit_count", 1))
+        gaps_ms = participant.get("attempt_gaps_ms", [])
+        attempts = []
+        for attempt_idx in range(submit_count):
+            is_final_attempt = attempt_idx == submit_count - 1
+            code_text = source_code if is_final_attempt else wrong_source_code
+            submit_result = submit_once(participant, code_text)
+            if args.throughput_only:
+                final_status = "submitted"
+            else:
+                final_status = wait_submission_final(
+                    participant["session"],
+                    int(participant["user_id"]),
+                    str(submit_result["submission_id"]),
+                )
+            result = {
+                "user_id": submit_result["user_id"],
+                "submission_id": submit_result["submission_id"],
+                "final_status": final_status,
+            }
+            attempts.append(result)
+            if attempt_idx < submit_count - 1:
+                gap_ms = int(gaps_ms[attempt_idx]) if attempt_idx < len(gaps_ms) else args.submit_gap_min_ms
+                if gap_ms > 0:
+                    time.sleep(gap_ms / 1000.0)
+        last_attempt = attempts[-1]
+        return {
+            "user_id": participant["user_id"],
+            "planned_submit_count": submit_count,
+            "attempts": attempts,
+            "last_submission_id": last_attempt["submission_id"],
+            "last_final_status": last_attempt["final_status"],
+        }
 
     print("== concurrent contest submit & status poll ==")
     submission_results = []
     max_workers = max(1, min(args.submit_workers, len(participants)))
+    submit_stage_started_at = time.time()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(submit_and_wait, participant) for participant in participants]
+        futures = [executor.submit(submit_user_session, participant) for participant in participants]
         for future in as_completed(futures):
             submission_results.append(future.result())
+    submit_stage_elapsed_s = max(0.001, time.time() - submit_stage_started_at)
 
     require(len(submission_results) == len(participants), "not all concurrent submissions completed")
-    failed_status = [res for res in submission_results if res["final_status"].lower() != "finished"]
-    require(not failed_status, f"some submissions did not finish successfully: {failed_status}")
+    mismatched_attempts = [
+        res
+        for res in submission_results
+        if int(res.get("planned_submit_count", 0)) != len(res.get("attempts", []))
+    ]
+    require(not mismatched_attempts, f"some users did not finish planned attempts: {mismatched_attempts}")
+    if not args.throughput_only:
+        failed_status = [res for res in submission_results if str(res["last_final_status"]).lower() != "finished"]
+        require(not failed_status, f"some submissions did not finish successfully: {failed_status}")
 
-    print("== leaderboard poll (all users) ==")
     rank_found_all = False
-    page_size = max(50, len(participants) + 5)
-    leaderboard_urls = [f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"]
-    if rank_base_url:
-        leaderboard_urls.append(
-            f"{rank_base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"
-        )
-    expected_member_ids = {str(participant["user_id"]) for participant in participants}
-    seen_member_ids = set()
-    for _ in range(args.rank_poll_times):
-        lb_resp = None
-        for lb_url in leaderboard_urls:
-            ok, result = try_request_json(session, "GET", lb_url, timeout=args.timeout)
-            if ok:
-                lb_resp = result
+    if args.throughput_only:
+        print("== leaderboard poll skipped (throughput-only) ==")
+    else:
+        print("== leaderboard poll (all users) ==")
+        page_size = max(50, len(participants) + 5)
+        leaderboard_urls = [f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"]
+        if rank_base_url:
+            leaderboard_urls.append(
+                f"{rank_base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"
+            )
+        expected_member_ids = {str(participant["user_id"]) for participant in participants}
+        seen_member_ids = set()
+        for _ in range(args.rank_poll_times):
+            lb_resp = None
+            for lb_url in leaderboard_urls:
+                ok, result = try_request_json(session, "GET", lb_url, timeout=args.timeout)
+                if ok:
+                    lb_resp = result
+                    break
+            if lb_resp is None:
+                time.sleep(args.poll_interval)
+                continue
+            items = pick(lb_resp, "data", "items") or []
+            seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
+            if expected_member_ids.issubset(seen_member_ids):
+                rank_found_all = True
                 break
-        if lb_resp is None:
             time.sleep(args.poll_interval)
-            continue
-        items = pick(lb_resp, "data", "items") or []
-        seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
-        if expected_member_ids.issubset(seen_member_ids):
-            rank_found_all = True
-            break
-        time.sleep(args.poll_interval)
-    require(rank_found_all, f"not all members found in leaderboard, expected={expected_member_ids}, seen={seen_member_ids}")
+        require(rank_found_all, f"not all members found in leaderboard, expected={expected_member_ids}, seen={seen_member_ids}")
 
     print("== summary ==")
     print(f"owner_user_id={user_id}")
     print(f"participant_count={len(participants)}")
+    print(f"multi_submit_user_count={multi_user_count}")
+    print(f"total_planned_attempts={total_attempts}")
+    print(f"submit_stage_elapsed_s={submit_stage_elapsed_s:.6f}")
+    print(f"throughput_only={args.throughput_only}")
     print(f"problem_id={problem_id}")
     print(f"contest_id={contest_id}")
     for result in sorted(submission_results, key=lambda item: item["user_id"]):
-        print(
-            f"submission user_id={result['user_id']} submission_id={result['submission_id']} final_status={result['final_status']}"
+        attempt_summaries = ",".join(
+            f"{idx + 1}:{attempt['submission_id']}:{attempt['final_status']}"
+            for idx, attempt in enumerate(result["attempts"])
         )
+        print(f"submission user_id={result['user_id']} attempts={attempt_summaries}")
     print(f"leaderboard_all_seen={rank_found_all}")
     return 0
 

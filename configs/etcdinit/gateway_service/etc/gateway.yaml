@@ -62,6 +62,8 @@ rateLimit:
   userMax: 200
   ipMax: 500
   routeMax: 1000
+  globalRefillPerSec: 10000
+  globalCapacity: 50000
 
 proxy:
   maxIdleConns: 2048

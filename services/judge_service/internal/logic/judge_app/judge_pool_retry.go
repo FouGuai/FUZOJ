@@ -18,13 +18,32 @@ type MessagePusher interface {
 }
 
 func (s *JudgeApp) acquireSlot(ctx context.Context, submissionID string) error {
+	logger := logx.WithContext(ctx)
+	waitStart := time.Now()
+	waitTicker := time.NewTicker(2 * time.Second)
+	defer waitTicker.Stop()
+
 	select {
 	case s.sem <- struct{}{}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(2 * time.Second):
-		return appErr.New(appErr.JudgeQueueFull).WithMessage("worker pool is full")
+	default:
+	}
+
+	for {
+		select {
+		case s.sem <- struct{}{}:
+			waitCost := time.Since(waitStart)
+			if waitCost >= 2*time.Second {
+				logger.Infof("worker slot acquired after waiting submission_id=%s wait_cost=%s", submissionID, waitCost)
+			}
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-waitTicker.C:
+			logger.Infof("worker pool is full, waiting for slot submission_id=%s wait_cost=%s", submissionID, time.Since(waitStart))
+		}
 	}
 }
 

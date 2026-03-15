@@ -17,6 +17,8 @@ const (
 	defaultBanLocalSize           = 100000
 	defaultTokenBlacklistCacheTTL = 2 * time.Minute
 	defaultRateWindow             = time.Minute
+	defaultGlobalRefillPerSec     = 10000
+	defaultGlobalCapacity         = 50000
 )
 
 // AuthConfig holds JWT settings.
@@ -41,10 +43,12 @@ type CacheConfig struct {
 
 // RateLimitConfig holds gateway rate limit defaults.
 type RateLimitConfig struct {
-	Window   time.Duration `json:"window"`
-	UserMax  int           `json:"userMax"`
-	IPMax    int           `json:"ipMax"`
-	RouteMax int           `json:"routeMax"`
+	Window             time.Duration `json:"window"`
+	UserMax            int           `json:"userMax"`
+	IPMax              int           `json:"ipMax"`
+	RouteMax           int           `json:"routeMax"`
+	GlobalRefillPerSec int           `json:"globalRefillPerSec,optional"`
+	GlobalCapacity     int           `json:"globalCapacity,optional"`
 }
 
 // ProxyConfig holds reverse proxy transport settings.
@@ -161,6 +165,12 @@ func (c *Config) Normalize() error {
 	}
 	if c.Rate.Window == 0 {
 		c.Rate.Window = defaultRateWindow
+	}
+	if c.Rate.GlobalRefillPerSec == 0 {
+		c.Rate.GlobalRefillPerSec = defaultGlobalRefillPerSec
+	}
+	if c.Rate.GlobalCapacity == 0 {
+		c.Rate.GlobalCapacity = defaultGlobalCapacity
 	}
 
 	if len(c.Upstreams) == 0 {

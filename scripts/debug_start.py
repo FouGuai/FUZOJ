@@ -364,7 +364,7 @@ def ensure_kafka_topics(base_cmd: List[str], env: Dict[str, str], root: Path, sc
             "--topic",
             topic,
             "--partitions",
-            "3",
+            "64",
             "--replication-factor",
             "1",
         ]

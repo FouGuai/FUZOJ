@@ -19,7 +19,7 @@ Redis:
 Rank:
   pageCacheTTL: 5s
   emptyTTL: 5m
-  wsDebounce: 100ms
+  wsDebounce: 200ms
 Timeouts:
   cache: 1s
   ws: 3s
