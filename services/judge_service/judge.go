@@ -37,6 +37,7 @@ import (
 var configFile = flag.String("f", "etc/judge.yaml", "the config file")
 
 const consumerRetryDelay = 3 * time.Second
+const rpcRoundRobinBalancer = "round_robin"
 
 func main() {
 	flag.Parse()
@@ -199,6 +200,7 @@ func main() {
 		logx.Errorf("init problem rpc client failed: %v", err)
 		return
 	}
+	logx.Infof("init problem rpc client with balancer=%s key=%s", c.ProblemRpc.BalancerName, c.ProblemRpc.Etcd.Key)
 
 	problemClient := problemclient.NewClient(problemv1.NewProblemServiceClient(rpcClient.Conn()))
 	ctx.ProblemClient = problemClient
@@ -310,6 +312,7 @@ func applyDefaults(c *config.Config) {
 	if c.ProblemRpc.CallTimeout == 0 {
 		c.ProblemRpc.CallTimeout = 3 * time.Second
 	}
+	c.ProblemRpc.BalancerName = rpcRoundRobinBalancer
 	if len(c.Kafka.TopicWeights) == 0 && len(c.Kafka.Topics) > 0 {
 		c.Kafka.TopicWeights = defaultTopicWeights(c.Kafka.Topics)
 	}

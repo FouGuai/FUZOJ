@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import re
 import signal
 import subprocess
 import time
@@ -52,14 +53,19 @@ def is_pid_running(pid: int) -> bool:
 
 
 def stop_service(log_dir: Path, name: str, grace_s: float) -> None:
-    pid_path = log_dir / f"{name}.pid"
-    if not pid_path.exists():
+    pattern = re.compile(rf"^{re.escape(name)}(?:-\d+)?\.pid$")
+    pid_paths = sorted(path for path in log_dir.glob("*.pid") if pattern.match(path.name))
+    if not pid_paths:
         return
+    for pid_path in reversed(pid_paths):
+        stop_service_pid(pid_path, grace_s)
+
+
+def stop_service_pid(pid_path: Path, grace_s: float) -> None:
     try:
         pid = int(pid_path.read_text(encoding="utf-8").strip())
     except ValueError:
         pid = -1
-
     if pid <= 0 or not is_pid_running(pid):
         pid_path.unlink(missing_ok=True)
         return

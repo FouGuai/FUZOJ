@@ -12,6 +12,7 @@ import (
 	"fuzoj/pkg/submit/statuscache"
 	"fuzoj/pkg/submit/statuswriter"
 
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
@@ -21,6 +22,7 @@ const (
 	ownerCacheMissValue   = "$NULL$"
 	defaultOwnerCacheTTL  = 5 * time.Minute
 	defaultOwnerMissTTL   = time.Minute
+	statusPendingLiteral  = "Pending"
 	statusFinishedLiteral = "finished"
 	statusFailedLiteral   = "failed"
 )
@@ -123,11 +125,20 @@ func (r *StatusRepository) getSubmissionOwnerID(ctx context.Context, submissionI
 }
 
 func (r *StatusRepository) getFinalStatusFromDB(ctx context.Context, submissionID string) (statuswriter.StatusPayload, error) {
+	logger := logx.WithContext(ctx)
 	query := "select final_status from submissions where submission_id = ? and final_status is not null limit 1"
 	var payload string
 	err := r.conn.QueryRowCtx(ctx, &payload, query, submissionID)
 	if err != nil {
 		if errors.Is(err, sqlx.ErrNotFound) {
+			exists, existsErr := r.submissionExists(ctx, submissionID)
+			if existsErr != nil {
+				return statuswriter.StatusPayload{}, existsErr
+			}
+			if exists {
+				logger.Infof("submission exists without final status, fallback to pending submission_id=%s", submissionID)
+				return buildPendingStatus(submissionID), nil
+			}
 			if r.cache != nil {
 				_ = statuscache.Set(ctx, r.cache, submissionID, statuscache.NullValue, ttlSeconds(defaultOwnerMissTTL))
 			}
@@ -170,6 +181,18 @@ func unmarshalStatus(raw string) (statuswriter.StatusPayload, error) {
 	return status, nil
 }
 
+func (r *StatusRepository) submissionExists(ctx context.Context, submissionID string) (bool, error) {
+	query := "select 1 from submissions where submission_id = ? limit 1"
+	var marker int
+	if err := r.conn.QueryRowCtx(ctx, &marker, query, submissionID); err != nil {
+		if errors.Is(err, sqlx.ErrNotFound) {
+			return false, nil
+		}
+		return false, appErr.Wrapf(err, appErr.DatabaseError, "check submission exists failed")
+	}
+	return true, nil
+}
+
 func IsFinalStatus(status string) bool {
 	s := strings.ToLower(strings.TrimSpace(status))
 	return s == statusFinishedLiteral || s == statusFailedLiteral
@@ -180,6 +203,17 @@ func BuildSummary(status statuswriter.StatusPayload) statuswriter.StatusPayload 
 	summary.Compile = nil
 	summary.Tests = nil
 	return summary
+}
+
+func buildPendingStatus(submissionID string) statuswriter.StatusPayload {
+	return statuswriter.StatusPayload{
+		SubmissionID: submissionID,
+		Status:       statusPendingLiteral,
+		Progress: statuswriter.Progress{
+			TotalTests: 0,
+			DoneTests:  0,
+		},
+	}
 }
 
 func ttlSeconds(ttl time.Duration) int {

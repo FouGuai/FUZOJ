@@ -105,12 +105,21 @@ func (r *StatusRepository) GetFinalDetail(ctx context.Context, submissionID stri
 }
 
 func (r *StatusRepository) getFinalStatusFromDB(ctx context.Context, submissionID string) (domain.JudgeStatusPayload, error) {
+	logger := logx.WithContext(ctx)
 	if r.submissionsModel == nil {
 		return domain.JudgeStatusPayload{}, appErr.New(appErr.ServiceUnavailable).WithMessage("submissions model is not configured")
 	}
 	payload, err := r.submissionsModel.FindFinalStatus(ctx, submissionID)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
+			exists, existsErr := r.submissionsModel.SubmissionExists(ctx, submissionID)
+			if existsErr != nil {
+				return domain.JudgeStatusPayload{}, appErr.Wrapf(existsErr, appErr.DatabaseError, "check submission exists failed")
+			}
+			if exists {
+				logger.Infof("submission exists without final status, fallback to pending submission_id=%s", submissionID)
+				return buildPendingStatus(submissionID), nil
+			}
 			return domain.JudgeStatusPayload{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
 		}
 		return domain.JudgeStatusPayload{}, appErr.Wrapf(err, appErr.DatabaseError, "get submission status failed")
@@ -143,6 +152,17 @@ func statusSummary(status domain.JudgeStatusPayload) domain.JudgeStatusPayload {
 	summary.Compile = nil
 	summary.Tests = nil
 	return summary
+}
+
+func buildPendingStatus(submissionID string) domain.JudgeStatusPayload {
+	return domain.JudgeStatusPayload{
+		SubmissionID: submissionID,
+		Status:       domain.StatusPending,
+		Progress: domain.Progress{
+			TotalTests: 0,
+			DoneTests:  0,
+		},
+	}
 }
 
 func durationSeconds(ttl time.Duration) int {

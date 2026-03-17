@@ -6,19 +6,25 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/zeromicro/go-zero/core/discov"
 	"github.com/zeromicro/go-zero/rest"
 	"github.com/zeromicro/go-zero/zrpc"
 )
 
 // RestRuntime holds runtime config and register key for REST service.
 type RestRuntime struct {
-	rest.RestConf
+	Name        string              `json:"name"`
+	Host        string              `json:"host"`
+	Port        int                 `json:"port"`
+	Timeout     int64               `json:"timeout,optional"`
+	Middlewares rest.MiddlewaresConf `json:"middlewares,optional"`
 	RegisterKey string `json:"registerKey,optional"`
 }
 
 // RpcRuntime holds runtime config for RPC service.
 type RpcRuntime struct {
-	zrpc.RpcServerConf
+	ListenOn string         `json:"listenOn"`
+	Etcd     discov.EtcdConf `json:"etcd"`
 }
 
 // LoadRestRuntime loads REST runtime config from etcd.

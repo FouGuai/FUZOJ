@@ -66,6 +66,17 @@ Submit:
   SubmissionEmptyTTL: 5m
   ContestDispatch:
     Topic: contest.submit.validate
+  DispatchRecovery:
+    Enabled: false
+    TimeoutAfter: 2m
+    ScanInterval: 2s
+    ClaimBatch: 200
+    WorkerCount: 8
+    LeaseDuration: 5s
+    RetryBase: 1s
+    RetryMax: 30s
+    DBTimeout: 3s
+    MQTimeout: 3s
   RateLimit:
     UserMax: 30
     IPMax: 60

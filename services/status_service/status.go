@@ -8,6 +8,8 @@ import (
 	"flag"
 
 	"fuzoj/pkg/bootstrap"
+	pkgerrors "fuzoj/pkg/errors"
+	"fuzoj/pkg/utils/contextkey"
 	"fuzoj/services/status_service/internal/config"
 	"fuzoj/services/status_service/internal/handler"
 	"fuzoj/services/status_service/internal/svc"
@@ -15,6 +17,7 @@ import (
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest"
+	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
 var configFile = flag.String("f", "etc/status.yaml", "the config file")
@@ -68,6 +71,7 @@ func main() {
 		return
 	}
 	logx.MustSetup(logConf)
+	setErrorHandler()
 
 	server := rest.MustNewServer(c.RestConf)
 	defer server.Stop()
@@ -94,4 +98,37 @@ func main() {
 
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)
 	server.Start()
+}
+
+type errorResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	TraceID string `json:"trace_id,omitempty"`
+}
+
+func setErrorHandler() {
+	httpx.SetErrorHandlerCtx(func(ctx context.Context, err error) (int, any) {
+		customErr := pkgerrors.GetError(err)
+		if customErr == nil {
+			customErr = pkgerrors.New(pkgerrors.ServiceUnavailable)
+		}
+		resp := errorResponse{
+			Code:    int(customErr.Code),
+			Message: customErr.Error(),
+			TraceID: traceIDFromContext(ctx),
+		}
+		return customErr.Code.HTTPStatus(), resp
+	})
+}
+
+func traceIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if traceID := ctx.Value(contextkey.TraceID); traceID != nil {
+		if value, ok := traceID.(string); ok {
+			return value
+		}
+	}
+	return ""
 }

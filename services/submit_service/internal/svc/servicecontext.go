@@ -21,6 +21,8 @@ import (
 	"github.com/zeromicro/go-zero/zrpc"
 )
 
+const rpcRoundRobinBalancer = "round_robin"
+
 type ServiceContext struct {
 	Config                config.Config
 	Conn                  sqlx.SqlConn
@@ -161,6 +163,9 @@ func initContestRpc(c config.Config) contestrpc.ContestRpc {
 	if len(c.ContestRpc.Etcd.Hosts) == 0 || c.ContestRpc.Etcd.Key == "" {
 		return nil
 	}
-	client := zrpc.MustNewClient(c.ContestRpc)
+	rpcConf := c.ContestRpc
+	rpcConf.BalancerName = rpcRoundRobinBalancer
+	logx.Infof("init contest rpc client with balancer=%s key=%s", rpcConf.BalancerName, rpcConf.Etcd.Key)
+	client := zrpc.MustNewClient(rpcConf)
 	return contestrpc.NewContestRpc(client)
 }

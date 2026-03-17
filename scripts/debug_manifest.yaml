@@ -11,6 +11,7 @@ deps:
       - "services/user_service/schema.sql"
       - "services/problem_service/internal/model/schema.goctl.sql"
       - "services/submit_service/internal/model/schema.goctl.sql"
+      - "services/submit_service/schema_dispatch_outbox.sql"
       - "services/contest_service/schema_contest.sql"
       - "services/contest_service/schema_rank.sql"
       - "services/rank_service/schema_rank.sql"
@@ -44,19 +45,24 @@ services:
   - name: "submit-service"
     build: "./services/submit_service"
     config: "services/submit_service/etc/submit.yaml"
+    instances: 1
   - name: "status-service"
     build: "./services/status_service"
     config: "services/status_service/etc/status.yaml"
+    instances: 1
   - name: "judge-service"
     build: "./services/judge_service"
     config: "services/judge_service/etc/judge.yaml"
     runAsRoot: true
+    instances: 3
   - name: "contest-service"
     build: "./services/contest_service"
     config: "services/contest_service/etc/contest.yaml"
+    instances: 3
   - name: "contest-rpc-service"
     build: "./services/contest_rpc_service"
     config: "services/contest_rpc_service/etc/contest.yaml"
+    instances: 3
   - name: "rank-service"
     build: "./services/rank_service"
     config: "services/rank_service/etc/rank.yaml"

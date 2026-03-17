@@ -3,11 +3,12 @@ import argparse
 import json
 import os
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 try:
     import yaml
@@ -266,6 +267,50 @@ def compose_env(manifest: Dict) -> Dict[str, str]:
     return env
 
 
+def parse_instance_overrides(raw: str) -> Dict[str, int]:
+    overrides: Dict[str, int] = {}
+    if not raw:
+        return overrides
+    for item in raw.split(","):
+        pair = item.strip()
+        if not pair:
+            continue
+        if "=" not in pair:
+            raise SystemExit(f"invalid --instances item: {pair}, expected service=count")
+        name, count_str = pair.split("=", 1)
+        name = name.strip()
+        if not name:
+            raise SystemExit(f"invalid --instances item: {pair}, service name is empty")
+        try:
+            count = int(count_str.strip())
+        except ValueError as exc:
+            raise SystemExit(f"invalid instance count for {name}: {count_str}") from exc
+        if count <= 0:
+            raise SystemExit(f"instance count must be >= 1 for {name}")
+        overrides[name] = count
+    return overrides
+
+
+def resolve_service_instances(service: Dict, overrides: Dict[str, int]) -> int:
+    name = service["name"]
+    if name in overrides:
+        return overrides[name]
+    configured = service.get("instances", 1)
+    try:
+        value = int(configured)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"invalid instances for {name}: {configured}") from exc
+    if value <= 0:
+        raise SystemExit(f"instances must be >= 1 for {name}")
+    return value
+
+
+def resolve_instance_name(service_name: str, index: int, total: int) -> str:
+    if total <= 1:
+        return service_name
+    return f"{service_name}-{index + 1}"
+
+
 def wait_for_http(url: str, timeout_s: int = 60, interval_s: float = 1.0) -> None:
     import urllib.request
 
@@ -292,6 +337,14 @@ def probe_http_ready(url: str, timeout_s: float = 2.0) -> bool:
         # 404/405 means route is missing, but service is already accepting HTTP traffic.
         return 400 <= exc.code < 500
     except Exception:
+        return False
+
+
+def probe_tcp_ready(host: str, port: int, timeout_s: float = 2.0) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout_s):
+            return True
+    except OSError:
         return False
 
 
@@ -415,6 +468,13 @@ def read_etcd_runtime(base_cmd: List[str], env: Dict[str, str], key: str) -> Opt
         return None
 
 
+def write_etcd_json(base_cmd: List[str], env: Dict[str, str], key: str, data: Dict) -> bool:
+    payload = json.dumps(data, separators=(",", ":"))
+    cmd = base_cmd + ["exec", "-T", "etcd", "etcdctl", "put", key, payload]
+    result = run(cmd, env=env, capture=True, check=False)
+    return result.returncode == 0
+
+
 def get_value_ci(data: Dict, key: str):
     if not isinstance(data, dict):
         return None
@@ -443,6 +503,16 @@ def resolve_runtime_key(config_path: Path) -> Optional[str]:
     return None
 
 
+def resolve_rpc_runtime_key(config_path: Path) -> Optional[str]:
+    if not config_path.exists():
+        return None
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    runtime_key = get_nested_ci(data, "bootstrap", "keys", "rpcRuntime")
+    if isinstance(runtime_key, str) and runtime_key.strip():
+        return runtime_key.strip()
+    return None
+
+
 def resolve_host_port_from_config(config_path: Path) -> tuple[Optional[str], Optional[int]]:
     if not config_path.exists():
         return None, None
@@ -457,6 +527,41 @@ def resolve_host_port_from_config(config_path: Path) -> tuple[Optional[str], Opt
         return None, None
 
 
+def resolve_rpc_listen_on_from_config(config_path: Path) -> Optional[str]:
+    if not config_path.exists():
+        return None
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    listen_on = get_nested_ci(data, "rpc", "listenOn")
+    if listen_on is None:
+        listen_on = get_value_ci(data, "listenOn")
+    if isinstance(listen_on, str) and listen_on.strip():
+        return listen_on.strip()
+    return None
+
+
+def split_host_port(addr: str) -> Tuple[Optional[str], Optional[int]]:
+    if not addr:
+        return None, None
+    value = addr.strip()
+    if value.startswith("[") and "]:" in value:
+        host, port_str = value.rsplit("]:", 1)
+        host = host.lstrip("[").strip()
+    else:
+        if ":" not in value:
+            return None, None
+        host, port_str = value.rsplit(":", 1)
+        host = host.strip()
+    try:
+        port = int(port_str.strip())
+    except ValueError:
+        return None, None
+    if port <= 0:
+        return None, None
+    if host in ("", "0.0.0.0", "::"):
+        host = "127.0.0.1"
+    return host, port
+
+
 def normalize_host(host: str) -> str:
     value = str(host).strip()
     if value in ("0.0.0.0", "::", ""):
@@ -464,10 +569,36 @@ def normalize_host(host: str) -> str:
     return value
 
 
+def prepare_runtime_for_next_instance(base_cmd: List[str], env: Dict[str, str], root: Path, service: Dict) -> None:
+    config_path = root / service["config"]
+
+    runtime_key = resolve_runtime_key(config_path)
+    if runtime_key:
+        runtime = read_etcd_runtime(base_cmd, env, runtime_key) or {}
+        if isinstance(runtime, dict):
+            runtime["port"] = 0
+            write_etcd_json(base_cmd, env, runtime_key, runtime)
+
+    rpc_runtime_key = resolve_rpc_runtime_key(config_path)
+    if rpc_runtime_key:
+        runtime = read_etcd_runtime(base_cmd, env, rpc_runtime_key) or {}
+        if isinstance(runtime, dict):
+            listen_on = get_value_ci(runtime, "listenOn")
+            if isinstance(listen_on, str) and ":" in listen_on:
+                host, _ = listen_on.rsplit(":", 1)
+                host = host.strip() or "0.0.0.0"
+                runtime["listenOn"] = f"{host}:0"
+            else:
+                runtime["listenOn"] = "0.0.0.0:0"
+            write_etcd_json(base_cmd, env, rpc_runtime_key, runtime)
+
+
 def wait_for_service_ready(base_cmd: List[str], env: Dict[str, str], root: Path, log_dir: Path, service: Dict, timeout_s: int = 90) -> None:
     config_path = root / service["config"]
     runtime_key = resolve_runtime_key(config_path)
+    rpc_runtime_key = resolve_rpc_runtime_key(config_path)
     fallback_host, fallback_port = resolve_host_port_from_config(config_path)
+    fallback_listen_on = resolve_rpc_listen_on_from_config(config_path)
     deadline = time.time() + timeout_s
     service_name = service["name"]
     log_path = log_dir / f"{service_name}.log"
@@ -488,22 +619,115 @@ def wait_for_service_ready(base_cmd: List[str], env: Dict[str, str], root: Path,
                     except (TypeError, ValueError):
                         host = None
                         port = None
-        if host is None or port is None or port <= 0:
-            host = fallback_host
-            port = fallback_port
-        if host is None or port is None or port <= 0:
+        if host is not None and port is not None and port > 0:
+            base = f"http://{normalize_host(host)}:{port}"
+            health_urls = [f"{base}/healthz", f"{base}/readyz", f"{base}/"]
+            for target in health_urls:
+                last_target = target
+                if probe_http_ready(target):
+                    return
             time.sleep(1)
             continue
 
-        base = f"http://{normalize_host(host)}:{port}"
-        health_urls = [f"{base}/healthz", f"{base}/readyz", f"{base}/"]
-        for target in health_urls:
-            last_target = target
-            if probe_http_ready(target):
+        if fallback_host is not None and fallback_port is not None and fallback_port > 0:
+            base = f"http://{normalize_host(fallback_host)}:{fallback_port}"
+            health_urls = [f"{base}/healthz", f"{base}/readyz", f"{base}/"]
+            for target in health_urls:
+                last_target = target
+                if probe_http_ready(target):
+                    return
+            time.sleep(1)
+            continue
+
+        listen_on = None
+        if rpc_runtime_key:
+            rpc_runtime = read_etcd_runtime(base_cmd, env, rpc_runtime_key)
+            if isinstance(rpc_runtime, dict):
+                runtime_listen_on = get_value_ci(rpc_runtime, "listenOn")
+                if isinstance(runtime_listen_on, str):
+                    listen_on = runtime_listen_on
+        if not listen_on:
+            listen_on = fallback_listen_on
+        rpc_host, rpc_port = split_host_port(listen_on or "")
+        if rpc_host and rpc_port:
+            last_target = f"tcp://{rpc_host}:{rpc_port}"
+            if probe_tcp_ready(rpc_host, rpc_port):
                 return
         time.sleep(1)
 
     raise SystemExit(f"service readiness check failed: {service_name}, target={last_target}, log={log_path}")
+
+
+def read_etcd_values(base_cmd: List[str], env: Dict[str, str], key: str) -> List[str]:
+    if not key:
+        return []
+    cmd = base_cmd + ["exec", "-T", "etcd", "etcdctl", "get", key, "--prefix", "--print-value-only"]
+    result = run(cmd, env=env, capture=True, check=False)
+    if result.returncode != 0:
+        return []
+    raw = (result.stdout or b"").decode("utf-8", errors="ignore")
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    return lines
+
+
+def discover_registry_keys(base_cmd: List[str], env: Dict[str, str], config_path: Path) -> Tuple[Optional[str], Optional[str]]:
+    rest_key = None
+    rpc_key = None
+    runtime_key = resolve_runtime_key(config_path)
+    if runtime_key:
+        runtime = read_etcd_runtime(base_cmd, env, runtime_key) or {}
+        register_key = get_value_ci(runtime, "registerKey")
+        if isinstance(register_key, str) and register_key.strip():
+            rest_key = register_key.strip()
+        else:
+            name = get_value_ci(runtime, "name")
+            if isinstance(name, str) and name.strip():
+                rest_key = f"{name.strip()}.rest"
+    rpc_runtime_key = resolve_rpc_runtime_key(config_path)
+    if rpc_runtime_key:
+        rpc_runtime = read_etcd_runtime(base_cmd, env, rpc_runtime_key) or {}
+        etcd_conf = get_value_ci(rpc_runtime, "etcd")
+        if isinstance(etcd_conf, dict):
+            key = get_value_ci(etcd_conf, "key")
+            if isinstance(key, str) and key.strip():
+                rpc_key = key.strip()
+    return rest_key, rpc_key
+
+
+def wait_for_registry_instances(
+    base_cmd: List[str],
+    env: Dict[str, str],
+    root: Path,
+    service: Dict,
+    expected: int,
+    timeout_s: int = 90,
+) -> None:
+    if expected <= 0:
+        return
+    config_path = root / service["config"]
+    rest_key, rpc_key = discover_registry_keys(base_cmd, env, config_path)
+    checks: List[Tuple[str, str]] = []
+    if rest_key:
+        checks.append(("rest", rest_key))
+    if rpc_key:
+        checks.append(("rpc", rpc_key))
+    if not checks:
+        return
+
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        all_ready = True
+        for _, key in checks:
+            values = read_etcd_values(base_cmd, env, key)
+            if len(values) < expected:
+                all_ready = False
+                break
+        if all_ready:
+            return
+        time.sleep(1)
+
+    details = ", ".join(f"{kind}:{key}" for kind, key in checks)
+    raise SystemExit(f"registry instance check failed for {service['name']}, expected={expected}, keys={details}")
 
 
 def update_cli_config(root: Path, base_cmd: List[str], env: Dict[str, str], gateway_cfg: Path) -> None:
@@ -551,10 +775,13 @@ def start_service(
     bin_dir: Path,
     service: Dict,
     *,
+    instance_index: int,
+    total_instances: int,
     allow_rootless: bool,
 ) -> None:
     name = service["name"]
-    pid_path = log_dir / f"{name}.pid"
+    instance_name = resolve_instance_name(name, instance_index, total_instances)
+    pid_path = log_dir / f"{instance_name}.pid"
     if pid_path.exists():
         try:
             pid = int(pid_path.read_text(encoding="utf-8").strip())
@@ -572,7 +799,7 @@ def start_service(
     if not bin_path.exists():
         raise SystemExit(f"binary not found: {bin_path}")
 
-    log_path = log_dir / f"{name}.log"
+    log_path = log_dir / f"{instance_name}.log"
     cmd = [str(bin_path), "-f", str(config_path)]
     if service.get("runAsRoot") and os.geteuid() != 0 and not allow_rootless:
         raise SystemExit(
@@ -591,7 +818,7 @@ def start_service(
     pid_path.write_text(str(proc.pid), encoding="utf-8")
     time.sleep(0.2)
     if not is_pid_running(proc.pid):
-        raise SystemExit(f"service failed to start: {name}")
+        raise SystemExit(f"service failed to start: {instance_name}")
 
 
 def build_service(root: Path, bin_dir: Path, service: Dict) -> None:
@@ -628,6 +855,11 @@ def main() -> None:
     )
     parser.add_argument("--only", default="", help="Comma-separated service list")
     parser.add_argument(
+        "--instances",
+        default="",
+        help="Override instances, format: service-a=2,service-b=3",
+    )
+    parser.add_argument(
         "--pull",
         default="missing",
         choices=["always", "missing", "never"],
@@ -662,10 +894,14 @@ def main() -> None:
     bin_dir.mkdir(parents=True, exist_ok=True)
 
     only_set = {name.strip() for name in args.only.split(",") if name.strip()}
+    instance_overrides = parse_instance_overrides(args.instances)
     services = manifest.get("services", [])
     if not isinstance(services, list):
         raise SystemExit("manifest services must be a list")
     active_services = [svc for svc in services if not only_set or svc["name"] in only_set]
+    service_instances: Dict[str, int] = {}
+    for svc in active_services:
+        service_instances[svc["name"]] = resolve_service_instances(svc, instance_overrides)
 
     needs_rootless = not args.deps_only and os.geteuid() != 0 and any(svc.get("runAsRoot") for svc in active_services)
     cgroup_root = None
@@ -729,12 +965,26 @@ def main() -> None:
     for svc in services:
         if only_set and svc["name"] not in only_set:
             continue
-        start_service(root, log_dir, bin_dir, svc, allow_rootless=cgroup_root is not None)
+        instances = service_instances.get(svc["name"], resolve_service_instances(svc, instance_overrides))
+        for idx in range(instances):
+            if idx > 0:
+                prepare_runtime_for_next_instance(base_cmd, env, root, svc)
+            start_service(
+                root,
+                log_dir,
+                bin_dir,
+                svc,
+                instance_index=idx,
+                total_instances=instances,
+                allow_rootless=cgroup_root is not None,
+            )
 
     for svc in services:
         if only_set and svc["name"] not in only_set:
             continue
         wait_for_service_ready(base_cmd, env, root, log_dir, svc)
+        expected = service_instances.get(svc["name"], resolve_service_instances(svc, instance_overrides))
+        wait_for_registry_instances(base_cmd, env, root, svc, expected)
 
     gateway_config = None
     for svc in services:
