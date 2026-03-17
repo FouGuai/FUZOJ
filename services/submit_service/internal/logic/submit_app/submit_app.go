@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
+	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
 const (
@@ -65,10 +66,12 @@ type SubmitParams struct {
 // It is intentionally created from ServiceContext and used by logic layer directly.
 type SubmitApp struct {
 	submissionRepo repository.SubmissionRepository
+	dispatchRepo   repository.SubmissionDispatchRepository
 	statusRepo     *repository.StatusRepository
 	logRepo        *repository.SubmissionLogRepository
 	storage        storage.ObjectStorage
 	redis          *redis.Redis
+	conn           sqlx.SqlConn
 
 	topics     svc.TopicConfig
 	pushers    svc.TopicPushers
@@ -78,6 +81,7 @@ type SubmitApp struct {
 	contestDispatchTopic  string
 	contestDispatchPusher svc.TopicPusher
 	contestDispatchSwitch *svc.ContestDispatchSwitch
+	dispatchTimeoutAfter  time.Duration
 
 	sourceBucket    string
 	sourceKeyPrefix string
@@ -119,10 +123,12 @@ func NewSubmitApp(svcCtx *svc.ServiceContext) (*SubmitApp, error) {
 
 	return &SubmitApp{
 		submissionRepo: svcCtx.SubmissionRepo,
+		dispatchRepo:   svcCtx.DispatchRepo,
 		statusRepo:     svcCtx.StatusRepo,
 		logRepo:        svcCtx.LogRepo,
 		storage:        svcCtx.Storage,
 		redis:          svcCtx.Redis,
+		conn:           svcCtx.Conn,
 		topics: svc.TopicConfig{
 			Level0: svcCtx.Config.Topics.Level0,
 			Level1: svcCtx.Config.Topics.Level1,
@@ -152,6 +158,7 @@ func NewSubmitApp(svcCtx *svc.ServiceContext) (*SubmitApp, error) {
 		contestDispatchTopic:  svcCtx.Config.Submit.ContestDispatch.Topic,
 		contestDispatchPusher: svcCtx.ContestDispatchPusher,
 		contestDispatchSwitch: svcCtx.ContestDispatchSwitch,
+		dispatchTimeoutAfter:  svcCtx.Config.Submit.DispatchRecovery.TimeoutAfter,
 	}, nil
 }
 
@@ -204,7 +211,13 @@ func (a *SubmitApp) Submit(ctx context.Context, input SubmitParams) (string, dom
 		CreatedAt:    createdAt,
 	}
 
-	if err := a.createSubmission(ctx, submission); err != nil {
+	body, err := a.buildDispatchPayload(submission, input.ExtraCompileFlags)
+	if err != nil {
+		a.releaseIdempotency(ctx, input.IdempotencyKey, acquired)
+		return "", domain.JudgeStatusPayload{}, err
+	}
+
+	if err := a.createSubmission(ctx, submission, body); err != nil {
 		a.releaseIdempotency(ctx, input.IdempotencyKey, acquired)
 		return "", domain.JudgeStatusPayload{}, err
 	}
@@ -220,7 +233,7 @@ func (a *SubmitApp) Submit(ctx context.Context, input SubmitParams) (string, dom
 		return "", domain.JudgeStatusPayload{}, err
 	}
 
-	if err := a.publishMessage(ctx, submission, input.ExtraCompileFlags); err != nil {
+	if err := a.publishEncodedMessage(ctx, submission, body); err != nil {
 		a.releaseIdempotency(ctx, input.IdempotencyKey, acquired)
 		return "", domain.JudgeStatusPayload{}, err
 	}
@@ -504,10 +517,54 @@ func (a *SubmitApp) uploadSource(ctx context.Context, objectKey, source string) 
 	return nil
 }
 
-func (a *SubmitApp) createSubmission(ctx context.Context, submission *repository.Submission) error {
+func (a *SubmitApp) createSubmission(ctx context.Context, submission *repository.Submission, payload string) error {
 	ctxDB := withTimeout(ctx, a.timeouts.DB)
 	defer ctxDB.cancel()
-	if err := a.submissionRepo.Create(ctxDB.ctx, nil, submission); err != nil {
+	if a.conn == nil {
+		if err := a.submissionRepo.Create(ctxDB.ctx, nil, submission); err != nil {
+			return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "create submission failed")
+		}
+		if a.dispatchRepo != nil {
+			record := repository.SubmissionDispatchRecord{
+				SubmissionID: submission.SubmissionID,
+				Scene:        submission.Scene,
+				ContestID:    submission.ContestID,
+				Payload:      payload,
+				Status:       repository.DispatchStatusPending,
+				RetryCount:   0,
+				NextRetryAt:  submission.CreatedAt.Add(a.dispatchTimeout()),
+				CreatedAt:    submission.CreatedAt,
+				UpdatedAt:    submission.CreatedAt,
+			}
+			if err := a.dispatchRepo.Create(ctxDB.ctx, nil, record); err != nil {
+				return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "create submission dispatch failed")
+			}
+		}
+		return nil
+	}
+	if a.dispatchRepo == nil {
+		if err := a.submissionRepo.Create(ctxDB.ctx, nil, submission); err != nil {
+			return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "create submission failed")
+		}
+		return nil
+	}
+	if err := a.conn.TransactCtx(ctxDB.ctx, func(ctx context.Context, session sqlx.Session) error {
+		if err := a.submissionRepo.Create(ctx, session, submission); err != nil {
+			return err
+		}
+		record := repository.SubmissionDispatchRecord{
+			SubmissionID: submission.SubmissionID,
+			Scene:        submission.Scene,
+			ContestID:    submission.ContestID,
+			Payload:      payload,
+			Status:       repository.DispatchStatusPending,
+			RetryCount:   0,
+			NextRetryAt:  submission.CreatedAt.Add(a.dispatchTimeout()),
+			CreatedAt:    submission.CreatedAt,
+			UpdatedAt:    submission.CreatedAt,
+		}
+		return a.dispatchRepo.Create(ctx, session, record)
+	}); err != nil {
 		return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "create submission failed")
 	}
 	return nil
@@ -523,6 +580,14 @@ func (a *SubmitApp) saveStatus(ctx context.Context, status domain.JudgeStatusPay
 }
 
 func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.Submission, extraFlags []string) error {
+	body, err := a.buildDispatchPayload(submission, extraFlags)
+	if err != nil {
+		return err
+	}
+	return a.publishEncodedMessage(ctx, submission, body)
+}
+
+func (a *SubmitApp) buildDispatchPayload(submission *repository.Submission, extraFlags []string) (string, error) {
 	payload := domain.JudgeMessage{
 		SubmissionID:      submission.SubmissionID,
 		ProblemID:         submission.ProblemID,
@@ -537,11 +602,14 @@ func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.S
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return appErr.Wrapf(err, appErr.SubmissionCreateFailed, "encode judge message failed")
+		return "", appErr.Wrapf(err, appErr.SubmissionCreateFailed, "encode judge message failed")
 	}
+	return string(body), nil
+}
 
+func (a *SubmitApp) publishEncodedMessage(ctx context.Context, submission *repository.Submission, body string) error {
 	if a.shouldDispatchContest(submission) {
-		return a.publishContestDispatch(ctx, submission, string(body))
+		return a.publishContestDispatch(ctx, submission, body)
 	}
 
 	topic := resolveTopic(submission.Scene, a.topics)
@@ -551,7 +619,7 @@ func (a *SubmitApp) publishMessage(ctx context.Context, submission *repository.S
 	}
 	ctxMQ := withTimeout(ctx, a.timeouts.MQ)
 	defer ctxMQ.cancel()
-	if err := pusher.PushWithKey(ctxMQ.ctx, submission.SubmissionID, string(body)); err != nil {
+	if err := pusher.PushWithKey(ctxMQ.ctx, submission.SubmissionID, body); err != nil {
 		logx.WithContext(ctxMQ.ctx).Errorf(
 			"publish judge message failed: %v topic=%s submission_id=%s problem_id=%d user_id=%d scene=%s",
 			err,
@@ -637,6 +705,13 @@ func (a *SubmitApp) pusherForTopic(topic string) svc.TopicPusher {
 
 func (a *SubmitApp) buildSourceKey(submissionID string) string {
 	return fmt.Sprintf("%s/%s/source.code", a.sourceKeyPrefix, submissionID)
+}
+
+func (a *SubmitApp) dispatchTimeout() time.Duration {
+	if a.dispatchTimeoutAfter > 0 {
+		return a.dispatchTimeoutAfter
+	}
+	return 2 * time.Minute
 }
 
 func hashSource(source string) string {

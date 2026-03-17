@@ -9,9 +9,11 @@ import (
 
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/pkg/submit/statuscache"
+	"fuzoj/pkg/submit/statuspubsub"
 	"fuzoj/services/submit_service/internal/domain"
 	"fuzoj/services/submit_service/internal/model"
 
+	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
@@ -24,6 +26,7 @@ const (
 // StatusRepository handles status persistence.
 type StatusRepository struct {
 	redis            *redis.Redis
+	pubsub           *red.Client
 	submissionsModel model.SubmissionsModel
 	ttl              time.Duration
 	emptyTTL         time.Duration
@@ -43,6 +46,14 @@ func NewStatusRepository(redisClient *redis.Redis, submissionsModel model.Submis
 		ttl:              ttl,
 		emptyTTL:         emptyTTL,
 	}
+}
+
+// SetStatusPubSub sets status pubsub client for real-time notifications.
+func (r *StatusRepository) SetStatusPubSub(client *red.Client) {
+	if r == nil {
+		return
+	}
+	r.pubsub = client
 }
 
 // Get returns status by submission id.
@@ -188,6 +199,9 @@ func (r *StatusRepository) Save(ctx context.Context, status domain.JudgeStatusPa
 	if err := statuscache.Set(ctx, r.redis, status.SubmissionID, string(data), ttlSeconds(r.ttl)); err != nil {
 		logger.Errorf("store status failed: %v", err)
 		return appErr.Wrapf(err, appErr.CacheError, "store status failed")
+	}
+	if err := statuspubsub.Publish(ctx, r.pubsub, status.SubmissionID); err != nil {
+		logger.Errorf("publish status update failed: %v", err)
 	}
 	return nil
 }

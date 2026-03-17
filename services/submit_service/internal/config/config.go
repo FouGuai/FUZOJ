@@ -52,24 +52,38 @@ type TopicConfig struct {
 }
 
 type SubmitConfig struct {
-	SourceBucket        string          `json:"sourceBucket"`
-	SourceKeyPrefix     string          `json:"sourceKeyPrefix"`
-	MaxCodeBytes        int             `json:"maxCodeBytes"`
-	LogBucket           string          `json:"logBucket"`
-	LogKeyPrefix        string          `json:"logKeyPrefix"`
-	LogMaxInlineBytes   int             `json:"logMaxInlineBytes"`
-	LogCacheTTL         time.Duration   `json:"logCacheTTL"`
-	IdempotencyTTL      time.Duration   `json:"idempotencyTTL"`
-	BatchLimit          int             `json:"batchLimit"`
-	StatusTTL           time.Duration   `json:"statusTTL"`
-	StatusEmptyTTL      time.Duration   `json:"statusEmptyTTL"`
-	StatusFinalTopic    string          `json:"statusFinalTopic"`
-	StatusFinalConsumer ConsumerConfig  `json:"statusFinalConsumer"`
-	ContestDispatch     ContestDispatch `json:"contestDispatch"`
-	SubmissionCacheTTL  time.Duration   `json:"submissionCacheTTL"`
-	SubmissionEmptyTTL  time.Duration   `json:"submissionEmptyTTL"`
-	RateLimit           RateLimitConfig `json:"rateLimit"`
-	Timeouts            TimeoutConfig   `json:"timeouts"`
+	SourceBucket        string                 `json:"sourceBucket"`
+	SourceKeyPrefix     string                 `json:"sourceKeyPrefix"`
+	MaxCodeBytes        int                    `json:"maxCodeBytes"`
+	LogBucket           string                 `json:"logBucket"`
+	LogKeyPrefix        string                 `json:"logKeyPrefix"`
+	LogMaxInlineBytes   int                    `json:"logMaxInlineBytes"`
+	LogCacheTTL         time.Duration          `json:"logCacheTTL"`
+	IdempotencyTTL      time.Duration          `json:"idempotencyTTL"`
+	BatchLimit          int                    `json:"batchLimit"`
+	StatusTTL           time.Duration          `json:"statusTTL"`
+	StatusEmptyTTL      time.Duration          `json:"statusEmptyTTL"`
+	StatusFinalTopic    string                 `json:"statusFinalTopic"`
+	StatusFinalConsumer ConsumerConfig         `json:"statusFinalConsumer"`
+	ContestDispatch     ContestDispatch        `json:"contestDispatch"`
+	DispatchRecovery    DispatchRecoveryConfig `json:"dispatchRecovery"`
+	SubmissionCacheTTL  time.Duration          `json:"submissionCacheTTL"`
+	SubmissionEmptyTTL  time.Duration          `json:"submissionEmptyTTL"`
+	RateLimit           RateLimitConfig        `json:"rateLimit"`
+	Timeouts            TimeoutConfig          `json:"timeouts"`
+}
+
+type DispatchRecoveryConfig struct {
+	Enabled       bool          `json:"enabled"`
+	TimeoutAfter  time.Duration `json:"timeoutAfter"`
+	ScanInterval  time.Duration `json:"scanInterval"`
+	ClaimBatch    int           `json:"claimBatch"`
+	WorkerCount   int           `json:"workerCount"`
+	LeaseDuration time.Duration `json:"leaseDuration"`
+	RetryBase     time.Duration `json:"retryBase"`
+	RetryMax      time.Duration `json:"retryMax"`
+	DBTimeout     time.Duration `json:"dbTimeout"`
+	MQTimeout     time.Duration `json:"mqTimeout"`
 }
 
 // ContestDispatch defines topic config for contest validation dispatch.

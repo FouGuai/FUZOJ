@@ -20,6 +20,7 @@ type (
 		submissionsModel
 		WithSession(session sqlx.Session) SubmissionsModel
 		FindFinalStatus(ctx context.Context, submissionID string) (string, error)
+		HasFinalStatus(ctx context.Context, submissionID string) (bool, error)
 		FindFinalStatusBatch(ctx context.Context, submissionIDs []string) ([]SubmissionFinalStatus, error)
 		UpdateFinalStatus(ctx context.Context, submissionID string, payload string, finishedAt time.Time) (sql.Result, error)
 	}
@@ -66,6 +67,20 @@ func (m *customSubmissionsModel) FindFinalStatus(ctx context.Context, submission
 		return "", err
 	}
 	return resp.FinalStatus, nil
+}
+
+func (m *customSubmissionsModel) HasFinalStatus(ctx context.Context, submissionID string) (bool, error) {
+	query := fmt.Sprintf("select `final_status_at` from %s where `submission_id` = ? and `final_status_at` is not null limit 1", m.table)
+	var resp struct {
+		FinalStatusAt time.Time `db:"final_status_at"`
+	}
+	if err := m.QueryRowNoCacheCtx(ctx, &resp, query, submissionID); err != nil {
+		if err == sqlx.ErrNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (m *customSubmissionsModel) FindFinalStatusBatch(ctx context.Context, submissionIDs []string) ([]SubmissionFinalStatus, error) {

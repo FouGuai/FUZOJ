@@ -5,6 +5,7 @@ package svc
 
 import (
 	"fuzoj/internal/common/storage"
+	"fuzoj/pkg/submit/statuspubsub"
 	"fuzoj/services/contest_rpc_service/contestrpc"
 	"fuzoj/services/submit_service/internal/config"
 	"fuzoj/services/submit_service/internal/consumer"
@@ -26,11 +27,13 @@ type ServiceContext struct {
 	Redis                 *redis.Redis
 	SubmissionsModel      model.SubmissionsModel
 	SubmissionRepo        repository.SubmissionRepository
+	DispatchRepo          repository.SubmissionDispatchRepository
 	StatusRepo            *repository.StatusRepository
 	LogRepo               *repository.SubmissionLogRepository
 	Storage               storage.ObjectStorage
 	StatusFinalQueue      queue.MessageQueue
 	StatusFinalConsumer   *consumer.StatusFinalConsumer
+	DispatchRecoveryRelay *consumer.DispatchRecoveryRelay
 	TopicPushers          TopicPushers
 	ContestDispatchPusher TopicPusher
 	ContestDispatchSwitch *ContestDispatchSwitch
@@ -51,7 +54,9 @@ func NewServiceContext(c config.Config) *ServiceContext {
 
 	submissionsModel := model.NewSubmissionsModel(conn, c.Cache, cacheOptions...)
 	submissionRepo := repository.NewSubmissionRepository(submissionsModel)
+	dispatchRepo := repository.NewSubmissionDispatchRepository(conn)
 	statusRepo := repository.NewStatusRepository(redisClient, submissionsModel, c.Submit.StatusTTL, c.Submit.StatusEmptyTTL)
+	statusRepo.SetStatusPubSub(statuspubsub.NewClient(c.Redis))
 
 	var storageClient storage.ObjectStorage
 	if c.MinIO.Endpoint != "" {
@@ -106,19 +111,26 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	var statusFinalConsumer *consumer.StatusFinalConsumer
 	var statusFinalQueue queue.MessageQueue
 	if len(c.Kafka.Brokers) > 0 && c.Submit.StatusFinalTopic != "" {
-		statusFinalConsumer = consumer.NewStatusFinalConsumer(statusRepo, logRepo, nil, consumer.TimeoutConfig{
+		handlers := make([]consumer.FinalStatusHandler, 0, 1)
+		if dispatchRepo != nil {
+			if handler := consumer.NewDispatchDoneHandler(dispatchRepo); handler != nil {
+				handlers = append(handlers, handler)
+			}
+		}
+		statusFinalConsumer = consumer.NewStatusFinalConsumer(statusRepo, logRepo, handlers, consumer.TimeoutConfig{
 			DB: c.Submit.Timeouts.DB,
 		})
 		kqConf := consumer.BuildStatusFinalKqConf(c)
 		statusFinalQueue = kq.MustNewQueue(kqConf, statusFinalConsumer)
 	}
 
-	return &ServiceContext{
+	ctx := &ServiceContext{
 		Config:                c,
 		Conn:                  conn,
 		Redis:                 redisClient,
 		SubmissionsModel:      submissionsModel,
 		SubmissionRepo:        submissionRepo,
+		DispatchRepo:          dispatchRepo,
 		StatusRepo:            statusRepo,
 		LogRepo:               logRepo,
 		Storage:               storageClient,
@@ -128,6 +140,21 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		ContestDispatchPusher: contestDispatchPusher,
 		ContestRpc:            initContestRpc(c),
 	}
+	if dispatchRepo != nil {
+		ctx.DispatchRecoveryRelay = consumer.NewDispatchRecoveryRelay(dispatchRepo, submissionsModel, ctx, consumer.DispatchRecoveryOptions{
+			Enabled:       c.Submit.DispatchRecovery.Enabled,
+			TimeoutAfter:  c.Submit.DispatchRecovery.TimeoutAfter,
+			ScanInterval:  c.Submit.DispatchRecovery.ScanInterval,
+			ClaimBatch:    c.Submit.DispatchRecovery.ClaimBatch,
+			WorkerCount:   c.Submit.DispatchRecovery.WorkerCount,
+			LeaseDuration: c.Submit.DispatchRecovery.LeaseDuration,
+			RetryBase:     c.Submit.DispatchRecovery.RetryBase,
+			RetryMax:      c.Submit.DispatchRecovery.RetryMax,
+			DBTimeout:     c.Submit.DispatchRecovery.DBTimeout,
+			MQTimeout:     c.Submit.DispatchRecovery.MQTimeout,
+		})
+	}
+	return ctx
 }
 
 func initContestRpc(c config.Config) contestrpc.ContestRpc {

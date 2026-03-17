@@ -94,6 +94,7 @@ func main() {
 		{Name: "contest", Path: "contest_service/etc/contest.yaml"},
 		{Name: "contest.rpc", Path: "contest_rpc_service/etc/contest.yaml"},
 		{Name: "rank", Path: "rank_service/etc/rank.yaml"},
+		{Name: "status-sse", Path: "status_sse_service/etc/status_sse.yaml"},
 		{Name: "rank-ws", Path: "rank_ws_service/etc/rank_ws.yaml"},
 		{Name: "rank-rpc", Path: "rank_rpc_service/etc/rank.yaml"},
 	}

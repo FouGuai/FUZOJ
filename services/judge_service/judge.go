@@ -12,6 +12,7 @@ import (
 	"fuzoj/internal/common/mq/weighted_kq"
 	"fuzoj/internal/common/storage"
 	"fuzoj/pkg/bootstrap"
+	"fuzoj/pkg/submit/statuspubsub"
 	"fuzoj/services/judge_service/internal/cache"
 	"fuzoj/services/judge_service/internal/config"
 	"fuzoj/services/judge_service/internal/handler"
@@ -178,6 +179,7 @@ func main() {
 		c.StatusCacheEmptyTTL,
 		finalBatcher,
 	)
+	ctx.StatusRepo.SetStatusPubSub(statuspubsub.NewClient(c.Redis))
 
 	dataCache := cache.NewDataPackCache(
 		c.CacheConfig.RootDir,

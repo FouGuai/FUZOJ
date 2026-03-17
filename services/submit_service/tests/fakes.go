@@ -19,6 +19,61 @@ type fakeSubmissionRepo struct {
 	getByIDFn func(ctx context.Context, session sqlx.Session, submissionID string) (*repository.Submission, error)
 }
 
+type fakeDispatchRepo struct {
+	createFn             func(ctx context.Context, session sqlx.Session, record repository.SubmissionDispatchRecord) error
+	markDoneFn           func(ctx context.Context, session sqlx.Session, submissionID string) error
+	requeueExpiredFn     func(ctx context.Context, now time.Time, limit int) (int64, error)
+	claimDueFn           func(ctx context.Context, now time.Time, ownerID string, leaseDuration time.Duration, limit int) ([]repository.SubmissionDispatchRecord, error)
+	markPublishedFn      func(ctx context.Context, id int64, ownerID string, nextRetryAt time.Time) error
+	markRetryFn          func(ctx context.Context, id int64, ownerID string, retryCount int, nextRetryAt time.Time) error
+	created              []repository.SubmissionDispatchRecord
+	markedDoneSubmission []string
+}
+
+func (f *fakeDispatchRepo) Create(ctx context.Context, session sqlx.Session, record repository.SubmissionDispatchRecord) error {
+	f.created = append(f.created, record)
+	if f.createFn == nil {
+		return nil
+	}
+	return f.createFn(ctx, session, record)
+}
+
+func (f *fakeDispatchRepo) MarkDone(ctx context.Context, session sqlx.Session, submissionID string) error {
+	f.markedDoneSubmission = append(f.markedDoneSubmission, submissionID)
+	if f.markDoneFn == nil {
+		return nil
+	}
+	return f.markDoneFn(ctx, session, submissionID)
+}
+
+func (f *fakeDispatchRepo) RequeueExpiredProcessing(ctx context.Context, now time.Time, limit int) (int64, error) {
+	if f.requeueExpiredFn == nil {
+		return 0, nil
+	}
+	return f.requeueExpiredFn(ctx, now, limit)
+}
+
+func (f *fakeDispatchRepo) ClaimDue(ctx context.Context, now time.Time, ownerID string, leaseDuration time.Duration, limit int) ([]repository.SubmissionDispatchRecord, error) {
+	if f.claimDueFn == nil {
+		return nil, nil
+	}
+	return f.claimDueFn(ctx, now, ownerID, leaseDuration, limit)
+}
+
+func (f *fakeDispatchRepo) MarkPublished(ctx context.Context, id int64, ownerID string, nextRetryAt time.Time) error {
+	if f.markPublishedFn == nil {
+		return nil
+	}
+	return f.markPublishedFn(ctx, id, ownerID, nextRetryAt)
+}
+
+func (f *fakeDispatchRepo) MarkRetry(ctx context.Context, id int64, ownerID string, retryCount int, nextRetryAt time.Time) error {
+	if f.markRetryFn == nil {
+		return nil
+	}
+	return f.markRetryFn(ctx, id, ownerID, retryCount, nextRetryAt)
+}
+
 func (f *fakeSubmissionRepo) Create(ctx context.Context, session sqlx.Session, submission *repository.Submission) error {
 	if f.createFn == nil {
 		return errors.New("create not implemented")
@@ -83,6 +138,14 @@ func (f *fakeSubmissionsModel) FindFinalStatus(ctx context.Context, submissionID
 		return "", model.ErrNotFound
 	}
 	return payload, nil
+}
+
+func (f *fakeSubmissionsModel) HasFinalStatus(ctx context.Context, submissionID string) (bool, error) {
+	if f.finalStatus == nil {
+		return false, nil
+	}
+	_, ok := f.finalStatus[submissionID]
+	return ok, nil
 }
 
 func (f *fakeSubmissionsModel) FindFinalStatusBatch(ctx context.Context, submissionIDs []string) ([]model.SubmissionFinalStatus, error) {

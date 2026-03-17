@@ -148,6 +148,12 @@ def replace_base(url: str, new_base: str) -> str:
     return f"{new.scheme}://{new.netloc}{old.path}" + (f"?{old.query}" if old.query else "")
 
 
+def to_ws_base(base_url: str) -> str:
+    parsed = urlparse(base_url)
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    return f"{scheme}://{parsed.netloc}"
+
+
 def create_authenticated_user(base_url: str, timeout: int, username_prefix: str) -> tuple[requests.Session, int, str]:
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
@@ -234,11 +240,14 @@ def main() -> int:
             print(f"gateway direct base detected: {base_url}")
     contest_base_url = discover_service_base_url(repo_root, "contest-service")
     status_base_url = discover_service_base_url(repo_root, "status-service")
+    status_sse_base_url = discover_service_base_url(repo_root, "status-sse-service")
     rank_base_url = discover_service_base_url(repo_root, "rank-service")
     if contest_base_url:
         print(f"contest direct base detected: {contest_base_url}")
     if status_base_url:
         print(f"status direct base detected: {status_base_url}")
+    if status_sse_base_url:
+        print(f"status sse direct base detected: {status_sse_base_url}")
     if rank_base_url:
         print(f"rank direct base detected: {rank_base_url}")
     print("== register ==")
@@ -624,7 +633,64 @@ int main() {
         require(submission_id, f"submission_id not found for user={participant_id}")
         return {"user_id": participant_id, "submission_id": submission_id}
 
+    def wait_submission_final_via_sse(participant_session: requests.Session, participant_id: int, submission_id: str) -> str:
+        stream_base_candidates = []
+        if status_sse_base_url:
+            stream_base_candidates.append(status_sse_base_url)
+        stream_base_candidates.append(base_url)
+        deadline = time.time() + max(1.0, args.poll_times * args.poll_interval)
+        timeout_s = max(args.timeout, int(args.poll_interval * 2), 20)
+        stream_error = None
+        for stream_base in stream_base_candidates:
+            stream_url = f"{stream_base}/api/v1/status/submissions/{submission_id}/events"
+            final_status = ""
+            headers = {"Accept": "text/event-stream"}
+            # Direct status-sse access bypasses gateway header injection.
+            if stream_base == status_sse_base_url:
+                headers["X-User-Id"] = str(participant_id)
+            try:
+                print(f"sse_connect url={stream_url}")
+                with participant_session.get(stream_url, headers=headers, stream=True, timeout=timeout_s) as resp:
+                    if resp.status_code < 200 or resp.status_code >= 300:
+                        raise RuntimeError(f"sse request failed: GET {stream_url} ({resp.status_code})")
+                    data_lines: list[str] = []
+                    for raw_line in resp.iter_lines(decode_unicode=True):
+                        if time.time() >= deadline:
+                            break
+                        line = (raw_line or "").strip()
+                        if not line:
+                            if not data_lines:
+                                continue
+                            payload_text = "".join(data_lines)
+                            data_lines = []
+                            payload = json.loads(payload_text)
+                            final_status = (
+                                pick(payload, "data", "status")
+                                or pick(payload, "data", "data", "status")
+                                or payload.get("status")
+                                or ""
+                            )
+                            print(f"sse_status submission_id={submission_id} status={final_status}")
+                            if str(final_status).lower() in {"finished", "failed"}:
+                                break
+                            continue
+                        if line.startswith(":"):
+                            continue
+                        if line.startswith("data:"):
+                            data_lines.append(line[len("data:") :].strip())
+                            continue
+                if final_status:
+                    return final_status
+            except Exception as sse_err:
+                stream_error = sse_err
+                continue
+        raise RuntimeError(f"sse stream failed: {stream_error}")
+
     def wait_submission_final(participant_session: requests.Session, participant_id: int, submission_id: str) -> str:
+        try:
+            return wait_submission_final_via_sse(participant_session, participant_id, submission_id)
+        except Exception as sse_err:
+            print(f"sse status stream failed, fallback to poll: user={participant_id} submission={submission_id} err={sse_err}")
         user_status_urls = [f"{base_url}/api/v1/status/submissions/{submission_id}"]
         if status_base_url:
             user_status_urls.append(f"{status_base_url}/api/v1/status/submissions/{submission_id}")
@@ -706,7 +772,7 @@ int main() {
     if args.throughput_only:
         print("== leaderboard poll skipped (throughput-only) ==")
     else:
-        print("== leaderboard poll (all users) ==")
+        print("== leaderboard check (prefer websocket, fallback poll) ==")
         page_size = max(50, len(participants) + 5)
         leaderboard_urls = [f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"]
         if rank_base_url:
@@ -715,23 +781,59 @@ int main() {
             )
         expected_member_ids = {str(participant["user_id"]) for participant in participants}
         seen_member_ids = set()
-        for _ in range(args.rank_poll_times):
-            lb_resp = None
-            for lb_url in leaderboard_urls:
-                ok, result = try_request_json(session, "GET", lb_url, timeout=args.timeout)
-                if ok:
-                    lb_resp = result
+        ws_err = None
+        try:
+            import websocket  # type: ignore
+
+            rank_ws_base = to_ws_base(rank_base_url if rank_base_url else base_url)
+            leaderboard_ws_url = (
+                f"{rank_ws_base}/api/v1/contests/{contest_id}/leaderboard/ws?page=1&page_size={page_size}&mode=live"
+            )
+            ws_headers = []
+            auth_header = session.headers.get("Authorization")
+            if auth_header:
+                ws_headers.append(f"Authorization: {auth_header}")
+            deadline = time.time() + max(1.0, args.rank_poll_times * args.poll_interval)
+            conn = websocket.create_connection(leaderboard_ws_url, timeout=args.timeout, header=ws_headers)
+            try:
+                while time.time() < deadline:
+                    message = conn.recv()
+                    if not message:
+                        continue
+                    payload = json.loads(message)
+                    items = pick(payload, "data", "items") or []
+                    seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
+                    if expected_member_ids.issubset(seen_member_ids):
+                        rank_found_all = True
+                        break
+            finally:
+                conn.close()
+        except Exception as err:
+            ws_err = err
+
+        if not rank_found_all:
+            if ws_err is not None:
+                print(f"leaderboard websocket unavailable, fallback to poll: {ws_err}")
+            for _ in range(args.rank_poll_times):
+                lb_resp = None
+                for lb_url in leaderboard_urls:
+                    ok, result = try_request_json(session, "GET", lb_url, timeout=args.timeout)
+                    if ok:
+                        lb_resp = result
+                        break
+                if lb_resp is None:
+                    time.sleep(args.poll_interval)
+                    continue
+                items = pick(lb_resp, "data", "items") or []
+                seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
+                if expected_member_ids.issubset(seen_member_ids):
+                    rank_found_all = True
                     break
-            if lb_resp is None:
                 time.sleep(args.poll_interval)
-                continue
-            items = pick(lb_resp, "data", "items") or []
-            seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
-            if expected_member_ids.issubset(seen_member_ids):
-                rank_found_all = True
-                break
-            time.sleep(args.poll_interval)
-        require(rank_found_all, f"not all members found in leaderboard, expected={expected_member_ids}, seen={seen_member_ids}")
+        require(
+            rank_found_all,
+            f"not all members found in leaderboard, expected={expected_member_ids}, seen={seen_member_ids}",
+        )
 
     print("== summary ==")
     print(f"owner_user_id={user_id}")

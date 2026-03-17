@@ -101,6 +101,10 @@ func main() {
 		go ctx.StatusFinalQueue.Start()
 		defer ctx.StatusFinalQueue.Stop()
 	}
+	if ctx.DispatchRecoveryRelay != nil {
+		ctx.DispatchRecoveryRelay.Start()
+		defer ctx.DispatchRecoveryRelay.Stop()
+	}
 	if ctx.TopicPushers.Level0 != nil {
 		defer ctx.TopicPushers.Level0.Close()
 	}

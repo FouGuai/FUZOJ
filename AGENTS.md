@@ -190,6 +190,7 @@
 - **Contest Dispatch Kafka**：`docs/contest_dispatch_kafka.md` — Submit→Contest Kafka 分流与动态切换说明
 - **Contest Rank Pipeline**：`docs/contest_rank_pipeline.md` — Judge→Contest→Rank 计分链路与事务出站说明
 - **Status Service**：`docs/status_service.md` — 判题状态查询与缓存策略说明
+- **Status SSE Service**：`docs/status_sse_service.md` — 提交状态 SSE 推送与单向实时更新说明
 - **Rank Service**：`docs/rank_service.md` — 高性能排行榜存取与订阅服务说明
 - **Rank Update Reliability**：`docs/rank_update_reliability.md` — 排行榜更新消息不丢与一致性策略说明
 - **Rank WS Service**：`docs/rank_ws_service.md` — 排行榜 WebSocket 推送与水平扩展说明

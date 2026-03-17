@@ -25,6 +25,7 @@ func TestCreateHandler(t *testing.T) {
 		_, redisClient := newTestRedis(t)
 		model := &fakeSubmissionsModel{}
 		statusRepo := repository.NewStatusRepository(redisClient, model, 5*time.Minute, time.Minute)
+		dispatchRepo := &fakeDispatchRepo{}
 		var created *repository.Submission
 		storageCalls := 0
 		pusher := &fakePusher{}
@@ -44,7 +45,9 @@ func TestCreateHandler(t *testing.T) {
 			},
 		}
 		cfg := defaultTestConfig()
+		cfg.Submit.DispatchRecovery.TimeoutAfter = 3 * time.Minute
 		ctx := newTestServiceContext(cfg, repo, statusRepo, nil, storageClient, redisClient, svc.TopicPushers{Level1: pusher}, nil, "")
+		ctx.DispatchRepo = dispatchRepo
 		req := types.CreateSubmissionRequest{
 			ProblemId:         100,
 			UserId:            200,
@@ -70,6 +73,12 @@ func TestCreateHandler(t *testing.T) {
 		}
 		if created == nil || created.SubmissionID != resp.Data.SubmissionId {
 			t.Fatalf("submission not created")
+		}
+		if len(dispatchRepo.created) != 1 {
+			t.Fatalf("expected dispatch outbox record to be created")
+		}
+		if dispatchRepo.created[0].SubmissionID != resp.Data.SubmissionId {
+			t.Fatalf("unexpected dispatch submission id: %s", dispatchRepo.created[0].SubmissionID)
 		}
 		if storageCalls != 1 {
 			t.Fatalf("unexpected storage calls: %d", storageCalls)

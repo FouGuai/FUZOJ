@@ -115,6 +115,28 @@ end
 return applied
 `)
 
+var rankLoadPageScript = redis.NewScript(`
+local leaderboardKey = KEYS[1]
+local metaKey = KEYS[2]
+local detailPrefix = ARGV[1] or ""
+local start = tonumber(ARGV[2]) or 0
+local stop = tonumber(ARGV[3]) or -1
+
+local memberIDs = redis.call("ZREVRANGE", leaderboardKey, start, stop)
+local total = redis.call("ZCARD", leaderboardKey)
+local version = redis.call("HGET", metaKey, "version") or ""
+
+local out = {tostring(total), tostring(version)}
+for i = 1, #memberIDs do
+	local memberId = memberIDs[i]
+	local summary = redis.call("HGET", detailPrefix .. memberId, "summary")
+	table.insert(out, memberId)
+	table.insert(out, summary or "")
+end
+
+return out
+`)
+
 // LeaderboardRepository handles leaderboard storage.
 type LeaderboardRepository struct {
 	redis    *redis.Redis
@@ -325,20 +347,16 @@ func (r *LeaderboardRepository) GetPage(ctx context.Context, contestID string, p
 	leaderboardKey := leaderboardKeyByMode(contestID, mode)
 	start := int64((page - 1) * pageSize)
 	stop := start + int64(pageSize) - 1
-	memberIDs, err := r.redis.ZrevrangeCtx(ctx, leaderboardKey, start, stop)
+	total, versionFromScript, rows, err := r.loadPageRows(ctx, contestID, leaderboardKey, start, stop)
 	if err != nil {
-		logger.Errorf("load leaderboard failed: %v", err)
-		return types.LeaderboardPayload{}, appErr.Wrapf(err, appErr.CacheError, "load leaderboard failed")
+		logger.Errorf("load leaderboard page rows failed: %v", err)
+		return types.LeaderboardPayload{}, err
 	}
-	total, err := r.redis.ZcardCtx(ctx, leaderboardKey)
-	if err != nil {
-		logger.Errorf("load leaderboard total failed: %v", err)
-		return types.LeaderboardPayload{}, appErr.Wrapf(err, appErr.CacheError, "load leaderboard total failed")
-	}
-	entries := make([]types.LeaderboardEntry, 0, len(memberIDs))
-	for idx, memberID := range memberIDs {
-		summary, err := r.loadSummary(ctx, contestID, memberID)
+	entries := make([]types.LeaderboardEntry, 0, len(rows))
+	for idx, row := range rows {
+		summary, err := decodeSummary(row.summaryJSON)
 		if err != nil {
+			logger.Errorf("decode summary failed: %v", err)
 			return types.LeaderboardPayload{}, err
 		}
 		if summary == nil {
@@ -351,6 +369,9 @@ func (r *LeaderboardRepository) GetPage(ctx context.Context, contestID string, p
 			Penalty:  summary.Penalty,
 			Detail:   summary.DetailJSON,
 		})
+	}
+	if versionFromScript != "" {
+		version = versionFromScript
 	}
 	payload := types.LeaderboardPayload{
 		Items: entries,
@@ -425,6 +446,44 @@ func (r *LeaderboardRepository) loadSummary(ctx context.Context, contestID, memb
 	}
 	var summary pmodel.LeaderboardSummary
 	if err := json.Unmarshal([]byte(val), &summary); err != nil {
+		return nil, fmt.Errorf("decode summary failed: %w", err)
+	}
+	return &summary, nil
+}
+
+type pageRow struct {
+	summaryJSON string
+}
+
+func (r *LeaderboardRepository) loadPageRows(ctx context.Context, contestID, leaderboardKey string, start, stop int64) (int64, string, []pageRow, error) {
+	raw, err := r.redis.ScriptRunCtx(ctx, rankLoadPageScript, []string{leaderboardKey, metaKey(contestID)}, detailPrefix+contestID+":", start, stop)
+	if err != nil {
+		return 0, "", nil, appErr.Wrapf(err, appErr.CacheError, "load leaderboard page failed")
+	}
+	values, ok := raw.([]any)
+	if !ok || len(values) < 2 {
+		return 0, "", nil, appErr.New(appErr.CacheError).WithMessage("invalid leaderboard page response")
+	}
+	total, err := strconv.ParseInt(fmt.Sprint(values[0]), 10, 64)
+	if err != nil {
+		return 0, "", nil, fmt.Errorf("parse leaderboard total failed: %w", err)
+	}
+	version := fmt.Sprint(values[1])
+	rows := make([]pageRow, 0, (len(values)-2)/2)
+	for i := 2; i+1 < len(values); i += 2 {
+		rows = append(rows, pageRow{
+			summaryJSON: fmt.Sprint(values[i+1]),
+		})
+	}
+	return total, version, rows, nil
+}
+
+func decodeSummary(summaryJSON string) (*pmodel.LeaderboardSummary, error) {
+	if summaryJSON == "" {
+		return nil, nil
+	}
+	var summary pmodel.LeaderboardSummary
+	if err := json.Unmarshal([]byte(summaryJSON), &summary); err != nil {
 		return nil, fmt.Errorf("decode summary failed: %w", err)
 	}
 	return &summary, nil

@@ -199,6 +199,15 @@
   - 响应体：`JudgeStatusResponse`
     - 默认仅返回摘要字段（不包含 `compile`/`tests`）
 
+## Status SSE Service
+
+### StatusSSEController
+
+- **StatusEvents**：订阅单个提交状态实时推送（SSE）
+  - 路径参数：`id`（submission_id）
+  - Query：`include`（string，可选）
+  - 协议：SSE（`snapshot` + `update` + `final`）
+
 ## Rank Service
 
 ### RankController

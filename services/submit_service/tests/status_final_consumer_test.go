@@ -62,3 +62,34 @@ func TestStatusFinalConsumer_ExtractLogsOnly(t *testing.T) {
 		t.Fatalf("consume without log repo failed: %v", err)
 	}
 }
+
+func TestStatusFinalConsumer_MarkDispatchDone(t *testing.T) {
+	model := &fakeSubmissionsModel{}
+	statusRepo := repository.NewStatusRepository(nil, model, time.Minute, time.Minute)
+	dispatchRepo := &fakeDispatchRepo{}
+	handler := consumer.NewDispatchDoneHandler(dispatchRepo)
+	c := consumer.NewStatusFinalConsumer(statusRepo, nil, []consumer.FinalStatusHandler{handler}, consumer.TimeoutConfig{DB: time.Second})
+
+	event := domain.StatusEvent{
+		Type: domain.StatusEventFinal,
+		Status: domain.JudgeStatusPayload{
+			SubmissionID: "sub-final-1",
+			Status:       domain.StatusFinished,
+			Timestamps:   domain.Timestamps{FinishedAt: time.Now().Unix()},
+		},
+		CreatedAt: time.Now().Unix(),
+	}
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal event failed: %v", err)
+	}
+	if err := c.Consume(context.Background(), event.Status.SubmissionID, string(raw)); err != nil {
+		t.Fatalf("consume failed: %v", err)
+	}
+	if len(dispatchRepo.markedDoneSubmission) != 1 {
+		t.Fatalf("expected dispatch mark done once")
+	}
+	if dispatchRepo.markedDoneSubmission[0] != event.Status.SubmissionID {
+		t.Fatalf("unexpected marked submission id: %s", dispatchRepo.markedDoneSubmission[0])
+	}
+}

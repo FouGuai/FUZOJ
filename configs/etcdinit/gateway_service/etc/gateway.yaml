@@ -328,3 +328,15 @@ upstreams:
         path: "/api/v1/contests/:id/leaderboard/ws"
         auth:
           mode: "public"
+
+  - name: "status-sse"
+    http:
+      target: "127.0.0.1:8093"
+      timeout: 0
+    mappings:
+      - name: "status.sse.events"
+        method: "GET"
+        path: "/api/v1/status/submissions/:id/events"
+        auth:
+          mode: "protected"
+          roles: ["user", "problem_setter", "admin", "super_admin"]

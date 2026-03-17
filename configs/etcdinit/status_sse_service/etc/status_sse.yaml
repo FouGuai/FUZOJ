@@ -1,0 +1,29 @@
+Name: status-sse
+Host: 0.0.0.0
+Port: 0
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: status.sse.config
+    runtime: status.sse.rest.runtime
+    log: status.sse.log
+Mysql:
+  DataSource: user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local
+Cache:
+  - Host: 127.0.0.1:6379
+    Type: node
+Redis:
+  Host: 127.0.0.1:6379
+  Type: node
+StatusSSE:
+  OwnerCacheTTL: 5m
+  OwnerCacheEmptyTTL: 1m
+  Debounce: 200ms
+  Heartbeat: 15s
+Timeouts:
+  DB: 2s
+  Cache: 1s
+  SSE: 0s

@@ -1,0 +1,9 @@
+bootstrap:
+  etcd:
+    hosts:
+      - 127.0.0.1:2379
+    key: bootstrap
+  keys:
+    config: status.sse.config
+    runtime: status.sse.rest.runtime
+    log: status.sse.log

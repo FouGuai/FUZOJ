@@ -187,6 +187,24 @@ Value：`host:port`
 }
 ```
 
+### Status SSE Service
+必需字段：
+- `name` `host` `port`（RestConf）
+- `mysql` `cache` `redis` `statusSSE` `timeouts`
+示例：
+```json
+{
+  "name":"status-sse",
+  "host":"0.0.0.0",
+  "port":8093,
+  "mysql":{"dataSource":"user:password@tcp(127.0.0.1:3306)/fuzoj?charset=utf8mb4&parseTime=true&loc=Local"},
+  "cache":[{"host":"127.0.0.1:6379","type":"node"}],
+  "redis":{"host":"127.0.0.1:6379","type":"node"},
+  "statusSSE":{"ownerCacheTTL":"5m","ownerCacheEmptyTTL":"1m","debounce":"200ms","heartbeat":"15s"},
+  "timeouts":{"db":"2s","cache":"1s","sse":"0s"}
+}
+```
+
 ### Contest Service
 必需字段：
 - `name` `host` `port`（RestConf）

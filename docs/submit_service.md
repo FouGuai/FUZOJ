@@ -36,3 +36,5 @@ Kafka 主题必须提前创建（本地可通过 `make start` 自动创建）。
 - `submit.switch`：`{"mode":"rpc|kafka"}`（运行时生效）
 
 源码上传后会在数据库中持久化，并写入 Redis 缓存（TTL 默认 30 分钟，空值缓存默认 5 分钟）。判题状态写入 Redis，前端通过轮询接口获取实时进度；批量查询会返回缺失的 submission_id 列表以降低重复查询成本。
+
+为降低消息乱序与进程异常导致的“提交长期停留未完成”风险，Submit Service 增加了 `submission_dispatch_outbox` 调度表与后台超时回投任务：提交创建时写入待调度记录，若在超时窗口内未收到最终状态，将按场景重投到 Judge 或 Contest 校验队列；最终状态消费成功后会将对应调度记录标记为 done。
