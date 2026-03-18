@@ -57,7 +57,7 @@ Value：`host:port`
   "kafka": {"brokers":["127.0.0.1:9092"],"conns":1,"consumers":2,"processors":2},
   "banEvent": {"enabled":true,"topic":"user.events","consumerGroup":"fuzoj-gateway-bans"},
   "cache": {"banLocalTTL":"30m","banLocalSize":100000,"tokenBlacklistCacheTTL":"2m"},
-  "rateLimit": {"window":"1m","userMax":200,"ipMax":500,"routeMax":1000},
+  "rateLimit": {"window":"1m","userMax":1200000,"ipMax":1200000,"routeMax":1200000,"globalRefillPerSec":20000,"globalCapacity":100000},
   "proxy": {"maxIdleConns":2048,"maxIdleConnsPerHost":256,"idleConnTimeout":"90s","responseHeaderTimeout":"5s","tlsHandshakeTimeout":"5s","dialTimeout":"3s"},
   "cors": {"enabled":true,"allowedOrigins":["*"],"allowedMethods":["GET","POST","PUT","DELETE","PATCH","OPTIONS"],"allowedHeaders":["Authorization","Content-Type","Idempotency-Key","X-Trace-Id"],"exposedHeaders":["X-Trace-Id","X-Request-Id"],"allowCredentials":false,"maxAge":"12h"},
   "upstreams": [

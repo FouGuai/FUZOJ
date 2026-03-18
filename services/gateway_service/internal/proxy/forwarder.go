@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"fuzoj/pkg/errors"
@@ -55,8 +56,47 @@ func NewHTTPForwarder(picker discovery.Picker, target config.HttpClientConf) htt
 		}
 
 		w.WriteHeader(resp.StatusCode)
+		if isStreamResponse(resp) {
+			if err = copyStreamResponse(w, resp.Body); err != nil {
+				logx.WithContext(r.Context()).Errorf("copy upstream stream response failed: %v", err)
+			}
+			return
+		}
 		if _, err = io.Copy(w, resp.Body); err != nil {
 			logx.WithContext(r.Context()).Errorf("copy upstream response failed: %v", err)
+		}
+	}
+}
+
+func isStreamResponse(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
+	return strings.Contains(contentType, "text/event-stream")
+}
+
+func copyStreamResponse(w http.ResponseWriter, body io.Reader) error {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		_, err := io.Copy(w, body)
+		return err
+	}
+
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return nil
+			}
+			return readErr
 		}
 	}
 }

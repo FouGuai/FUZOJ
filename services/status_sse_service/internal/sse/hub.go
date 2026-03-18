@@ -72,6 +72,13 @@ func (h *Hub) Subscribe(ctx context.Context, submissionID string, userID int64, 
 	if err := h.repo.CheckSubmissionOwner(ctx, submissionID, userID); err != nil {
 		return err
 	}
+	return h.SubscribeAuthorized(ctx, submissionID, include, sender)
+}
+
+func (h *Hub) SubscribeAuthorized(ctx context.Context, submissionID string, include string, sender sender) error {
+	if h == nil || h.repo == nil {
+		return errors.New("hub is not configured")
+	}
 	var sub *subscription
 	sub = newSubscription(submissionID, include, sender, h.repo, h.debounce, h.heartbeat, func() {
 		h.removeSub(submissionID, sub)

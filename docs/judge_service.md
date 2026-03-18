@@ -14,3 +14,21 @@
 2) 通过 `ProblemService` gRPC 拉取最新元信息（含 data_pack_key），若本地缓存未命中则从 MinIO 下载数据包并解压（要求 Judge 与 Problem 服务使用同一 MinIO bucket）。
 3) 下载源码到本地工作目录，构造 `JudgeRequest` 交给 Worker 执行。
 4) 结果写入 Redis 状态机，前端通过轮询接口获取实时进度与最终结果。
+
+## 高并发稳定性与一致性说明
+为降低高并发下 `judge -> problem rpc` 的瞬时压力，Judge Service 在 `getProblemMeta` 路径新增了同题请求合并（singleflight 风格）与失败降级策略：
+
+- 同一个 `problem_id` 在同一时刻只发起一次 Problem RPC，其他并发判题请求等待该结果。
+- 若 RPC 临时失败且本地存在该题目的缓存元信息，则允许回退到 stale meta，避免整批提交直接进入 `Failed(SE)`。
+
+该机制的边界如下：
+
+- singleflight 仅在**单个 Judge Service 进程内**生效，不是跨实例共享。多实例部署时，每个实例仍会各自维护本地 in-flight 与本地缓存。
+- 不同判题请求可以共享同一个 problem meta 结果（同实例内），因为这些请求读取的是同一题目的“最新已发布元信息”。
+- stale meta 只在上游 RPC 故障时启用，目的是优先保证服务可用性；在题目刚发布新版本且 RPC 故障的窗口期，可能短时间使用上一版本数据包。
+
+一致性建议：
+
+1) 当前实现偏向“可用性优先”。如需更强一致，可在提交消息中固化 `problem_version/data_pack_key/hash`，Judge 按提交快照判题，避免读取“最新版本”带来的窗口差异。
+2) 保持 `MetaTTL` 合理（默认 30s），避免缓存过旧；发布高频场景可下调 TTL 并配合发布后主动失效。
+3) 结合日志监控 `circuit breaker is open`、Problem RPC 延迟与失败率，评估是否需要扩容 Problem Service 或调大 RPC 超时。

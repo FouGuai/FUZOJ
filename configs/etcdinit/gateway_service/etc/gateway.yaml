@@ -59,11 +59,11 @@ cache:
 
 rateLimit:
   window: 1m
-  userMax: 200
-  ipMax: 500
-  routeMax: 1000
-  globalRefillPerSec: 10000
-  globalCapacity: 50000
+  userMax: 1200000
+  ipMax: 1200000
+  routeMax: 1200000
+  globalRefillPerSec: 20000
+  globalCapacity: 100000
 
 proxy:
   maxIdleConns: 2048

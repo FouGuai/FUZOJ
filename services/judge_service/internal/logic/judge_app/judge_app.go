@@ -43,11 +43,18 @@ type JudgeApp struct {
 
 	metaMu    sync.Mutex
 	metaCache map[int64]metaEntry
+	metaCalls map[int64]*metaCall
 }
 
 type metaEntry struct {
 	meta      pmodel.ProblemMeta
 	expiresAt time.Time
+}
+
+type metaCall struct {
+	done chan struct{}
+	meta pmodel.ProblemMeta
+	err  error
 }
 
 // JudgeAppConfig holds processor dependencies and settings.
@@ -120,6 +127,7 @@ func NewJudgeApp(cfg JudgeAppConfig) (*JudgeApp, error) {
 		deadLetter:     cfg.DeadLetter,
 		sem:            make(chan struct{}, poolSize),
 		metaCache:      make(map[int64]metaEntry),
+		metaCalls:      make(map[int64]*metaCall),
 	}
 	if svc.worker != nil {
 		svc.worker.SetStatusReporter(svc)

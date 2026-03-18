@@ -17,8 +17,8 @@ const (
 	defaultBanLocalSize           = 100000
 	defaultTokenBlacklistCacheTTL = 2 * time.Minute
 	defaultRateWindow             = time.Minute
-	defaultGlobalRefillPerSec     = 10000
-	defaultGlobalCapacity         = 50000
+	defaultGlobalRefillPerSec     = 20000
+	defaultGlobalCapacity         = 100000
 )
 
 // AuthConfig holds JWT settings.

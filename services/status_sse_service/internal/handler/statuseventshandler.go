@@ -36,6 +36,14 @@ func StatusEventsHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			handlerx.WriteError(w, r, err)
 			return
 		}
+		if svcCtx.StatusRepo == nil {
+			handlerx.WriteError(w, r, appErr.New(appErr.ServiceUnavailable).WithMessage("status repository is not configured"))
+			return
+		}
+		if err := svcCtx.StatusRepo.CheckSubmissionOwner(r.Context(), req.Id, userID); err != nil {
+			handlerx.WriteError(w, r, err)
+			return
+		}
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
@@ -51,7 +59,7 @@ func StatusEventsHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		flusher.Flush()
 
 		sender := sse.NewSender(w, flusher)
-		if err := svcCtx.Hub.Subscribe(r.Context(), req.Id, userID, req.Include, sender); err != nil {
+		if err := svcCtx.Hub.SubscribeAuthorized(r.Context(), req.Id, req.Include, sender); err != nil {
 			logx.WithContext(r.Context()).Errorf("subscribe status sse failed: %v", err)
 			return
 		}

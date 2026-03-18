@@ -1,10 +1,13 @@
 package gateway_test
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -189,6 +192,85 @@ func TestGatewayForwardingRoundRobin(t *testing.T) {
 
 	if atomic.LoadInt32(&hitA) == 0 || atomic.LoadInt32(&hitB) == 0 {
 		t.Fatalf("expected requests to hit both upstreams, got A=%d B=%d", hitA, hitB)
+	}
+}
+
+func TestGatewayForwardingSSEStreamFlushesPromptly(t *testing.T) {
+	secret := "test-secret"
+	issuer := "fuzoj"
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		_, _ = io.WriteString(w, "event: snapshot\n")
+		_, _ = io.WriteString(w, "data: {\"data\":{\"status\":\"Compiling\"}}\n\n")
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		time.Sleep(500 * time.Millisecond)
+	}))
+	defer upstream.Close()
+
+	port := pickFreePort(t)
+	matcher := middleware.NewPolicyMatcher()
+	matcher.AddExact(http.MethodGet, "/api/v1/status/submissions/:id/events", middleware.RoutePolicy{
+		Name: "status.sse.events",
+		Path: "/api/v1/status/submissions/:id/events",
+		Auth: middleware.AuthPolicy{Mode: "protected", Roles: []string{"admin"}},
+	})
+
+	authService := service.NewAuthService(secret, issuer, nil, nil)
+	server := rest.MustNewServer(rest.RestConf{Host: "127.0.0.1", Port: port})
+	defer server.Stop()
+	server.Use(middleware.TraceMiddleware())
+	server.Use(middleware.RoutePolicyMiddleware(matcher))
+	server.Use(middleware.AuthMiddleware(authService))
+	server.Use(middleware.RouteMiddleware())
+
+	picker := discovery.NewRoundRobinPicker([]string{upstream.Listener.Addr().String()})
+	handler := proxy.NewHTTPForwarder(picker, config.HttpClientConf{Prefix: "", Timeout: 0})
+	server.AddRoutes([]rest.Route{
+		{Method: http.MethodGet, Path: "/api/v1/status/submissions/:id/events", Handler: handler},
+	})
+	go server.Start()
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/api/v1/status/submissions/abc/events", port)
+	if err := waitForGateway(url, 2*time.Second); err != nil {
+		t.Fatalf("gateway not ready: %v", err)
+	}
+
+	token := newAccessToken(t, secret, issuer, 42, "admin", 5*time.Minute)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("build request failed: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read sse line failed: %v", err)
+	}
+	if !strings.HasPrefix(line, "event: snapshot") {
+		t.Fatalf("unexpected first sse line: %q", line)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatalf("sse first frame arrived too late: %s", time.Since(start))
 	}
 }
 
