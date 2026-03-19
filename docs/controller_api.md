@@ -52,6 +52,7 @@
 ### ProblemUploadController
 
 - **Prepare**：创建或复用上传会话，返回上传所需信息
+  - 路由：`POST /api/v1/problems/:id/data-pack/uploads:prepare`
   - Header：`Idempotency-Key`（必填）
   - 路径参数：`id`（problem_id）
   - 请求体：`PrepareUploadRequest`
@@ -183,6 +184,7 @@
 ### JudgeController
 
 - **GetStatus**：获取单个提交状态（判题服务视角）
+  - 路由：`GET /api/v1/judge/submissions/:id`
   - 路径参数：`id`（submission_id）
   - 响应体：`JudgeStatusResponse`
     - `compile.Log`（string）：编译日志文本（最大 64KB，超出截断）
@@ -204,6 +206,7 @@
 ### StatusSSEController
 
 - **StatusEvents**：订阅单个提交状态实时推送（SSE）
+  - 路由：`GET /api/v1/status/submissions/:id/events`
   - 路径参数：`id`（submission_id）
   - Query：`include`（string，可选）
   - 协议：SSE（`snapshot` + `update` + `final`）
@@ -353,20 +356,3 @@
 - **AnnouncementList**：公告列表
   - 路径参数：`id`（contest_id）
   - 请求参数：`page`、`page_size`
-
-## Rank Service
-
-### RankController
-
-- **Leaderboard**：获取比赛排行榜分页
-  - 路径参数：`id`（contest_id）
-  - Query：`page` `page_size` `mode`(live|frozen)
-  - 响应体：`LeaderboardResponse`
-    - `items`（[]LeaderboardEntry）
-    - `page`（PageInfo）
-    - `version`（string）
-
-- **LeaderboardWS**：订阅排行榜分页增量推送
-  - 路径：`GET /api/v1/contests/:id/leaderboard/ws`
-  - Query：`page` `page_size` `mode`
-  - 推送：`snapshot` 首包 + `refresh` 更新包
