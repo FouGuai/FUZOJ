@@ -15,6 +15,8 @@ import (
 
 func TestPublishVersionHandler(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
+		var publishedProblemID int64
+		var publishedVersion int32
 		statementRepo := &fakeStatementRepo{
 			existsFn: func(ctx context.Context, session sqlx.Session, problemID int64, version int32) (bool, error) {
 				return true, nil
@@ -26,6 +28,43 @@ func TestPublishVersionHandler(t *testing.T) {
 			},
 		}
 		ctx := newTestServiceContext(&fakeProblemRepo{}, statementRepo, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx.MetaPublisher = &fakeMetaPublisher{
+			publishFn: func(ctx context.Context, problemID int64, version int32) error {
+				publishedProblemID = problemID
+				publishedVersion = version
+				return nil
+			},
+		}
+		rr := doRequest(t, handler.PublishVersionHandler(ctx), http.MethodPost, "/api/v1/problems/1/versions/2/publish", nil, nil, map[string]string{"id": "1", "version": "2"})
+		if rr.Code != http.StatusOK {
+			t.Fatalf("unexpected status: %d", rr.Code)
+		}
+		resp := decodeJSON[errorResponse](t, rr.Body)
+		if resp.Code != int(pkgerrors.Success) {
+			t.Fatalf("unexpected response: %+v", resp)
+		}
+		if publishedProblemID != 1 || publishedVersion != 2 {
+			t.Fatalf("unexpected invalidation publish: problem_id=%d version=%d", publishedProblemID, publishedVersion)
+		}
+	})
+
+	t.Run("publish invalidation failure does not fail request", func(t *testing.T) {
+		statementRepo := &fakeStatementRepo{
+			existsFn: func(ctx context.Context, session sqlx.Session, problemID int64, version int32) (bool, error) {
+				return true, nil
+			},
+		}
+		uploadRepo := &fakeUploadRepo{
+			publishVersionFn: func(ctx context.Context, session sqlx.Session, problemID int64, version int32) error {
+				return nil
+			},
+		}
+		ctx := newTestServiceContext(&fakeProblemRepo{}, statementRepo, uploadRepo, &fakeStorage{}, defaultTestConfig())
+		ctx.MetaPublisher = &fakeMetaPublisher{
+			publishFn: func(ctx context.Context, problemID int64, version int32) error {
+				return errors.New("pubsub unavailable")
+			},
+		}
 		rr := doRequest(t, handler.PublishVersionHandler(ctx), http.MethodPost, "/api/v1/problems/1/versions/2/publish", nil, nil, map[string]string{"id": "1", "version": "2"})
 		if rr.Code != http.StatusOK {
 			t.Fatalf("unexpected status: %d", rr.Code)

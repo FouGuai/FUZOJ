@@ -135,6 +135,16 @@ func NewJudgeApp(cfg JudgeAppConfig) (*JudgeApp, error) {
 	return svc, nil
 }
 
+// InvalidateProblemMeta drops a cached latest-meta entry so the next request refetches it.
+func (s *JudgeApp) InvalidateProblemMeta(problemID int64) {
+	if s == nil || problemID <= 0 {
+		return
+	}
+	s.metaMu.Lock()
+	delete(s.metaCache, problemID)
+	s.metaMu.Unlock()
+}
+
 // HandleMessage processes a judge task message.
 func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessage) error {
 	if payload.SubmissionID == "" || payload.ProblemID <= 0 || payload.LanguageID == "" || payload.SourceKey == "" {

@@ -32,6 +32,7 @@ type problemApp struct {
 	uploadRepo        repository.ProblemUploadRepository
 	storage           storage.ObjectStorage
 	cleanupPublisher  cleanupPublisher
+	metaPublisher     metaInvalidationPublisher
 	bucket            string
 	keyPrefix         string
 	partSizeBytes     int64
@@ -42,6 +43,10 @@ type problemApp struct {
 
 type cleanupPublisher interface {
 	PublishProblemDeleted(ctx context.Context, problemID int64) error
+}
+
+type metaInvalidationPublisher interface {
+	PublishProblemMetaInvalidated(ctx context.Context, problemID int64, version int32) error
 }
 
 type CreateInput struct {
@@ -115,7 +120,7 @@ type PublishInput struct {
 	Version   int32
 }
 
-func newProblemApp(repo repository.ProblemRepository, statementRepo repository.ProblemStatementRepository, uploadRepo repository.ProblemUploadRepository, storageClient storage.ObjectStorage, publisher cleanupPublisher, conn sqlx.SqlConn, bucket string, keyPrefix string, partSizeBytes int64, sessionTTL, presignTTL time.Duration, statementMaxBytes int) *problemApp {
+func newProblemApp(repo repository.ProblemRepository, statementRepo repository.ProblemStatementRepository, uploadRepo repository.ProblemUploadRepository, storageClient storage.ObjectStorage, publisher cleanupPublisher, metaPublisher metaInvalidationPublisher, conn sqlx.SqlConn, bucket string, keyPrefix string, partSizeBytes int64, sessionTTL, presignTTL time.Duration, statementMaxBytes int) *problemApp {
 	if keyPrefix == "" {
 		keyPrefix = defaultUploadKeyPrefix
 	}
@@ -135,6 +140,7 @@ func newProblemApp(repo repository.ProblemRepository, statementRepo repository.P
 		uploadRepo:        uploadRepo,
 		storage:           storageClient,
 		cleanupPublisher:  publisher,
+		metaPublisher:     metaPublisher,
 		bucket:            bucket,
 		keyPrefix:         keyPrefix,
 		partSizeBytes:     partSizeBytes,
@@ -523,6 +529,11 @@ func (m *problemApp) PublishVersion(ctx context.Context, input PublishInput) err
 	_ = m.repo.InvalidateLatestMetaCache(ctx, input.ProblemID)
 	if m.statementRepo != nil {
 		_ = m.statementRepo.InvalidateLatestCache(ctx, input.ProblemID)
+	}
+	if m.metaPublisher != nil {
+		if err := m.metaPublisher.PublishProblemMetaInvalidated(ctx, input.ProblemID, input.Version); err != nil {
+			logx.WithContext(ctx).Errorf("publish problem meta invalidation failed problem_id=%d version=%d err=%v", input.ProblemID, input.Version, err)
+		}
 	}
 	return nil
 }

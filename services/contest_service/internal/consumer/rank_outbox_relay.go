@@ -12,6 +12,7 @@ import (
 
 	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 type RankOutboxRelayOptions struct {
@@ -35,6 +36,7 @@ type RankOutboxRelayOptions struct {
 type RankOutboxRelay struct {
 	repo    *repository.RankOutboxRepository
 	pusher  *kq.Pusher
+	redis   *redis.Redis
 	options RankOutboxRelayOptions
 	stopCh  chan struct{}
 	once    sync.Once
@@ -43,9 +45,10 @@ type RankOutboxRelay struct {
 const (
 	rankOutboxBacklogWarnThreshold = 2 * time.Second
 	rankOutboxPublishWarnThreshold = 500 * time.Millisecond
+	rankOutboxLockKeyPrefix        = "contest:rank:outbox:lock:"
 )
 
-func NewRankOutboxRelay(repo *repository.RankOutboxRepository, pusher *kq.Pusher, options RankOutboxRelayOptions) *RankOutboxRelay {
+func NewRankOutboxRelay(repo *repository.RankOutboxRepository, pusher *kq.Pusher, redisClient *redis.Redis, options RankOutboxRelayOptions) *RankOutboxRelay {
 	if options.OwnerID == "" {
 		host, _ := os.Hostname()
 		options.OwnerID = fmt.Sprintf("%s-%d", host, time.Now().UnixNano())
@@ -86,6 +89,7 @@ func NewRankOutboxRelay(repo *repository.RankOutboxRepository, pusher *kq.Pusher
 	return &RankOutboxRelay{
 		repo:    repo,
 		pusher:  pusher,
+		redis:   redisClient,
 		options: options,
 		stopCh:  make(chan struct{}),
 	}
@@ -130,7 +134,7 @@ func (r *RankOutboxRelay) run(ctx context.Context) {
 
 		processedAny := false
 		for _, contestID := range contests {
-			locked, err := r.acquireLease(ctx, contestID)
+			lock, locked, err := r.acquireLease(ctx, contestID)
 			if err != nil {
 				logger.Errorf("acquire contest lease failed, contest=%s err=%v", contestID, err)
 				continue
@@ -138,8 +142,8 @@ func (r *RankOutboxRelay) run(ctx context.Context) {
 			if !locked {
 				continue
 			}
-			processed, err := r.processContest(ctx, contestID)
-			releaseErr := r.releaseLease(ctx, contestID)
+			processed, err := r.processContest(ctx, contestID, lock)
+			releaseErr := r.releaseLease(ctx, lock)
 			if releaseErr != nil {
 				logger.Errorf("release contest lease failed, contest=%s err=%v", contestID, releaseErr)
 			}
@@ -165,14 +169,14 @@ func (r *RankOutboxRelay) Stop() {
 	})
 }
 
-func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string) (bool, error) {
+func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string, lock *redis.RedisLock) (bool, error) {
 	logger := logx.WithContext(ctx)
 	processedAny := false
 	lastRenew := time.Now()
 
 	for {
 		if time.Since(lastRenew) >= r.options.LeaseRenewInterval {
-			if err := r.renewLease(ctx, contestID); err != nil {
+			if err := r.renewLease(ctx, contestID, lock); err != nil {
 				return processedAny, err
 			}
 			lastRenew = time.Now()
@@ -287,22 +291,45 @@ func (r *RankOutboxRelay) listPendingContests(ctx context.Context, now time.Time
 	return r.repo.ListPendingContests(ctxDB.ctx, now, r.options.ContestScanBatch)
 }
 
-func (r *RankOutboxRelay) acquireLease(ctx context.Context, contestID string) (bool, error) {
-	ctxDB := withTimeout(ctx, r.options.DBTimeout)
-	defer ctxDB.cancel()
-	return r.repo.AcquireContestLease(ctxDB.ctx, contestID, r.options.OwnerID, r.options.LeaseDuration)
+func (r *RankOutboxRelay) acquireLease(ctx context.Context, contestID string) (*redis.RedisLock, bool, error) {
+	if r.redis == nil {
+		return nil, false, fmt.Errorf("redis is not configured")
+	}
+	lock := redis.NewRedisLock(r.redis, buildRankOutboxLockKey(contestID))
+	lock.SetExpire(lockExpireSeconds(r.options.LeaseDuration))
+	ctxLock := withTimeout(ctx, r.options.DBTimeout)
+	ok, err := lock.AcquireCtx(ctxLock.ctx)
+	ctxLock.cancel()
+	if err != nil {
+		return nil, false, err
+	}
+	return lock, ok, nil
 }
 
-func (r *RankOutboxRelay) renewLease(ctx context.Context, contestID string) error {
-	ctxDB := withTimeout(ctx, r.options.DBTimeout)
-	defer ctxDB.cancel()
-	return r.repo.RenewContestLease(ctxDB.ctx, contestID, r.options.OwnerID, r.options.LeaseDuration)
+func (r *RankOutboxRelay) renewLease(ctx context.Context, contestID string, lock *redis.RedisLock) error {
+	if lock == nil {
+		return fmt.Errorf("lock is required for contest %s", contestID)
+	}
+	ctxLock := withTimeout(ctx, r.options.DBTimeout)
+	ok, err := lock.AcquireCtx(ctxLock.ctx)
+	ctxLock.cancel()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("renew contest lease failed, contest=%s", contestID)
+	}
+	return nil
 }
 
-func (r *RankOutboxRelay) releaseLease(ctx context.Context, contestID string) error {
-	ctxDB := withTimeout(ctx, r.options.DBTimeout)
-	defer ctxDB.cancel()
-	return r.repo.ReleaseContestLease(ctxDB.ctx, contestID, r.options.OwnerID)
+func (r *RankOutboxRelay) releaseLease(ctx context.Context, lock *redis.RedisLock) error {
+	if lock == nil {
+		return nil
+	}
+	ctxLock := withTimeout(ctx, r.options.DBTimeout)
+	_, err := lock.ReleaseCtx(ctxLock.ctx)
+	ctxLock.cancel()
+	return err
 }
 
 func (r *RankOutboxRelay) claimByContest(ctx context.Context, contestID string) ([]repository.RankOutboxEvent, error) {
@@ -343,4 +370,22 @@ func countFailed(groups map[int][]int64) int {
 		total += len(ids)
 	}
 	return total
+}
+
+func buildRankOutboxLockKey(contestID string) string {
+	return rankOutboxLockKeyPrefix + contestID
+}
+
+func lockExpireSeconds(duration time.Duration) int {
+	if duration <= 0 {
+		return 1
+	}
+	seconds := int(duration / time.Second)
+	if duration%time.Second != 0 {
+		seconds++
+	}
+	if seconds <= 0 {
+		return 1
+	}
+	return seconds
 }

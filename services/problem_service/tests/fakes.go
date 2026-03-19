@@ -307,3 +307,18 @@ func (f *fakeCleanupPublisher) PublishProblemDeleted(ctx context.Context, proble
 	}
 	return f.publishFn(ctx, problemID)
 }
+
+type fakeMetaPublisher struct {
+	publishFn func(ctx context.Context, problemID int64, version int32) error
+}
+
+func (f *fakeMetaPublisher) PublishProblemMetaInvalidated(ctx context.Context, problemID int64, version int32) error {
+	if f.publishFn == nil {
+		return nil
+	}
+	return f.publishFn(ctx, problemID, version)
+}
+
+func (f *fakeMetaPublisher) Close() error {
+	return nil
+}

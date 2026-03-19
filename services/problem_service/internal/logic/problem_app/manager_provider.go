@@ -14,7 +14,7 @@ type ProblemApp interface {
 
 func NewProblemAppFromContext(svcCtx *svc.ServiceContext) *problemApp {
 	if svcCtx == nil {
-		return newProblemApp(nil, nil, nil, nil, nil, nil, "", "", 0, 0, 0, 0)
+		return newProblemApp(nil, nil, nil, nil, nil, nil, nil, "", "", 0, 0, 0, 0)
 	}
 	return newProblemApp(
 		svcCtx.ProblemRepo,
@@ -22,6 +22,7 @@ func NewProblemAppFromContext(svcCtx *svc.ServiceContext) *problemApp {
 		svcCtx.UploadRepo,
 		svcCtx.Storage,
 		svcCtx.CleanupPublisher,
+		svcCtx.MetaPublisher,
 		svcCtx.Conn,
 		svcCtx.Config.MinIO.Bucket,
 		svcCtx.Config.Upload.KeyPrefix,

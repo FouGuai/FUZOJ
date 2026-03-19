@@ -134,6 +134,9 @@ func main() {
 	if ctx.CleanupPublisher != nil {
 		defer ctx.CleanupPublisher.Close()
 	}
+	if ctx.MetaPublisher != nil {
+		defer ctx.MetaPublisher.Close()
+	}
 	if ctx.DeadLetterPusher != nil {
 		defer ctx.DeadLetterPusher.Close()
 	}

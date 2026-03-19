@@ -4,13 +4,17 @@
 package svc
 
 import (
+	"context"
 	"database/sql"
 
 	"fuzoj/internal/common/storage"
+	"fuzoj/pkg/problem/metapubsub"
 	"fuzoj/services/problem_service/internal/config"
 	"fuzoj/services/problem_service/internal/logic/cleanup"
+	"fuzoj/services/problem_service/internal/metainvalidation"
 	"fuzoj/services/problem_service/internal/repository"
 
+	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-queue/kq"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/queue"
@@ -30,7 +34,13 @@ type ServiceContext struct {
 	CleanupQueue     queue.MessageQueue
 	CleanupConsumer  *cleanup.ProblemCleanupConsumer
 	CleanupPublisher *cleanup.ProblemCleanupPublisher
+	MetaPublisher    MetaPublisher
 	DeadLetterPusher *kq.Pusher
+}
+
+type MetaPublisher interface {
+	PublishProblemMetaInvalidated(ctx context.Context, problemID int64, version int32) error
+	Close() error
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
@@ -63,6 +73,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 	statementRepo := repository.NewProblemStatementRepositoryWithTTL(conn, cacheClient, statementLocal, c.Statement.RedisTTL, c.Statement.EmptyTTL)
 	uploadRepo := repository.NewProblemUploadRepository(conn)
+	metaPublisher := metainvalidation.NewPublisher(metainvalidationClient(c))
 
 	var cleanupConsumer *cleanup.ProblemCleanupConsumer
 	var cleanupQueue queue.MessageQueue
@@ -107,6 +118,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		CleanupQueue:     cleanupQueue,
 		CleanupConsumer:  cleanupConsumer,
 		CleanupPublisher: cleanupPublisher,
+		MetaPublisher:    metaPublisher,
 		DeadLetterPusher: deadLetterPusher,
 	}
+}
+
+func metainvalidationClient(c config.Config) *red.Client {
+	return metapubsub.NewClient(c.Redis)
 }

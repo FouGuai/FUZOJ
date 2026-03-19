@@ -29,7 +29,7 @@ type JudgeConsumerLogic struct {
 }
 
 func NewJudgeConsumerLogic(ctx context.Context, svcCtx *svc.ServiceContext) *JudgeConsumerLogic {
-	processor := newJudgeAppFromSvc(svcCtx)
+	processor := NewJudgeAppFromServiceContext(svcCtx)
 	if svcCtx == nil {
 		return &JudgeConsumerLogic{
 			Logger:    logx.WithContext(ctx),
@@ -103,9 +103,12 @@ func (l *JudgeConsumerLogic) Consume(ctx context.Context, key, value string) err
 	return nil
 }
 
-func newJudgeAppFromSvc(svcCtx *svc.ServiceContext) *judge_app.JudgeApp {
+func NewJudgeAppFromServiceContext(svcCtx *svc.ServiceContext) *judge_app.JudgeApp {
 	if svcCtx == nil {
 		return nil
+	}
+	if svcCtx.JudgeApp != nil {
+		return svcCtx.JudgeApp
 	}
 	cfg := judge_app.JudgeAppConfig{
 		Worker:         svcCtx.Worker,
@@ -134,5 +137,6 @@ func newJudgeAppFromSvc(svcCtx *svc.ServiceContext) *judge_app.JudgeApp {
 		logx.Errorf("init judge processor failed: %v", err)
 		return nil
 	}
+	svcCtx.JudgeApp = processor
 	return processor
 }

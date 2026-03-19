@@ -7,6 +7,7 @@ import (
 	"fuzoj/internal/common/storage"
 	"fuzoj/services/judge_service/internal/cache"
 	"fuzoj/services/judge_service/internal/config"
+	"fuzoj/services/judge_service/internal/logic/judge_app"
 	"fuzoj/services/judge_service/internal/model"
 	"fuzoj/services/judge_service/internal/problemclient"
 	"fuzoj/services/judge_service/internal/repository"
@@ -19,20 +20,21 @@ import (
 )
 
 type ServiceContext struct {
-	Config           config.Config
-	Conn             sqlx.SqlConn
-	SubmissionsModel model.SubmissionsModel
-	StatusCache      *redis.Redis
-	StatusPublisher  repository.StatusEventPublisher
+	Config             config.Config
+	Conn               sqlx.SqlConn
+	SubmissionsModel   model.SubmissionsModel
+	StatusCache        *redis.Redis
+	StatusPublisher    repository.StatusEventPublisher
 	FinalStatusBatcher *repository.FinalStatusBatcher
-	StatusRepo       *repository.StatusRepository
-	Worker           *sandbox.Worker
-	ProblemClient    *problemclient.Client
-	DataCache        *cache.DataPackCache
-	Storage          storage.ObjectStorage
-	StatusPusher     *kq.Pusher
-	RetryPusher      *kq.Pusher
-	DeadLetterPusher *kq.Pusher
+	StatusRepo         *repository.StatusRepository
+	Worker             *sandbox.Worker
+	ProblemClient      *problemclient.Client
+	JudgeApp           *judge_app.JudgeApp
+	DataCache          *cache.DataPackCache
+	Storage            storage.ObjectStorage
+	StatusPusher       *kq.Pusher
+	RetryPusher        *kq.Pusher
+	DeadLetterPusher   *kq.Pusher
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {

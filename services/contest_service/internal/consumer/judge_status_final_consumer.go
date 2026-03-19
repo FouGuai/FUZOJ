@@ -11,6 +11,7 @@ import (
 	"fuzoj/pkg/contest/eligibility"
 	contestRepo "fuzoj/pkg/contest/repository"
 	"fuzoj/pkg/contest/score"
+	dbutil "fuzoj/internal/common/db"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/contest_service/internal/pmodel"
 	"fuzoj/services/contest_service/internal/repository"
@@ -24,6 +25,7 @@ import (
 const (
 	rankIdemKeyPrefix = "contest:rank:idem:"
 	rankResultIDKey   = "contest:rank:result:id:"
+	rankOutboxEventKeyPrefix = "contest:rank:outbox:"
 )
 
 // JudgeFinalConsumer processes final judge status messages for contest ranking.
@@ -32,7 +34,7 @@ type JudgeFinalConsumer struct {
 	redis             *redis.Redis
 	contestRepo       contestRepo.ContestRepository
 	eligibilitySvc    *eligibility.Service
-	rankUpdatePusher  *kq.Pusher
+	rankOutboxRepo    *repository.RankOutboxRepository
 	deadLetterPusher  *kq.Pusher
 	opts              JudgeFinalOptions
 	timeouts          TimeoutConfig
@@ -55,8 +57,7 @@ func NewJudgeFinalConsumer(
 	eligibilityService *eligibility.Service,
 	_ *repository.MemberProblemRepository,
 	_ *repository.MemberSummaryRepository,
-	_ *repository.RankOutboxRepository,
-	rankUpdatePusher *kq.Pusher,
+	rankOutboxRepo *repository.RankOutboxRepository,
 	opts JudgeFinalOptions,
 	timeouts TimeoutConfig,
 ) *JudgeFinalConsumer {
@@ -74,7 +75,7 @@ func NewJudgeFinalConsumer(
 		redis:             redisClient,
 		contestRepo:       contestRepository,
 		eligibilitySvc:    eligibilityService,
-		rankUpdatePusher:  rankUpdatePusher,
+		rankOutboxRepo:    rankOutboxRepo,
 		opts:              opts,
 		timeouts:          timeouts,
 	}
@@ -91,7 +92,7 @@ func (c *JudgeFinalConsumer) Consume(ctx context.Context, key, value string) err
 		return nil
 	}
 	logger := logx.WithContext(ctx)
-	if c == nil || c.conn == nil || c.contestRepo == nil || c.eligibilitySvc == nil || c.rankUpdatePusher == nil {
+	if c == nil || c.conn == nil || c.contestRepo == nil || c.eligibilitySvc == nil || c.rankOutboxRepo == nil {
 		logger.Error("judge final consumer is not configured")
 		return appErr.New(appErr.ServiceUnavailable).WithMessage("judge final consumer is not configured")
 	}
@@ -153,11 +154,12 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 		}
 	}
 
+	finishedAt := status.Timestamps.FinishedAt
+	if finishedAt <= 0 {
+		finishedAt = event.CreatedAt
+	}
+
 	if c.redis != nil {
-		finishedAt := status.Timestamps.FinishedAt
-		if finishedAt <= 0 {
-			finishedAt = event.CreatedAt
-		}
 		idemKey = rankIdemKeyPrefix + status.SubmissionID + ":" + fmt.Sprint(finishedAt)
 		ok, err := c.redis.SetnxExCtx(ctx, idemKey, "1", ttlSeconds(c.opts.IdempotencyTTL))
 		if err != nil {
@@ -208,6 +210,7 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 	err = c.conn.TransactCtx(ctx, func(ctx context.Context, session sqlx.Session) error {
 		memberProblemRepo := repository.NewMemberProblemRepository(session)
 		memberSummaryRepo := repository.NewMemberSummaryRepository(session)
+		outboxRepo := repository.NewRankOutboxRepository(session)
 
 		memberID := status.UserID
 		problemID := status.ProblemID
@@ -318,23 +321,27 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 			ResultID:   resultID,
 			UpdatedAt:  summary.UpdatedAt.Unix(),
 		}
+		payload, err := json.Marshal(update)
+		if err != nil {
+			return fmt.Errorf("marshal rank update failed: %w", err)
+		}
+		outboxEvent := repository.RankOutboxEvent{
+			ContestID: status.ContestID,
+			EventKey:  buildRankOutboxEventKey(status.ContestID, status.SubmissionID, finishedAt),
+			KafkaKey:  status.ContestID,
+			Payload:   string(payload),
+		}
+		if err := outboxRepo.Enqueue(ctx, outboxEvent); err != nil {
+			if key, ok := dbutil.UniqueViolation(err); ok && key == "contest_rank_outbox_event_key_uq" {
+				return nil
+			}
+			return fmt.Errorf("enqueue rank outbox failed: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-
-	payload, err := json.Marshal(update)
-	if err != nil {
-		return fmt.Errorf("marshal rank update failed: %w", err)
-	}
-	ctxPush := withTimeout(ctx, c.timeouts.MQ)
-	defer ctxPush.cancel()
-	if err := c.rankUpdatePusher.PushWithKey(ctxPush.ctx, status.ContestID, string(payload)); err != nil {
-		logger.Errorf("push rank update failed contest=%s member=%s result_id=%d err=%v", status.ContestID, status.UserID, resultID, err)
-		return fmt.Errorf("push rank update failed: %w", err)
-	}
-
 	return nil
 }
 
@@ -408,4 +415,8 @@ func submissionTime(status pmodel.JudgeStatusResponse) time.Time {
 		return time.Unix(status.Timestamps.ReceivedAt, 0)
 	}
 	return time.Now()
+}
+
+func buildRankOutboxEventKey(contestID, submissionID string, finishedAt int64) string {
+	return fmt.Sprintf("%s%s:%s:%d", rankOutboxEventKeyPrefix, contestID, submissionID, finishedAt)
 }

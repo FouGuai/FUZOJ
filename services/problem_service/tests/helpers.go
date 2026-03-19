@@ -30,6 +30,7 @@ func newTestServiceContext(problemRepo repository.ProblemRepository, statementRe
 		ProblemRepo:   problemRepo,
 		StatementRepo: statementRepo,
 		UploadRepo:    uploadRepo,
+		MetaPublisher: &fakeMetaPublisher{},
 		Conn:          nil,
 	}
 	ctx.Storage = storage

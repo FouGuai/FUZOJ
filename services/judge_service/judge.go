@@ -12,11 +12,13 @@ import (
 	"fuzoj/internal/common/mq/weighted_kq"
 	"fuzoj/internal/common/storage"
 	"fuzoj/pkg/bootstrap"
+	"fuzoj/pkg/problem/metapubsub"
 	"fuzoj/pkg/submit/statuspubsub"
 	"fuzoj/services/judge_service/internal/cache"
 	"fuzoj/services/judge_service/internal/config"
 	"fuzoj/services/judge_service/internal/handler"
 	"fuzoj/services/judge_service/internal/logic"
+	"fuzoj/services/judge_service/internal/metainvalidation"
 	"fuzoj/services/judge_service/internal/problemclient"
 	"fuzoj/services/judge_service/internal/repository"
 	"fuzoj/services/judge_service/internal/sandbox"
@@ -204,6 +206,15 @@ func main() {
 
 	problemClient := problemclient.NewClient(problemv1.NewProblemServiceClient(rpcClient.Conn()))
 	ctx.ProblemClient = problemClient
+	ctx.JudgeApp = logic.NewJudgeAppFromServiceContext(ctx)
+	if ctx.JudgeApp == nil {
+		logx.Error("init judge app failed")
+		return
+	}
+
+	metaSub := metainvalidation.NewSubscriber(metapubsub.NewClient(c.Redis), ctx.JudgeApp)
+	metaSub.Start(context.Background())
+	defer metaSub.Stop()
 
 	go startConsumerLoop(ctx, &c)
 	handler.RegisterHandlers(server, ctx)

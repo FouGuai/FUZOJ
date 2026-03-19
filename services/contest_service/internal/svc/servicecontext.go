@@ -141,7 +141,6 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			memberProblemRepo,
 			memberSummaryRepo,
 			rankOutboxRepo,
-			rankUpdatePusher,
 			consumer.JudgeFinalOptions{
 				IdempotencyTTL:  c.JudgeFinal.IdempotencyTTL,
 				MessageTTL:      c.JudgeFinal.MessageTTL,
@@ -162,8 +161,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	var rankOutboxRelay *consumer.RankOutboxRelay
-	if rankOutboxRepo != nil && rankUpdatePusher != nil {
-		rankOutboxRelay = consumer.NewRankOutboxRelay(rankOutboxRepo, rankUpdatePusher, consumer.RankOutboxRelayOptions{
+	if rankOutboxRepo != nil && rankUpdatePusher != nil && redisClient != nil {
+		rankOutboxRelay = consumer.NewRankOutboxRelay(rankOutboxRepo, rankUpdatePusher, redisClient, consumer.RankOutboxRelayOptions{
 			ContestScanInterval: c.RankOutbox.ContestScanInterval,
 			ContestScanBatch:    c.RankOutbox.ContestScanBatch,
 			ClaimBatchSize:      c.RankOutbox.ClaimBatchSize,
@@ -178,6 +177,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			DBTimeout:           c.Timeouts.DB,
 			MQTimeout:           c.Timeouts.MQ,
 		})
+	} else if rankOutboxRepo != nil && rankUpdatePusher != nil && redisClient == nil {
+		logx.Infof("rank outbox relay is disabled due to missing redis config")
 	}
 
 	return &ServiceContext{
