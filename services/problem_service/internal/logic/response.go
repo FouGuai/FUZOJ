@@ -51,6 +51,33 @@ func buildLatestMetaResponse(ctx context.Context, meta repository.ProblemLatestM
 	}
 }
 
+func buildListProblemsResponse(ctx context.Context, items []repository.ProblemListItem, hasMore bool) *types.ListProblemsResponse {
+	respItems := make([]types.ListProblemItem, 0, len(items))
+	nextCursor := ""
+	for _, item := range items {
+		respItems = append(respItems, types.ListProblemItem{
+			ProblemId: item.ProblemID,
+			Title:     item.Title,
+			Version:   item.Version,
+			UpdatedAt: formatTime(item.UpdatedAt),
+		})
+		nextCursor = strconv.FormatInt(item.ProblemID, 10)
+	}
+	if !hasMore {
+		nextCursor = ""
+	}
+	return &types.ListProblemsResponse{
+		Code:    int(pkgerrors.Success),
+		Message: "Success",
+		Data: types.ListProblemsPayload{
+			Items:      respItems,
+			NextCursor: nextCursor,
+			HasMore:    hasMore,
+		},
+		TraceId: traceIDFromContext(ctx),
+	}
+}
+
 func buildStatementResponse(ctx context.Context, statement repository.ProblemStatement) *types.StatementResponse {
 	return &types.StatementResponse{
 		Code:    int(pkgerrors.Success),

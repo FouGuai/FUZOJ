@@ -28,11 +28,13 @@ type ProblemRepository interface {
 	Create(ctx context.Context, session sqlx.Session, problem *Problem) (int64, error)
 	Delete(ctx context.Context, session sqlx.Session, problemID int64) error
 	Exists(ctx context.Context, session sqlx.Session, problemID int64) (bool, error)
+	ListPublished(ctx context.Context, cursorID int64, limit int) ([]ProblemListItem, error)
 	GetLatestMeta(ctx context.Context, session sqlx.Session, problemID int64) (ProblemLatestMeta, error)
 	InvalidateLatestMetaCache(ctx context.Context, problemID int64) error
 }
 
 type MySQLProblemRepository struct {
+	conn         sqlx.SqlConn
 	problemModel model.ProblemModel
 	versionModel model.ProblemVersionModel
 	cache        cache.Cache
@@ -52,6 +54,7 @@ func NewProblemRepositoryWithTTL(conn sqlx.SqlConn, cacheClient cache.Cache, ttl
 		emptyTTL = defaultProblemLatestEmptyTTL
 	}
 	return &MySQLProblemRepository{
+		conn:         conn,
 		problemModel: model.NewProblemModel(conn),
 		versionModel: model.NewProblemVersionModel(conn),
 		cache:        cacheClient,
@@ -89,6 +92,54 @@ func (r *MySQLProblemRepository) GetLatestMeta(ctx context.Context, session sqlx
 
 func (r *MySQLProblemRepository) Exists(ctx context.Context, session sqlx.Session, problemID int64) (bool, error) {
 	return r.problemModel.WithSession(session).Exists(ctx, problemID)
+}
+
+func (r *MySQLProblemRepository) ListPublished(ctx context.Context, cursorID int64, limit int) ([]ProblemListItem, error) {
+	if r == nil || r.conn == nil {
+		return nil, errors.New("problem repository is not configured")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	type problemListRow struct {
+		ProblemID int64     `db:"problem_id"`
+		Title     string    `db:"title"`
+		Version   int32     `db:"version"`
+		UpdatedAt time.Time `db:"updated_at"`
+	}
+	args := make([]any, 0, 3)
+	query := "select p.id as problem_id, p.title, pv.version, p.updated_at " +
+		"from problem p " +
+		"join (" +
+		"select problem_id, max(version) as version from problem_version where state = ? group by problem_id" +
+		") latest on latest.problem_id = p.id " +
+		"join problem_version pv on pv.problem_id = latest.problem_id and pv.version = latest.version and pv.state = ? " +
+		"where p.status = ? "
+	args = append(args, ProblemVersionStatePublished, ProblemVersionStatePublished, ProblemStatusPublished)
+	if cursorID > 0 {
+		query += "and p.id < ? "
+		args = append(args, cursorID)
+	}
+	query += "order by p.id desc limit ?"
+	args = append(args, limit)
+
+	var rows []problemListRow
+	if err := r.conn.QueryRowsCtx(ctx, &rows, query, args...); err != nil {
+		if err == sqlx.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	items := make([]ProblemListItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, ProblemListItem{
+			ProblemID: row.ProblemID,
+			Title:     row.Title,
+			Version:   row.Version,
+			UpdatedAt: row.UpdatedAt,
+		})
+	}
+	return items, nil
 }
 
 func (r *MySQLProblemRepository) InvalidateLatestMetaCache(ctx context.Context, problemID int64) error {

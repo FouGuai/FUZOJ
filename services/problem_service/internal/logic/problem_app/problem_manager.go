@@ -165,6 +165,22 @@ func (m *problemApp) GetLatestMeta(ctx context.Context, problemID int64) (reposi
 	return meta, nil
 }
 
+func (m *problemApp) ListPublishedProblems(ctx context.Context, cursorID int64, limit int) ([]repository.ProblemListItem, bool, error) {
+	if limit <= 0 {
+		return nil, false, pkgerrors.New(pkgerrors.InvalidParams)
+	}
+	items, err := m.repo.ListPublished(ctx, cursorID, limit+1)
+	if err != nil {
+		logx.WithContext(ctx).Errorf("list published problems failed cursor_id=%d limit=%d err=%v", cursorID, limit, err)
+		return nil, false, pkgerrors.Wrap(fmt.Errorf("list published problems failed: %w", err), pkgerrors.DatabaseError)
+	}
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	return items, hasMore, nil
+}
+
 func (m *problemApp) CreateProblem(ctx context.Context, input CreateInput) (int64, error) {
 	if input.Title == "" {
 		return 0, pkgerrors.New(pkgerrors.InvalidParams)

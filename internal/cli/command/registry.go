@@ -54,6 +54,17 @@ func Registry() map[string]Command {
 		},
 		{
 			Service:      "problem",
+			Action:       "list",
+			Method:       "GET",
+			PathTemplate: "/api/v1/problems",
+			RequiresAuth: false,
+			Fields: []Field{
+				{Name: "cursor", Prompt: "cursor", Type: FieldString, Required: false},
+				{Name: "limit", Prompt: "limit", Type: FieldInt, Required: false},
+			},
+		},
+		{
+			Service:      "problem",
 			Action:       "create",
 			Method:       "POST",
 			PathTemplate: "/api/v1/problems",
@@ -372,6 +383,10 @@ func BuildRequest(cmd Command, params Params) (RequestSpec, error) {
 		return RequestSpec{}, err
 	}
 	path = appendQuery(path, "include", params.Get("include"))
+	if cmd.Service == "problem" && cmd.Action == "list" {
+		path = appendQuery(path, "cursor", params.Get("cursor"))
+		path = appendQuery(path, "limit", params.Get("limit"))
+	}
 
 	headers := map[string]string{}
 	if cmd.Service == "problem" && cmd.Action == "upload-prepare" {

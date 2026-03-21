@@ -15,6 +15,7 @@ type fakeProblemRepo struct {
 	createFn          func(ctx context.Context, session sqlx.Session, problem *repository.Problem) (int64, error)
 	deleteFn          func(ctx context.Context, session sqlx.Session, problemID int64) error
 	existsFn          func(ctx context.Context, session sqlx.Session, problemID int64) (bool, error)
+	listPublishedFn   func(ctx context.Context, cursorID int64, limit int) ([]repository.ProblemListItem, error)
 	getLatestMetaFn   func(ctx context.Context, session sqlx.Session, problemID int64) (repository.ProblemLatestMeta, error)
 	invalidateCacheFn func(ctx context.Context, problemID int64) error
 }
@@ -38,6 +39,13 @@ func (f *fakeProblemRepo) Exists(ctx context.Context, session sqlx.Session, prob
 		return false, errors.New("exists not implemented")
 	}
 	return f.existsFn(ctx, session, problemID)
+}
+
+func (f *fakeProblemRepo) ListPublished(ctx context.Context, cursorID int64, limit int) ([]repository.ProblemListItem, error) {
+	if f.listPublishedFn == nil {
+		return nil, errors.New("list published not implemented")
+	}
+	return f.listPublishedFn(ctx, cursorID, limit)
 }
 
 func (f *fakeProblemRepo) GetLatestMeta(ctx context.Context, session sqlx.Session, problemID int64) (repository.ProblemLatestMeta, error) {

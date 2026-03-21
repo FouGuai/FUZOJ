@@ -115,6 +115,11 @@ upstreams:
       target: "127.0.0.1:8083"
       timeout: 0
     mappings:
+      - name: "problem.public.list"
+        method: "GET"
+        path: "/api/v1/problems"
+        auth:
+          mode: "public"
       - name: "problem.public.latest"
         method: "GET"
         path: "/api/v1/problems/:id/latest"

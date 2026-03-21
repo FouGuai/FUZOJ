@@ -64,6 +64,32 @@ type GetLatestRequest struct {
 	Id int64 `path:"id"`
 }
 
+type ListProblemItem struct {
+	ProblemId int64  `json:"problem_id"`
+	Title     string `json:"title"`
+	Version   int32  `json:"version"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type ListProblemsPayload struct {
+	Items      []ListProblemItem `json:"items"`
+	NextCursor string            `json:"next_cursor,omitempty"`
+	HasMore    bool              `json:"has_more"`
+}
+
+type ListProblemsRequest struct {
+	Cursor string `form:"cursor,optional"`
+	Limit  int    `form:"limit,optional"`
+}
+
+type ListProblemsResponse struct {
+	Code    int                 `json:"code"`
+	Message string              `json:"message"`
+	Data    ListProblemsPayload `json:"data"`
+	Details map[string]string   `json:"details,omitempty"`
+	TraceId string              `json:"trace_id,omitempty"`
+}
+
 type LatestMetaPayload struct {
 	ProblemId    int64  `json:"problem_id"`
 	Version      int32  `json:"version"`

@@ -10,6 +10,7 @@ import (
 // ProblemApp exposes core problem behaviors for internal integrations.
 type ProblemApp interface {
 	GetLatestMeta(ctx context.Context, problemID int64) (repository.ProblemLatestMeta, error)
+	ListPublishedProblems(ctx context.Context, cursorID int64, limit int) ([]repository.ProblemListItem, bool, error)
 }
 
 func NewProblemAppFromContext(svcCtx *svc.ServiceContext) *problemApp {

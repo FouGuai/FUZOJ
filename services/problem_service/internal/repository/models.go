@@ -31,6 +31,14 @@ type ProblemLatestMeta struct {
 	UpdatedAt    time.Time
 }
 
+// ProblemListItem represents a published problem in the public list.
+type ProblemListItem struct {
+	ProblemID int64
+	Title     string
+	Version   int32
+	UpdatedAt time.Time
+}
+
 // ProblemStatement represents statement content for a problem version.
 type ProblemStatement struct {
 	ProblemID     int64

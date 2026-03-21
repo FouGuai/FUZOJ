@@ -6,6 +6,13 @@
 
 ### ProblemController
 
+- **List**：获取公开题目列表（仅返回已发布题目，使用 cursor 分页避免深度分页）
+  - Query：`limit`（int，可选）、`cursor`（string，可选，上一页最后一条的 `problem_id`）
+  - 响应体：`ListProblemsResponse`
+    - `items[]`：`problem_id`、`title`、`version`、`updated_at`
+    - `next_cursor`（string）
+    - `has_more`（bool）
+
 - **Create**：创建题目基础信息，返回 `problem_id`
   - 请求体：`CreateProblemRequest`
     - `title`（string，必填）
