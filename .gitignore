@@ -62,3 +62,6 @@ rootfs/*
 
 .gocache/*
 *.pyc
+web/node_modules/
+web/dist/
+web/.vite/

@@ -116,6 +116,12 @@
 - **日常对话与讨论默认使用中文**
 - **代码注释、错误信息、日志内容统一使用英文**
 
+## 前端文案约束
+
+- 页面中禁止直接展示用户给 AI 的 prompt、需求原文、实现说明、开发备注或“根据你的要求/按你的 prompt/参考某产品”之类的描述
+- 前端页面文案只能呈现真实产品信息、操作提示和业务语义，不能把设计来源、开发过程或内部约束暴露给终端用户
+- 如需说明功能流程，应使用面向用户的产品语言，不要出现“对齐现有接口”“自动按某步骤实现”“参考 LeetCode”等实现导向文案
+
 ## 功能实现与代码复用
 
 ### 实现新功能前的必做检查
@@ -194,3 +200,4 @@
 - **Rank Service**：`docs/rank_service.md` — 高性能排行榜存取与订阅服务说明
 - **Rank Update Reliability**：`docs/rank_update_reliability.md` — 排行榜更新消息不丢与一致性策略说明
 - **Rank WS Service**：`docs/rank_ws_service.md` — 排行榜 WebSocket 推送与水平扩展说明
+- **OJ Frontend**：`docs/frontend_oj_web.md` — Vue 题库、在线判题与题目发布前端说明

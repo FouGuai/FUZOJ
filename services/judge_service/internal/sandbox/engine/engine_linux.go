@@ -129,6 +129,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 
 	var timedOut atomic.Bool
 	var cpuTimedOut atomic.Bool
+	var memoryPeakBytes atomic.Int64
 	killCtx, cancelKill := context.WithCancel(ctx)
 	defer cancelKill()
 
@@ -146,9 +147,19 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 			cpuTicker = time.NewTicker(100 * time.Millisecond)
 			defer cpuTicker.Stop()
 		}
+		var memoryTicker *time.Ticker
+		if e.cfg.EnableCgroup && cgroupPath != "" {
+			// Sample memory.current for environments where memory.peak is unavailable.
+			memoryTicker = time.NewTicker(100 * time.Millisecond)
+			defer memoryTicker.Stop()
+		}
 		var cpuTick <-chan time.Time
 		if cpuTicker != nil {
 			cpuTick = cpuTicker.C
+		}
+		var memoryTick <-chan time.Time
+		if memoryTicker != nil {
+			memoryTick = memoryTicker.C
 		}
 		for {
 			select {
@@ -171,6 +182,20 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 					cpuTimedOut.Store(true)
 					e.killProcessGroup(cmd.Process.Pid)
 					return
+				}
+			case <-memoryTick:
+				currentBytes, err := cgroupMemoryCurrentBytes(cgroupPath)
+				if err != nil || currentBytes <= 0 {
+					continue
+				}
+				for {
+					prev := memoryPeakBytes.Load()
+					if currentBytes <= prev {
+						break
+					}
+					if memoryPeakBytes.CompareAndSwap(prev, currentBytes) {
+						break
+					}
 				}
 			}
 		}
@@ -200,7 +225,7 @@ func (e *linuxEngine) Run(ctx context.Context, runSpec spec.RunSpec) (result.Run
 		ExitCode:   exitCodeFromErr(waitErr, cmd.ProcessState),
 		TimeMs:     timeMs,
 		WallTimeMs: wallTimeMs,
-		MemoryKB:   memoryPeakKB(cgroupPath, cmd.ProcessState),
+		MemoryKB:   memoryPeakKB(cgroupPath, cmd.ProcessState, memoryPeakBytes.Load()),
 		OutputKB:   stdoutSizeKB(stdoutPath),
 		Stdout:     readLimitedFile(stdoutPath, e.cfg.StdoutStderrMaxBytes),
 		Stderr:     readLimitedFile(stderrPath, e.cfg.StdoutStderrMaxBytes),

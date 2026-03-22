@@ -198,7 +198,7 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 
 	verdict := result.VerdictAC
 	if firstFailedTestID != "" {
-		verdict = tests[len(tests)-1].Verdict
+		verdict = aggregateVerdict(tests)
 	}
 
 	resultBase.Tests = tests
@@ -349,6 +349,33 @@ func computeTotalScore(subtaskIndex map[string]*subtaskState, tests []result.Tes
 		total += state.spec.Score
 	}
 	return total
+}
+
+func aggregateVerdict(tests []result.TestcaseResult) result.Verdict {
+	// Severity order follows sandbox design doc: SE > TLE > MLE > OLE > RE > WA > AC.
+	priority := map[result.Verdict]int{
+		result.VerdictAC:  0,
+		result.VerdictWA:  1,
+		result.VerdictRE:  2,
+		result.VerdictOLE: 3,
+		result.VerdictMLE: 4,
+		result.VerdictTLE: 5,
+		result.VerdictSE:  6,
+	}
+
+	best := result.VerdictAC
+	bestScore := priority[best]
+	for _, tc := range tests {
+		score, ok := priority[tc.Verdict]
+		if !ok {
+			score = priority[result.VerdictRE]
+		}
+		if score > bestScore {
+			best = tc.Verdict
+			bestScore = score
+		}
+	}
+	return best
 }
 
 func (w *Worker) buildCheckerProfile(ctx context.Context, tc TestcaseSpec, defaultLanguageID string) (*runner.CheckerSpec, *profile.TaskProfile, error) {

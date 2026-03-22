@@ -129,19 +129,49 @@ func cgroupCPUTimeMs(cgroupPath string) (int64, error) {
 	return 0, appErr.New(appErr.JudgeSystemError).WithMessage("usage_usec not found in cpu.stat")
 }
 
-func memoryPeakKB(cgroupPath string, state *os.ProcessState) int64 {
+func memoryPeakKB(cgroupPath string, state *os.ProcessState, sampledPeakBytes int64) int64 {
+	sampledPeakKB := int64(0)
+	if sampledPeakBytes > 0 {
+		sampledPeakKB = sampledPeakBytes / 1024
+	}
 	if cgroupPath != "" {
 		if val, err := readCgroupInt(cgroupPath, "memory.peak"); err == nil && val > 0 {
-			return val / 1024
+			return maxInt64(val/1024, sampledPeakKB)
+		}
+		if current, err := cgroupMemoryCurrentBytes(cgroupPath); err == nil && current > 0 {
+			return maxInt64(current/1024, sampledPeakKB)
 		}
 	}
 	if state == nil {
-		return 0
+		return sampledPeakKB
 	}
 	if usage, ok := state.SysUsage().(*syscall.Rusage); ok {
-		return usage.Maxrss
+		return maxInt64(usage.Maxrss, sampledPeakKB)
 	}
-	return 0
+	return sampledPeakKB
+}
+
+func cgroupMemoryCurrentBytes(cgroupPath string) (int64, error) {
+	if cgroupPath == "" {
+		return 0, appErr.ValidationError("cgroup_path", "required")
+	}
+	data, err := os.ReadFile(filepath.Join(cgroupPath, "memory.current"))
+	if err != nil {
+		return 0, appErr.Wrapf(err, appErr.JudgeSystemError, "read memory.current failed")
+	}
+	value := strings.TrimSpace(string(data))
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, appErr.Wrapf(err, appErr.JudgeSystemError, "parse memory.current failed")
+	}
+	return parsed, nil
+}
+
+func maxInt64(a, b int64) int64 {
+	if a >= b {
+		return a
+	}
+	return b
 }
 
 func readCgroupInt(cgroupPath, name string) (int64, error) {
