@@ -5,6 +5,7 @@ package svc
 
 import (
 	"database/sql"
+	"time"
 
 	"fuzoj/pkg/contest/eligibility"
 	contestRepo "fuzoj/pkg/contest/repository"
@@ -161,8 +162,12 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	}
 
 	var rankOutboxRelay *consumer.RankOutboxRelay
-	if rankOutboxRepo != nil && rankUpdatePusher != nil && redisClient != nil {
-		rankOutboxRelay = consumer.NewRankOutboxRelay(rankOutboxRepo, rankUpdatePusher, redisClient, consumer.RankOutboxRelayOptions{
+	if rankOutboxRepo != nil && len(c.Kafka.Brokers) > 0 && c.RankUpdate.Topic != "" && redisClient != nil {
+		rankOutboxRelay = consumer.NewRankOutboxRelay(rankOutboxRepo, redisClient, consumer.RankOutboxRelayOptions{
+			KafkaBrokers:        c.Kafka.Brokers,
+			RankUpdateTopic:     c.RankUpdate.Topic,
+			PublishBatchSize:    c.RankOutbox.ClaimBatchSize,
+			PublishBatchTimeout: time.Second,
 			ContestScanInterval: c.RankOutbox.ContestScanInterval,
 			ContestScanBatch:    c.RankOutbox.ContestScanBatch,
 			ClaimBatchSize:      c.RankOutbox.ClaimBatchSize,
@@ -177,7 +182,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			DBTimeout:           c.Timeouts.DB,
 			MQTimeout:           c.Timeouts.MQ,
 		})
-	} else if rankOutboxRepo != nil && rankUpdatePusher != nil && redisClient == nil {
+	} else if rankOutboxRepo != nil && len(c.Kafka.Brokers) > 0 && c.RankUpdate.Topic != "" && redisClient == nil {
 		logx.Infof("rank outbox relay is disabled due to missing redis config")
 	}
 

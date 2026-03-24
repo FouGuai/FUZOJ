@@ -171,8 +171,8 @@ func (r *RankOutboxRepository) ListPendingContests(ctx context.Context, now time
 	}
 	var contests []string
 	query := "select distinct contest_id from " + contestRankOutboxTable +
-		" where status = 'pending' and (next_retry_at is null or next_retry_at <= ?) order by contest_id asc limit ?"
-	if err := r.conn.QueryRowsCtx(ctx, &contests, query, now, limit); err != nil {
+		" where status = 'pending' order by contest_id asc limit ?"
+	if err := r.conn.QueryRowsCtx(ctx, &contests, query, limit); err != nil {
 		if err == sqlx.ErrNotFound {
 			return nil, nil
 		}

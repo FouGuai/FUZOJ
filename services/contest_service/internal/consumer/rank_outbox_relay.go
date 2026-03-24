@@ -10,13 +10,17 @@ import (
 
 	"fuzoj/services/contest_service/internal/repository"
 
-	"github.com/zeromicro/go-queue/kq"
+	"github.com/segmentio/kafka-go"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 type RankOutboxRelayOptions struct {
 	OwnerID             string
+	KafkaBrokers        []string
+	RankUpdateTopic     string
+	PublishBatchSize    int
+	PublishBatchTimeout time.Duration
 	ContestScanInterval time.Duration
 	ContestScanBatch    int
 	ClaimBatchSize      int
@@ -34,12 +38,14 @@ type RankOutboxRelayOptions struct {
 
 // RankOutboxRelay publishes outbox events to Kafka.
 type RankOutboxRelay struct {
-	repo    *repository.RankOutboxRepository
-	pusher  *kq.Pusher
-	redis   *redis.Redis
-	options RankOutboxRelayOptions
-	stopCh  chan struct{}
-	once    sync.Once
+	repo       *repository.RankOutboxRepository
+	redis      *redis.Redis
+	publisher  kafkaPublisher
+	options    RankOutboxRelayOptions
+	stopCh     chan struct{}
+	once       sync.Once
+	closeOnce  sync.Once
+	closeError error
 }
 
 const (
@@ -48,10 +54,18 @@ const (
 	rankOutboxLockKeyPrefix        = "contest:rank:outbox:lock:"
 )
 
-func NewRankOutboxRelay(repo *repository.RankOutboxRepository, pusher *kq.Pusher, redisClient *redis.Redis, options RankOutboxRelayOptions) *RankOutboxRelay {
+type kafkaPublisher interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
+func NewRankOutboxRelay(repo *repository.RankOutboxRepository, redisClient *redis.Redis, options RankOutboxRelayOptions) *RankOutboxRelay {
 	if options.OwnerID == "" {
 		host, _ := os.Hostname()
 		options.OwnerID = fmt.Sprintf("%s-%d", host, time.Now().UnixNano())
+	}
+	if options.PublishBatchTimeout <= 0 {
+		options.PublishBatchTimeout = time.Second
 	}
 	if options.ContestScanInterval <= 0 {
 		options.ContestScanInterval = time.Second
@@ -86,12 +100,31 @@ func NewRankOutboxRelay(repo *repository.RankOutboxRepository, pusher *kq.Pusher
 	if options.RequeueBatchSize <= 0 {
 		options.RequeueBatchSize = 200
 	}
+	if options.PublishBatchSize <= 0 {
+		options.PublishBatchSize = options.ClaimBatchSize
+	}
+	if options.PublishBatchSize <= 0 {
+		options.PublishBatchSize = 200
+	}
+
+	var publisher kafkaPublisher
+	if len(options.KafkaBrokers) > 0 && options.RankUpdateTopic != "" {
+		publisher = &kafka.Writer{
+			Addr:         kafka.TCP(options.KafkaBrokers...),
+			Topic:        options.RankUpdateTopic,
+			Balancer:     &kafka.LeastBytes{},
+			Compression:  kafka.Snappy,
+			BatchSize:    options.PublishBatchSize,
+			BatchTimeout: options.PublishBatchTimeout,
+		}
+	}
+
 	return &RankOutboxRelay{
-		repo:    repo,
-		pusher:  pusher,
-		redis:   redisClient,
-		options: options,
-		stopCh:  make(chan struct{}),
+		repo:      repo,
+		redis:     redisClient,
+		publisher: publisher,
+		options:   options,
+		stopCh:    make(chan struct{}),
 	}
 }
 
@@ -104,6 +137,7 @@ func (r *RankOutboxRelay) Start() {
 }
 
 func (r *RankOutboxRelay) run(ctx context.Context) {
+	defer r.closePublisher()
 	logger := logx.WithContext(ctx)
 	lastCleanup := time.Now()
 	for {
@@ -171,6 +205,9 @@ func (r *RankOutboxRelay) Stop() {
 
 func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string, lock *redis.RedisLock) (bool, error) {
 	logger := logx.WithContext(ctx)
+	if r.publisher == nil {
+		return false, fmt.Errorf("rank update publisher is not configured")
+	}
 	processedAny := false
 	lastRenew := time.Now()
 
@@ -196,6 +233,8 @@ func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string, 
 		failedIDs := make(map[int][]int64)
 		sort.Slice(events, func(i, j int) bool { return events[i].ID < events[j].ID })
 		var oldestCreatedAt time.Time
+		msgs := make([]kafka.Message, 0, len(events))
+		msgEvents := make([]repository.RankOutboxEvent, 0, len(events))
 		for _, event := range events {
 			if oldestCreatedAt.IsZero() || event.CreatedAt.Before(oldestCreatedAt) {
 				oldestCreatedAt = event.CreatedAt
@@ -209,15 +248,36 @@ func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string, 
 				sentIDs = append(sentIDs, event.ID)
 				continue
 			}
+			msgs = append(msgs, kafka.Message{
+				Key:   []byte(event.KafkaKey),
+				Value: []byte(event.Payload),
+			})
+			msgEvents = append(msgEvents, event)
+		}
+		if len(msgs) > 0 {
 			ctxMQ := withTimeout(ctx, r.options.MQTimeout)
-			err := r.pusher.PushWithKey(ctxMQ.ctx, event.KafkaKey, event.Payload)
+			err := r.publisher.WriteMessages(ctxMQ.ctx, msgs...)
 			ctxMQ.cancel()
-			if err != nil {
-				logger.Errorf("publish rank update failed, contest=%s id=%d retry=%d err=%v", contestID, event.ID, event.RetryCount, err)
-				failedIDs[event.RetryCount] = append(failedIDs[event.RetryCount], event.ID)
-				continue
+			switch typed := err.(type) {
+			case nil:
+				for _, event := range msgEvents {
+					sentIDs = append(sentIDs, event.ID)
+				}
+			case kafka.WriteErrors:
+				for i, event := range msgEvents {
+					if i < len(typed) && typed[i] != nil {
+						logger.Errorf("publish rank update failed, contest=%s id=%d retry=%d err=%v", contestID, event.ID, event.RetryCount, typed[i])
+						failedIDs[event.RetryCount] = append(failedIDs[event.RetryCount], event.ID)
+						continue
+					}
+					sentIDs = append(sentIDs, event.ID)
+				}
+			default:
+				logger.Errorf("publish rank update batch failed, contest=%s count=%d err=%v", contestID, len(msgEvents), err)
+				for _, event := range msgEvents {
+					failedIDs[event.RetryCount] = append(failedIDs[event.RetryCount], event.ID)
+				}
 			}
-			sentIDs = append(sentIDs, event.ID)
 		}
 
 		if len(sentIDs) > 0 {
@@ -255,6 +315,15 @@ func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string, 
 			return processedAny, nil
 		}
 	}
+}
+
+func (r *RankOutboxRelay) closePublisher() {
+	if r == nil || r.publisher == nil {
+		return
+	}
+	r.closeOnce.Do(func() {
+		r.closeError = r.publisher.Close()
+	})
 }
 
 func (r *RankOutboxRelay) requeueExpired(ctx context.Context, now time.Time) {
