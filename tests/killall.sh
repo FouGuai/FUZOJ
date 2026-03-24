@@ -11,9 +11,14 @@ patterns=(
   "/logs/bin/user-service"
   "/logs/bin/problem-service"
   "/logs/bin/submit-service"
+  "/logs/bin/status-service"
+  "/logs/bin/status-sse-service"
   "/logs/bin/judge-service"
   "/logs/bin/contest-service"
   "/logs/bin/contest-rpc-service"
+  "/logs/bin/rank-service"
+  "/logs/bin/rank-ws-service"
+  "/logs/bin/rank-rpc-service"
 )
 
 for pattern in "${patterns[@]}"; do

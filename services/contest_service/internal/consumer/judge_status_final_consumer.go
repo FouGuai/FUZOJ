@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	dbutil "fuzoj/internal/common/db"
 	"fuzoj/pkg/contest/eligibility"
 	contestRepo "fuzoj/pkg/contest/repository"
 	"fuzoj/pkg/contest/score"
-	dbutil "fuzoj/internal/common/db"
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/services/contest_service/internal/pmodel"
 	"fuzoj/services/contest_service/internal/repository"
@@ -23,21 +23,21 @@ import (
 )
 
 const (
-	rankIdemKeyPrefix = "contest:rank:idem:"
-	rankResultIDKey   = "contest:rank:result:id:"
+	rankIdemKeyPrefix        = "contest:rank:idem:"
+	rankResultIDKey          = "contest:rank:result:id:"
 	rankOutboxEventKeyPrefix = "contest:rank:outbox:"
 )
 
 // JudgeFinalConsumer processes final judge status messages for contest ranking.
 type JudgeFinalConsumer struct {
-	conn              sqlx.SqlConn
-	redis             *redis.Redis
-	contestRepo       contestRepo.ContestRepository
-	eligibilitySvc    *eligibility.Service
-	rankOutboxRepo    *repository.RankOutboxRepository
-	deadLetterPusher  *kq.Pusher
-	opts              JudgeFinalOptions
-	timeouts          TimeoutConfig
+	conn             sqlx.SqlConn
+	redis            *redis.Redis
+	contestRepo      contestRepo.ContestRepository
+	eligibilitySvc   *eligibility.Service
+	rankOutboxRepo   *repository.RankOutboxRepository
+	deadLetterPusher *kq.Pusher
+	opts             JudgeFinalOptions
+	timeouts         TimeoutConfig
 }
 
 // JudgeFinalOptions holds consumer options.
@@ -71,13 +71,13 @@ func NewJudgeFinalConsumer(
 		opts.RetryDelay = time.Second
 	}
 	return &JudgeFinalConsumer{
-		conn:              conn,
-		redis:             redisClient,
-		contestRepo:       contestRepository,
-		eligibilitySvc:    eligibilityService,
-		rankOutboxRepo:    rankOutboxRepo,
-		opts:              opts,
-		timeouts:          timeouts,
+		conn:           conn,
+		redis:          redisClient,
+		contestRepo:    contestRepository,
+		eligibilitySvc: eligibilityService,
+		rankOutboxRepo: rankOutboxRepo,
+		opts:           opts,
+		timeouts:       timeouts,
 	}
 }
 
@@ -261,7 +261,7 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 			state.Solved = true
 			state.FirstACAt = submitAt
 			state.Score = 1
-			state.Penalty = score.ICPCPenalty(meta.StartAt, submitAt, state.WrongCount)
+			state.Penalty = score.ICPCPenaltyWithMinutes(meta.StartAt, submitAt, state.WrongCount, meta.PenaltyMinutes)
 		}
 		state.UpdatedAt = time.Now()
 

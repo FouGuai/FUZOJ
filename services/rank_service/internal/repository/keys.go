@@ -10,6 +10,11 @@ func MetaPrefix() string {
 	return metaPrefix
 }
 
+// ContestIDFromMetaKey parses contest id from a meta key.
+func ContestIDFromMetaKey(key string) string {
+	return parseContestIDFromMetaKey(key)
+}
+
 // LeaderboardKey exposes the leaderboard zset key.
 func LeaderboardKey(contestID string) string {
 	return leaderboardKey(contestID)

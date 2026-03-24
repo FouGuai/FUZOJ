@@ -11,12 +11,98 @@ import tempfile
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
 import yaml
+
+
+@dataclass(frozen=True)
+class ServiceEndpoints:
+    gateway: str
+    contest: str
+    status: str
+    status_sse: str
+    rank: str
+
+
+@dataclass(frozen=True)
+class SourceVariants:
+    correct: dict[str, str]
+    wrong: dict[str, str]
+
+
+@dataclass
+class ParticipantPlan:
+    session: requests.Session
+    user_id: int
+    language_id: str
+    planned_submit_count: int
+    attempt_gaps_ms: list[int]
+
+
+@dataclass(frozen=True)
+class ProblemPack:
+    problem_id: int
+    version: int
+    temp_root: Path
+    pack_root: Path
+    tar_path: Path
+    manifest_path: Path
+    config_path: Path
+    manifest_hash: str
+    data_pack_hash: str
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run contest full-path e2e with rank validation.")
+    parser.add_argument("--base", default="", help="Base URL for gateway")
+    parser.add_argument("--timeout", type=int, default=10, help="HTTP timeout in seconds")
+    parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
+    parser.add_argument("--poll-times", type=int, default=60, help="Polling attempts for submit status")
+    parser.add_argument("--rank-poll-times", type=int, default=90, help="Polling attempts for leaderboard")
+    parser.add_argument("--concurrent-users", type=int, default=5, help="Total contest users for concurrent submit")
+    parser.add_argument("--submit-workers", type=int, default=5, help="Worker count for concurrent submit/poll")
+    parser.add_argument(
+        "--python-submit-ratio",
+        type=float,
+        default=0.5,
+        help="Ratio of users using Python submissions",
+    )
+    parser.add_argument("--multi-submit-ratio", type=float, default=0.4, help="Ratio of users with multi-submit attempts")
+    parser.add_argument("--multi-submit-min", type=int, default=2, help="Minimum attempts for multi-submit users")
+    parser.add_argument("--multi-submit-max", type=int, default=4, help="Maximum attempts for multi-submit users")
+    parser.add_argument("--submit-gap-min-ms", type=int, default=150, help="Minimum delay between user attempts in ms")
+    parser.add_argument("--submit-gap-max-ms", type=int, default=1200, help="Maximum delay between user attempts in ms")
+    parser.add_argument("--submit-seed", type=int, default=0, help="Random seed for submit behavior (0 means time-based)")
+    parser.add_argument(
+        "--status-wait-mode",
+        choices=("sse", "poll", "auto"),
+        default="sse",
+        help="Select how submission status waits are performed",
+    )
+    parser.add_argument(
+        "--status-fetch-mode",
+        choices=("gateway", "status", "auto"),
+        default="auto",
+        help="Select which status service endpoint is used for short polling fallback",
+    )
+    parser.add_argument(
+        "--throughput-only",
+        action="store_true",
+        help="Measure submit throughput only: skip status wait and leaderboard convergence checks",
+    )
+    args = parser.parse_args()
+    require(0.0 <= args.python_submit_ratio <= 1.0, "python-submit-ratio must be between 0 and 1")
+    require(0.0 <= args.multi_submit_ratio <= 1.0, "multi-submit-ratio must be between 0 and 1")
+    require(args.multi_submit_min >= 2, "multi-submit-min must be at least 2")
+    require(args.multi_submit_max >= args.multi_submit_min, "multi-submit-max must be >= multi-submit-min")
+    require(args.submit_gap_min_ms >= 0, "submit-gap-min-ms must be non-negative")
+    require(args.submit_gap_max_ms >= args.submit_gap_min_ms, "submit-gap-max-ms must be >= submit-gap-min-ms")
+    return args
 
 
 def is_http_reachable(base_url: str, timeout_s: float = 1.0) -> bool:
@@ -148,12 +234,6 @@ def replace_base(url: str, new_base: str) -> str:
     return f"{new.scheme}://{new.netloc}{old.path}" + (f"?{old.query}" if old.query else "")
 
 
-def to_ws_base(base_url: str) -> str:
-    parsed = urlparse(base_url)
-    scheme = "wss" if parsed.scheme == "https" else "ws"
-    return f"{scheme}://{parsed.netloc}"
-
-
 def create_authenticated_user(base_url: str, timeout: int, username_prefix: str) -> tuple[requests.Session, int, str]:
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
@@ -201,38 +281,8 @@ def to_rfc3339(ts: datetime) -> str:
     return ts.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Run contest full-path e2e with rank validation.")
-    parser.add_argument("--base", default="", help="Base URL for gateway")
-    parser.add_argument("--timeout", type=int, default=10, help="HTTP timeout in seconds")
-    parser.add_argument("--poll-interval", type=float, default=1.0, help="Polling interval in seconds")
-    parser.add_argument("--poll-times", type=int, default=60, help="Polling attempts for submit status")
-    parser.add_argument("--rank-poll-times", type=int, default=90, help="Polling attempts for leaderboard")
-    parser.add_argument("--concurrent-users", type=int, default=5, help="Total contest users for concurrent submit")
-    parser.add_argument("--submit-workers", type=int, default=5, help="Worker count for concurrent submit/poll")
-    parser.add_argument("--multi-submit-ratio", type=float, default=0.4, help="Ratio of users with multi-submit attempts")
-    parser.add_argument("--multi-submit-min", type=int, default=2, help="Minimum attempts for multi-submit users")
-    parser.add_argument("--multi-submit-max", type=int, default=4, help="Maximum attempts for multi-submit users")
-    parser.add_argument("--submit-gap-min-ms", type=int, default=150, help="Minimum delay between user attempts in ms")
-    parser.add_argument("--submit-gap-max-ms", type=int, default=1200, help="Maximum delay between user attempts in ms")
-    parser.add_argument("--submit-seed", type=int, default=0, help="Random seed for submit behavior (0 means time-based)")
-    parser.add_argument(
-        "--throughput-only",
-        action="store_true",
-        help="Measure submit throughput only: skip status wait and leaderboard convergence checks",
-    )
-    args = parser.parse_args()
-    require(0.0 <= args.multi_submit_ratio <= 1.0, "multi-submit-ratio must be between 0 and 1")
-    require(args.multi_submit_min >= 2, "multi-submit-min must be at least 2")
-    require(args.multi_submit_max >= args.multi_submit_min, "multi-submit-max must be >= multi-submit-min")
-    require(args.submit_gap_min_ms >= 0, "submit-gap-min-ms must be non-negative")
-    require(args.submit_gap_max_ms >= args.submit_gap_min_ms, "submit-gap-max-ms must be >= submit-gap-min-ms")
-    behavior_seed = args.submit_seed if args.submit_seed != 0 else time.time_ns()
-    rng = random.Random(behavior_seed)
-    print(f"submit behavior seed={behavior_seed}")
-
-    repo_root = Path(__file__).resolve().parents[1]
-    base_url = load_base_url(repo_root, args.base)
+def resolve_service_endpoints(repo_root: Path, base_override: str) -> ServiceEndpoints:
+    base_url = load_base_url(repo_root, base_override)
     if not is_http_reachable(base_url):
         gateway_base_url = discover_service_base_url(repo_root, "gateway")
         if gateway_base_url:
@@ -250,17 +300,67 @@ def main() -> int:
         print(f"status sse direct base detected: {status_sse_base_url}")
     if rank_base_url:
         print(f"rank direct base detected: {rank_base_url}")
+    return ServiceEndpoints(
+        gateway=base_url,
+        contest=contest_base_url,
+        status=status_base_url,
+        status_sse=status_sse_base_url,
+        rank=rank_base_url,
+    )
+
+
+def load_submission_sources(repo_root: Path) -> SourceVariants:
+    cpp_source_path = repo_root / "tests/main.cpp"
+    python_source_path = repo_root / "tests/main.py"
+    require(cpp_source_path.exists(), "tests/main.cpp not found")
+    require(python_source_path.exists(), "tests/main.py not found")
+    return SourceVariants(
+        correct={
+            "cpp": cpp_source_path.read_text(encoding="utf-8"),
+            "py": python_source_path.read_text(encoding="utf-8"),
+        },
+        wrong={
+            "cpp": """
+#include <bits/stdc++.h>
+using namespace std;
+int main() {
+    long long a = 0, b = 0;
+    if (!(cin >> a >> b)) return 0;
+    cout << (a - b) << "\\n";
+    return 0;
+}
+""".strip(),
+            "py": """
+import sys
+
+
+def main() -> int:
+    data = sys.stdin.read().strip().split()
+    if len(data) < 2:
+        return 0
+    a = int(data[0])
+    b = int(data[1])
+    sys.stdout.write(f"{a - b}\\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+""".strip(),
+        },
+    )
+
+
+def build_problem_pack(session: requests.Session, base_url: str, user_id: int, timeout: int) -> ProblemPack:
     print("== register ==")
     print("== login ==")
-    session, user_id, _ = create_authenticated_user(base_url, args.timeout, "contest_e2e_owner")
-
     print("== problem create ==")
     problem_resp = request_json(
         session,
         "POST",
         f"{base_url}/api/v1/problems",
         payload={"title": "Contest Two Sum (E2E)", "owner_id": int(user_id)},
-        timeout=args.timeout,
+        timeout=timeout,
     )
     problem_id = pick(problem_resp, "data", "id") or pick(problem_resp, "data", "problem_id")
     require(problem_id, "problem_id not found in create response")
@@ -342,7 +442,7 @@ def main() -> int:
                 "client_type": "e2e_contest_rank",
                 "upload_strategy": "multipart",
             },
-            timeout=args.timeout,
+            timeout=timeout,
         )
 
     print("== upload prepare ==")
@@ -368,7 +468,7 @@ def main() -> int:
         "PUT",
         f"{base_url}/api/v1/problems/{problem_id}/versions/{version}/statement",
         payload={"statement_md": statement},
-        timeout=args.timeout,
+        timeout=timeout,
     )
 
     print("== upload sign ==")
@@ -377,14 +477,14 @@ def main() -> int:
         "POST",
         f"{base_url}/api/v1/problems/{problem_id}/data-pack/uploads/{upload_id}/sign",
         payload={"part_numbers": [1]},
-        timeout=args.timeout,
+        timeout=timeout,
     )
     urls = pick(sign_resp, "data", "urls") or {}
     signed_url = urls.get("1") if isinstance(urls, dict) else None
     require(signed_url, "signed url not found in sign response")
 
     print("== upload part ==")
-    etag = upload_file(signed_url, tar_path, args.timeout)
+    etag = upload_file(signed_url, tar_path, timeout)
 
     print("== upload complete ==")
     manifest_json = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -400,11 +500,25 @@ def main() -> int:
             "manifest_hash": manifest_hash,
             "data_pack_hash": data_pack_hash,
         },
-        timeout=args.timeout,
+        timeout=timeout,
     )
 
     print("== problem publish ==")
-    request_json(session, "POST", f"{base_url}/api/v1/problems/{problem_id}/versions/{version}/publish", timeout=args.timeout)
+    request_json(session, "POST", f"{base_url}/api/v1/problems/{problem_id}/versions/{version}/publish", timeout=timeout)
+    return ProblemPack(
+        problem_id=int(problem_id),
+        version=int(version),
+        temp_root=temp_root,
+        pack_root=pack_root,
+        tar_path=tar_path,
+        manifest_path=manifest_path,
+        config_path=config_path,
+        manifest_hash=manifest_hash,
+        data_pack_hash=data_pack_hash,
+    )
+def create_contest(session: requests.Session, endpoints: ServiceEndpoints, user_id: int, problem_pack: ProblemPack, timeout: int) -> str:
+    base_url = endpoints.gateway
+    contest_base_url = endpoints.contest
 
     now = datetime.now(timezone.utc)
     contest_start = to_rfc3339(now - timedelta(minutes=1))
@@ -476,7 +590,7 @@ def main() -> int:
             "POST",
             f"{base_url}/api/v1/contests",
             payload=payload,
-            timeout=args.timeout,
+            timeout=timeout,
         )
         if ok:
             contest_resp = result
@@ -494,8 +608,14 @@ def main() -> int:
         session,
         "POST",
         contest_problem_url,
-        payload={"problem_id": int(problem_id), "order": 1, "score": 100, "visible": True, "version": int(version)},
-        timeout=args.timeout,
+        payload={
+            "problem_id": int(problem_pack.problem_id),
+            "order": 1,
+            "score": 100,
+            "visible": True,
+            "version": int(problem_pack.version),
+        },
+        timeout=timeout,
     )
     if not ok:
         if contest_base_url:
@@ -503,354 +623,474 @@ def main() -> int:
                 session,
                 "POST",
                 replace_base(contest_problem_url, contest_base_url),
-                payload={"problem_id": int(problem_id), "order": 1, "score": 100, "visible": True, "version": int(version)},
-                timeout=args.timeout,
+                payload={
+                    "problem_id": int(problem_pack.problem_id),
+                    "order": 1,
+                    "score": 100,
+                    "visible": True,
+                    "version": int(problem_pack.version),
+                },
+                timeout=timeout,
             )
         else:
             raise RuntimeError(f"request failed: POST {contest_problem_url}")
 
     print("== contest publish ==")
     contest_publish_url = f"{base_url}/api/v1/contests/{contest_id}/publish"
-    ok, _ = try_request_json(session, "POST", contest_publish_url, timeout=args.timeout)
+    ok, _ = try_request_json(session, "POST", contest_publish_url, timeout=timeout)
     if not ok:
         if contest_base_url:
-            request_json(session, "POST", replace_base(contest_publish_url, contest_base_url), timeout=args.timeout)
+            request_json(session, "POST", replace_base(contest_publish_url, contest_base_url), timeout=timeout)
         else:
             raise RuntimeError(f"request failed: POST {contest_publish_url}")
+    return str(contest_id)
 
-    print("== contest register ==")
-    contest_register_url = f"{base_url}/api/v1/contests/{contest_id}/register"
+
+def register_contest_user(session: requests.Session, endpoints: ServiceEndpoints, contest_id: str, user_id: int, timeout: int) -> None:
+    contest_register_url = f"{endpoints.gateway}/api/v1/contests/{contest_id}/register"
     register_payload = {"user_id": int(user_id), "team_id": "", "invite_code": ""}
-    ok, _ = try_request_json(
-        session,
-        "POST",
-        contest_register_url,
-        payload=register_payload,
-        timeout=args.timeout,
-    )
-    if not ok:
-        if contest_base_url:
-            request_json(
-                session,
-                "POST",
-                replace_base(contest_register_url, contest_base_url),
-                payload=register_payload,
-                timeout=args.timeout,
-            )
-        else:
-            raise RuntimeError(f"request failed: POST {contest_register_url}")
+    ok, _ = try_request_json(session, "POST", contest_register_url, payload=register_payload, timeout=timeout)
+    if ok:
+        return
+    if endpoints.contest:
+        request_json(
+            session,
+            "POST",
+            replace_base(contest_register_url, endpoints.contest),
+            payload=register_payload,
+            timeout=timeout,
+        )
+        return
+    raise RuntimeError(f"request failed: POST {contest_register_url}")
 
-    source_path = repo_root / "tests/main.cpp"
-    require(source_path.exists(), "tests/main.cpp not found")
-    source_code = source_path.read_text(encoding="utf-8")
-    wrong_source_code = """
-#include <bits/stdc++.h>
-using namespace std;
-int main() {
-    long long a = 0, b = 0;
-    if (!(cin >> a >> b)) return 0;
-    cout << (a - b) << "\\n";
-    return 0;
-}
-""".strip()
 
+def build_participant_plans(
+    owner_session: requests.Session,
+    owner_user_id: int,
+    endpoints: ServiceEndpoints,
+    args: argparse.Namespace,
+    rng: random.Random,
+) -> tuple[list[ParticipantPlan], int, int]:
     print("== build concurrent users ==")
     require(args.concurrent_users > 0, "concurrent-users must be positive")
-    participants = [{"session": session, "user_id": int(user_id)}]
+    participants: list[ParticipantPlan] = [
+        ParticipantPlan(
+            session=owner_session,
+            user_id=int(owner_user_id),
+            language_id="cpp",
+            planned_submit_count=1,
+            attempt_gaps_ms=[],
+        )
+    ]
     remaining_users = args.concurrent_users - 1
     if remaining_users > 0:
         create_workers = max(1, min(args.submit_workers, remaining_users))
         with ThreadPoolExecutor(max_workers=create_workers) as executor:
             futures = [
-                executor.submit(create_authenticated_user, base_url, args.timeout, "contest_e2e_member")
+                executor.submit(create_authenticated_user, endpoints.gateway, args.timeout, "contest_e2e_member")
                 for _ in range(remaining_users)
             ]
             for future in as_completed(futures):
-                u_session, u_id, _ = future.result()
-                participants.append({"session": u_session, "user_id": int(u_id)})
-
-    print("== contest register all users ==")
-    for participant in participants:
-        participant_session = participant["session"]
-        participant_id = participant["user_id"]
-        register_payload = {"user_id": int(participant_id), "team_id": "", "invite_code": ""}
-        ok, _ = try_request_json(
-            participant_session,
-            "POST",
-            contest_register_url,
-            payload=register_payload,
-            timeout=args.timeout,
-        )
-        if not ok:
-            if contest_base_url:
-                request_json(
-                    participant_session,
-                    "POST",
-                    replace_base(contest_register_url, contest_base_url),
-                    payload=register_payload,
-                    timeout=args.timeout,
+                user_session, user_id, _ = future.result()
+                participants.append(
+                    ParticipantPlan(
+                        session=user_session,
+                        user_id=int(user_id),
+                        language_id="cpp",
+                        planned_submit_count=1,
+                        attempt_gaps_ms=[],
+                    )
                 )
-            else:
-                raise RuntimeError(f"request failed: POST {contest_register_url}")
 
-    print("== build submit behavior ==")
     total_users = len(participants)
+    python_user_count = 0
+    if total_users > 0 and args.python_submit_ratio > 0:
+        python_user_count = int(round(total_users * args.python_submit_ratio))
+        python_user_count = min(total_users, max(0, python_user_count))
+    python_user_indexes = set(rng.sample(range(total_users), python_user_count)) if python_user_count > 0 else set()
+
     multi_user_count = 0
     if total_users > 0 and args.multi_submit_ratio > 0:
         multi_user_count = max(1, int(round(total_users * args.multi_submit_ratio)))
         multi_user_count = min(total_users, multi_user_count)
     multi_user_indexes = set(rng.sample(range(total_users), multi_user_count)) if multi_user_count > 0 else set()
+
     total_attempts = 0
     for idx, participant in enumerate(participants):
         submit_count = 1
         if idx in multi_user_indexes:
             submit_count = rng.randint(args.multi_submit_min, args.multi_submit_max)
-        participant["planned_submit_count"] = submit_count
-        participant["attempt_gaps_ms"] = [rng.randint(args.submit_gap_min_ms, args.submit_gap_max_ms) for _ in range(submit_count - 1)]
+        participant.language_id = "py" if idx in python_user_indexes else "cpp"
+        participant.planned_submit_count = submit_count
+        participant.attempt_gaps_ms = [
+            rng.randint(args.submit_gap_min_ms, args.submit_gap_max_ms) for _ in range(submit_count - 1)
+        ]
         total_attempts += submit_count
-    print(f"participants={total_users} multi_submit_users={multi_user_count} total_planned_attempts={total_attempts}")
 
-    def submit_once(participant: dict, code_text: str) -> dict:
-        participant_session = participant["session"]
-        participant_id = participant["user_id"]
-        submit_resp = request_json(
-            participant_session,
-            "POST",
-            f"{base_url}/api/v1/submissions",
-            headers={"Idempotency-Key": str(uuid.uuid4())},
-            payload={
-                "problem_id": int(problem_id),
-                "user_id": int(participant_id),
-                "language_id": "cpp",
-                "source_code": code_text,
-                "contest_id": contest_id,
-                "scene": "contest",
-                "extra_compile_flags": [],
-            },
-            timeout=args.timeout,
-        )
-        submission_id = pick(submit_resp, "data", "submission_id") or pick(submit_resp, "submission_id")
-        require(submission_id, f"submission_id not found for user={participant_id}")
-        return {"user_id": participant_id, "submission_id": submission_id}
+    print(
+        f"participants={total_users} python_users={python_user_count} "
+        f"multi_submit_users={multi_user_count} total_planned_attempts={total_attempts}"
+    )
+    return participants, multi_user_count, total_attempts
 
-    def wait_submission_final_via_sse(participant_session: requests.Session, participant_id: int, submission_id: str) -> str:
-        stream_base_candidates = []
-        if status_sse_base_url:
-            stream_base_candidates.append(status_sse_base_url)
-        stream_base_candidates.append(base_url)
-        deadline = time.time() + max(1.0, args.poll_times * args.poll_interval)
-        timeout_s = max(args.timeout, int(args.poll_interval * 2), 20)
-        stream_error = None
-        for stream_base in stream_base_candidates:
-            stream_url = f"{stream_base}/api/v1/status/submissions/{submission_id}/events"
-            final_status = ""
-            headers = {"Accept": "text/event-stream"}
-            # Direct status-sse access bypasses gateway header injection.
-            if stream_base == status_sse_base_url:
-                headers["X-User-Id"] = str(participant_id)
-            try:
-                print(f"sse_connect url={stream_url}")
-                with participant_session.get(stream_url, headers=headers, stream=True, timeout=timeout_s) as resp:
-                    if resp.status_code < 200 or resp.status_code >= 300:
-                        raise RuntimeError(f"sse request failed: GET {stream_url} ({resp.status_code})")
-                    data_lines: list[str] = []
-                    for raw_line in resp.iter_lines(decode_unicode=True):
-                        if time.time() >= deadline:
-                            break
-                        line = (raw_line or "").strip()
-                        if not line:
-                            if not data_lines:
-                                continue
-                            payload_text = "".join(data_lines)
-                            data_lines = []
-                            payload = json.loads(payload_text)
-                            final_status = (
-                                pick(payload, "data", "status")
-                                or pick(payload, "data", "data", "status")
-                                or payload.get("status")
-                                or ""
-                            )
-                            print(f"sse_status submission_id={submission_id} status={final_status}")
-                            if str(final_status).lower() in {"finished", "failed"}:
-                                break
-                            continue
-                        if line.startswith(":"):
-                            continue
-                        if line.startswith("data:"):
-                            data_lines.append(line[len("data:") :].strip())
-                            continue
-                if final_status:
-                    return final_status
-            except Exception as sse_err:
-                stream_error = sse_err
-                continue
-        raise RuntimeError(f"sse stream failed: {stream_error}")
 
-    def wait_submission_final(participant_session: requests.Session, participant_id: int, submission_id: str) -> str:
-        try:
-            return wait_submission_final_via_sse(participant_session, participant_id, submission_id)
-        except Exception as sse_err:
-            print(f"sse status stream failed, fallback to poll: user={participant_id} submission={submission_id} err={sse_err}")
-        user_status_urls = [f"{base_url}/api/v1/status/submissions/{submission_id}"]
-        if status_base_url:
-            user_status_urls.append(f"{status_base_url}/api/v1/status/submissions/{submission_id}")
+def register_all_participants(
+    participants: list[ParticipantPlan], endpoints: ServiceEndpoints, contest_id: str, timeout: int
+) -> None:
+    print("== contest register all users ==")
+    for participant in participants:
+        register_contest_user(participant.session, endpoints, contest_id, participant.user_id, timeout)
+
+
+def submit_once(
+    participant: ParticipantPlan,
+    endpoints: ServiceEndpoints,
+    problem_pack: ProblemPack,
+    contest_id: str,
+    code_text: str,
+    timeout: int,
+) -> dict:
+    submit_resp = request_json(
+        participant.session,
+        "POST",
+        f"{endpoints.gateway}/api/v1/submissions",
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+        payload={
+            "problem_id": int(problem_pack.problem_id),
+            "user_id": int(participant.user_id),
+            "language_id": participant.language_id,
+            "source_code": code_text,
+            "contest_id": contest_id,
+            "scene": "contest",
+            "extra_compile_flags": [],
+        },
+        timeout=timeout,
+    )
+    submission_id = pick(submit_resp, "data", "submission_id") or pick(submit_resp, "submission_id")
+    require(submission_id, f"submission_id not found for user={participant.user_id}")
+    return {
+        "user_id": participant.user_id,
+        "submission_id": submission_id,
+        "language_id": participant.language_id,
+    }
+
+
+def build_status_urls(endpoints: ServiceEndpoints, submission_id: str, fetch_mode: str) -> list[str]:
+    gateway_url = f"{endpoints.gateway}/api/v1/status/submissions/{submission_id}"
+    status_url = f"{endpoints.status}/api/v1/status/submissions/{submission_id}" if endpoints.status else ""
+    if fetch_mode == "gateway":
+        return [gateway_url]
+    if fetch_mode == "status":
+        return [status_url] if status_url else [gateway_url]
+    urls = [gateway_url]
+    if status_url:
+        urls.append(status_url)
+    return urls
+
+
+def wait_submission_final_via_sse(
+    participant_session: requests.Session,
+    participant_id: int,
+    submission_id: str,
+    endpoints: ServiceEndpoints,
+    args: argparse.Namespace,
+) -> str:
+    stream_base_candidates = []
+    if endpoints.status_sse:
+        stream_base_candidates.append(endpoints.status_sse)
+    if args.status_wait_mode in {"sse", "auto"}:
+        stream_base_candidates.append(endpoints.gateway)
+
+    deadline = time.time() + max(1.0, args.poll_times * args.poll_interval)
+    connect_timeout_s = max(3, min(args.timeout, 10))
+    read_timeout_s = max(args.timeout * 6, int(args.poll_interval * 10), 120)
+    stream_error = None
+
+    for stream_base in stream_base_candidates:
+        stream_url = f"{stream_base}/api/v1/status/submissions/{submission_id}/events"
         final_status = ""
-        for _ in range(args.poll_times):
-            status_resp = None
-            for url in user_status_urls:
-                ok, result = try_request_json(participant_session, "GET", url, timeout=args.timeout)
-                if ok:
-                    status_resp = result
-                    break
-            if status_resp is None:
-                time.sleep(args.poll_interval)
-                continue
-            final_status = pick(status_resp, "data", "status") or status_resp.get("status") or ""
-            if final_status.lower() in {"finished", "failed"}:
-                break
-            time.sleep(args.poll_interval)
-        require(final_status != "", f"final status is empty for user={participant_id}")
-        return final_status
+        headers = {"Accept": "text/event-stream"}
+        if stream_base == endpoints.status_sse:
+            headers["X-User-Id"] = str(participant_id)
+        try:
+            print(f"sse_connect url={stream_url}")
+            with participant_session.get(
+                stream_url,
+                headers=headers,
+                stream=True,
+                timeout=(connect_timeout_s, read_timeout_s),
+            ) as resp:
+                if resp.status_code < 200 or resp.status_code >= 300:
+                    raise RuntimeError(f"sse request failed: GET {stream_url} ({resp.status_code})")
+                data_lines: list[str] = []
+                # Use tiny chunk size to avoid buffering small SSE frames (snapshot/ping) in client.
+                for raw_line in resp.iter_lines(chunk_size=1, decode_unicode=True):
+                    if time.time() >= deadline:
+                        break
+                    line = (raw_line or "").strip()
+                    if not line:
+                        if not data_lines:
+                            continue
+                        payload_text = "".join(data_lines)
+                        data_lines = []
+                        payload = json.loads(payload_text)
+                        final_status = (
+                            pick(payload, "data", "status")
+                            or pick(payload, "data", "data", "status")
+                            or payload.get("status")
+                            or ""
+                        )
+                        print(f"sse_status submission_id={submission_id} status={final_status}")
+                        if str(final_status).lower() in {"finished", "failed"}:
+                            break
+                        continue
+                    if line.startswith(":"):
+                        continue
+                    if line.startswith("data:"):
+                        data_lines.append(line[len("data:") :].strip())
+                        continue
+            if final_status:
+                return final_status
+        except Exception as sse_err:
+            stream_error = sse_err
+            continue
 
-    def submit_user_session(participant: dict) -> dict:
-        submit_count = int(participant.get("planned_submit_count", 1))
-        gaps_ms = participant.get("attempt_gaps_ms", [])
-        attempts = []
-        for attempt_idx in range(submit_count):
-            is_final_attempt = attempt_idx == submit_count - 1
-            code_text = source_code if is_final_attempt else wrong_source_code
-            submit_result = submit_once(participant, code_text)
-            if args.throughput_only:
-                final_status = "submitted"
-            else:
-                final_status = wait_submission_final(
-                    participant["session"],
-                    int(participant["user_id"]),
-                    str(submit_result["submission_id"]),
+    raise RuntimeError(f"sse stream failed: {stream_error}")
+
+
+def wait_submission_final(
+    participant_session: requests.Session,
+    participant_id: int,
+    submission_id: str,
+    endpoints: ServiceEndpoints,
+    args: argparse.Namespace,
+) -> str:
+    if args.status_wait_mode in {"sse", "auto"}:
+        try:
+            return wait_submission_final_via_sse(participant_session, participant_id, submission_id, endpoints, args)
+        except Exception as sse_err:
+            if args.status_wait_mode == "sse":
+                print(
+                    f"sse status stream failed, fallback to poll: user={participant_id} "
+                    f"submission={submission_id} err={sse_err}"
                 )
-            result = {
+            else:
+                print(
+                    f"sse status stream failed in auto mode, fallback to poll: user={participant_id} "
+                    f"submission={submission_id} err={sse_err}"
+                )
+
+    user_status_urls = build_status_urls(endpoints, submission_id, args.status_fetch_mode)
+    final_status = ""
+    for _ in range(args.poll_times):
+        status_resp = None
+        for url in user_status_urls:
+            ok, result = try_request_json(participant_session, "GET", url, timeout=args.timeout)
+            if ok:
+                status_resp = result
+                break
+        if status_resp is None:
+            time.sleep(args.poll_interval)
+            continue
+        final_status = pick(status_resp, "data", "status") or status_resp.get("status") or ""
+        if final_status.lower() in {"finished", "failed"}:
+            break
+        time.sleep(args.poll_interval)
+    require(final_status != "", f"final status is empty for user={participant_id}")
+    return final_status
+
+
+def execute_participant_plan(
+    participant: ParticipantPlan,
+    endpoints: ServiceEndpoints,
+    problem_pack: ProblemPack,
+    contest_id: str,
+    source_variants: SourceVariants,
+    args: argparse.Namespace,
+) -> dict:
+    attempts = []
+    for attempt_idx in range(participant.planned_submit_count):
+        is_final_attempt = attempt_idx == participant.planned_submit_count - 1
+        code_text = (
+            source_variants.correct[participant.language_id]
+            if is_final_attempt
+            else source_variants.wrong[participant.language_id]
+        )
+        submit_result = submit_once(participant, endpoints, problem_pack, contest_id, code_text, args.timeout)
+        if args.throughput_only:
+            final_status = "submitted"
+        else:
+            final_status = wait_submission_final(
+                participant.session,
+                participant.user_id,
+                str(submit_result["submission_id"]),
+                endpoints,
+                args,
+            )
+        attempts.append(
+            {
                 "user_id": submit_result["user_id"],
                 "submission_id": submit_result["submission_id"],
+                "language_id": participant.language_id,
                 "final_status": final_status,
             }
-            attempts.append(result)
-            if attempt_idx < submit_count - 1:
-                gap_ms = int(gaps_ms[attempt_idx]) if attempt_idx < len(gaps_ms) else args.submit_gap_min_ms
-                if gap_ms > 0:
-                    time.sleep(gap_ms / 1000.0)
-        last_attempt = attempts[-1]
-        return {
-            "user_id": participant["user_id"],
-            "planned_submit_count": submit_count,
-            "attempts": attempts,
-            "last_submission_id": last_attempt["submission_id"],
-            "last_final_status": last_attempt["final_status"],
-        }
+        )
+        if attempt_idx < participant.planned_submit_count - 1:
+            gap_ms = participant.attempt_gaps_ms[attempt_idx] if attempt_idx < len(participant.attempt_gaps_ms) else 0
+            if gap_ms > 0:
+                time.sleep(gap_ms / 1000.0)
+    last_attempt = attempts[-1]
+    return {
+        "user_id": participant.user_id,
+        "language_id": participant.language_id,
+        "planned_submit_count": participant.planned_submit_count,
+        "attempts": attempts,
+        "last_submission_id": last_attempt["submission_id"],
+        "last_final_status": last_attempt["final_status"],
+    }
 
+
+def run_submission_stage(
+    participants: list[ParticipantPlan],
+    endpoints: ServiceEndpoints,
+    problem_pack: ProblemPack,
+    contest_id: str,
+    source_variants: SourceVariants,
+    args: argparse.Namespace,
+) -> tuple[list[dict], float]:
     print("== concurrent contest submit & status poll ==")
     submission_results = []
     max_workers = max(1, min(args.submit_workers, len(participants)))
-    submit_stage_started_at = time.time()
+    started_at = time.time()
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(submit_user_session, participant) for participant in participants]
+        futures = [
+            executor.submit(execute_participant_plan, participant, endpoints, problem_pack, contest_id, source_variants, args)
+            for participant in participants
+        ]
         for future in as_completed(futures):
             submission_results.append(future.result())
-    submit_stage_elapsed_s = max(0.001, time.time() - submit_stage_started_at)
+    elapsed_s = max(0.001, time.time() - started_at)
+    return submission_results, elapsed_s
 
-    require(len(submission_results) == len(participants), "not all concurrent submissions completed")
+
+def validate_submission_results(submission_results: list[dict], participant_count: int, throughput_only: bool) -> None:
+    require(len(submission_results) == participant_count, "not all concurrent submissions completed")
     mismatched_attempts = [
-        res
-        for res in submission_results
-        if int(res.get("planned_submit_count", 0)) != len(res.get("attempts", []))
+        res for res in submission_results if int(res.get("planned_submit_count", 0)) != len(res.get("attempts", []))
     ]
     require(not mismatched_attempts, f"some users did not finish planned attempts: {mismatched_attempts}")
-    if not args.throughput_only:
+    if not throughput_only:
         failed_status = [res for res in submission_results if str(res["last_final_status"]).lower() != "finished"]
         require(not failed_status, f"some submissions did not finish successfully: {failed_status}")
 
-    rank_found_all = False
+
+def wait_leaderboard_ready(
+    session: requests.Session,
+    participants: list[ParticipantPlan],
+    endpoints: ServiceEndpoints,
+    contest_id: str,
+    args: argparse.Namespace,
+) -> bool:
     if args.throughput_only:
         print("== leaderboard poll skipped (throughput-only) ==")
-    else:
-        print("== leaderboard check (prefer websocket, fallback poll) ==")
-        page_size = max(50, len(participants) + 5)
-        leaderboard_urls = [f"{base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"]
-        if rank_base_url:
-            leaderboard_urls.append(
-                f"{rank_base_url}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"
-            )
-        expected_member_ids = {str(participant["user_id"]) for participant in participants}
-        seen_member_ids = set()
-        ws_err = None
-        try:
-            import websocket  # type: ignore
+        return False
 
-            rank_ws_base = to_ws_base(rank_base_url if rank_base_url else base_url)
-            leaderboard_ws_url = (
-                f"{rank_ws_base}/api/v1/contests/{contest_id}/leaderboard/ws?page=1&page_size={page_size}&mode=live"
-            )
-            ws_headers = []
-            auth_header = session.headers.get("Authorization")
-            if auth_header:
-                ws_headers.append(f"Authorization: {auth_header}")
-            deadline = time.time() + max(1.0, args.rank_poll_times * args.poll_interval)
-            conn = websocket.create_connection(leaderboard_ws_url, timeout=args.timeout, header=ws_headers)
-            try:
-                while time.time() < deadline:
-                    message = conn.recv()
-                    if not message:
-                        continue
-                    payload = json.loads(message)
-                    items = pick(payload, "data", "items") or []
-                    seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
-                    if expected_member_ids.issubset(seen_member_ids):
-                        rank_found_all = True
-                        break
-            finally:
-                conn.close()
-        except Exception as err:
-            ws_err = err
-
-        if not rank_found_all:
-            if ws_err is not None:
-                print(f"leaderboard websocket unavailable, fallback to poll: {ws_err}")
-            for _ in range(args.rank_poll_times):
-                lb_resp = None
-                for lb_url in leaderboard_urls:
-                    ok, result = try_request_json(session, "GET", lb_url, timeout=args.timeout)
-                    if ok:
-                        lb_resp = result
-                        break
-                if lb_resp is None:
-                    time.sleep(args.poll_interval)
-                    continue
-                items = pick(lb_resp, "data", "items") or []
-                seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
-                if expected_member_ids.issubset(seen_member_ids):
-                    rank_found_all = True
-                    break
-                time.sleep(args.poll_interval)
-        require(
-            rank_found_all,
-            f"not all members found in leaderboard, expected={expected_member_ids}, seen={seen_member_ids}",
+    print("== leaderboard check (poll only) ==")
+    page_size = max(50, len(participants) + 5)
+    leaderboard_urls = [f"{endpoints.gateway}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"]
+    if endpoints.rank:
+        leaderboard_urls.append(
+            f"{endpoints.rank}/api/v1/contests/{contest_id}/leaderboard?page=1&page_size={page_size}&mode=live"
         )
+    expected_member_ids = {str(participant.user_id) for participant in participants}
+    seen_member_ids = set()
+    for _ in range(args.rank_poll_times):
+        lb_resp = None
+        for lb_url in leaderboard_urls:
+            ok, result = try_request_json(session, "GET", lb_url, timeout=args.timeout)
+            if ok:
+                lb_resp = result
+                break
+        if lb_resp is None:
+            time.sleep(args.poll_interval)
+            continue
+        items = pick(lb_resp, "data", "items") or []
+        seen_member_ids = {str(item.get("member_id", "")) for item in items if str(item.get("member_id", ""))}
+        if expected_member_ids.issubset(seen_member_ids):
+            return True
+        time.sleep(args.poll_interval)
+    raise RuntimeError(f"not all members found in leaderboard, expected={expected_member_ids}, seen={seen_member_ids}")
 
+
+def print_summary(
+    owner_user_id: int,
+    participants: list[ParticipantPlan],
+    multi_user_count: int,
+    total_attempts: int,
+    submit_stage_elapsed_s: float,
+    throughput_only: bool,
+    problem_pack: ProblemPack,
+    contest_id: str,
+    submission_results: list[dict],
+    rank_found_all: bool,
+) -> None:
     print("== summary ==")
-    print(f"owner_user_id={user_id}")
+    print(f"owner_user_id={owner_user_id}")
     print(f"participant_count={len(participants)}")
     print(f"multi_submit_user_count={multi_user_count}")
     print(f"total_planned_attempts={total_attempts}")
     print(f"submit_stage_elapsed_s={submit_stage_elapsed_s:.6f}")
-    print(f"throughput_only={args.throughput_only}")
-    print(f"problem_id={problem_id}")
+    print(f"throughput_only={throughput_only}")
+    print(f"problem_id={problem_pack.problem_id}")
     print(f"contest_id={contest_id}")
     for result in sorted(submission_results, key=lambda item: item["user_id"]):
         attempt_summaries = ",".join(
-            f"{idx + 1}:{attempt['submission_id']}:{attempt['final_status']}"
+            f"{idx + 1}:{attempt['submission_id']}:{attempt['language_id']}:{attempt['final_status']}"
             for idx, attempt in enumerate(result["attempts"])
         )
-        print(f"submission user_id={result['user_id']} attempts={attempt_summaries}")
+        print(f"submission user_id={result['user_id']} language_id={result['language_id']} attempts={attempt_summaries}")
     print(f"leaderboard_all_seen={rank_found_all}")
+
+
+def main() -> int:
+    args = parse_args()
+    behavior_seed = args.submit_seed if args.submit_seed != 0 else time.time_ns()
+    rng = random.Random(behavior_seed)
+    print(f"submit behavior seed={behavior_seed}")
+
+    repo_root = Path(__file__).resolve().parents[1]
+    endpoints = resolve_service_endpoints(repo_root, args.base)
+
+    print("== register ==")
+    print("== login ==")
+    owner_session, owner_user_id, _ = create_authenticated_user(endpoints.gateway, args.timeout, "contest_e2e_owner")
+    problem_pack = build_problem_pack(owner_session, endpoints.gateway, owner_user_id, args.timeout)
+    contest_id = create_contest(owner_session, endpoints, owner_user_id, problem_pack, args.timeout)
+    register_contest_user(owner_session, endpoints, contest_id, owner_user_id, args.timeout)
+
+    source_variants = load_submission_sources(repo_root)
+    participants, multi_user_count, total_attempts = build_participant_plans(
+        owner_session, owner_user_id, endpoints, args, rng
+    )
+    register_all_participants(participants, endpoints, contest_id, args.timeout)
+
+    submission_results, submit_stage_elapsed_s = run_submission_stage(
+        participants, endpoints, problem_pack, contest_id, source_variants, args
+    )
+    validate_submission_results(submission_results, len(participants), args.throughput_only)
+    rank_found_all = wait_leaderboard_ready(owner_session, participants, endpoints, contest_id, args)
+    print_summary(
+        owner_user_id,
+        participants,
+        multi_user_count,
+        total_attempts,
+        submit_stage_elapsed_s,
+        args.throughput_only,
+        problem_pack,
+        contest_id,
+        submission_results,
+        rank_found_all,
+    )
     return 0
 
 

@@ -209,7 +209,11 @@ func (s *subscription) loop(ctx context.Context) {
 	logger := logx.WithContext(ctx)
 	if err := s.sendSnapshot(ctx); err != nil {
 		logger.Errorf("send status snapshot failed: %v", err)
-		return
+		// Keep stream alive with a fallback snapshot so clients do not block forever.
+		if fallbackErr := s.sender.Send(eventSnapshot, toMessage(s.submissionID, pendingPayload(s.submissionID))); fallbackErr != nil {
+			logger.Errorf("send fallback status snapshot failed: %v", fallbackErr)
+			return
+		}
 	}
 
 	heartbeatTicker := time.NewTicker(s.heartbeat)
@@ -223,6 +227,16 @@ func (s *subscription) loop(ctx context.Context) {
 		case <-heartbeatTicker.C:
 			if err := s.sender.Ping(); err != nil {
 				logger.Errorf("send status ping failed: %v", err)
+				return
+			}
+			// Fallback refresh on heartbeat to avoid stale pending stream
+			// when pubsub notification is missed.
+			isFinal, err := s.sendUpdate(ctx)
+			if err != nil {
+				logger.Errorf("send status update on heartbeat failed: %v", err)
+				return
+			}
+			if isFinal {
 				return
 			}
 		case <-s.refreshCh:
@@ -243,11 +257,26 @@ func (s *subscription) loop(ctx context.Context) {
 			}
 			return timer.C
 		}():
-			if err := s.sendUpdate(ctx); err != nil {
+			isFinal, err := s.sendUpdate(ctx)
+			if err != nil {
 				logger.Errorf("send status update failed: %v", err)
 				return
 			}
+			if isFinal {
+				return
+			}
 		}
+	}
+}
+
+func pendingPayload(submissionID string) statuswriter.StatusPayload {
+	return statuswriter.StatusPayload{
+		SubmissionID: submissionID,
+		Status:       "Pending",
+		Progress: statuswriter.Progress{
+			TotalTests: 0,
+			DoneTests:  0,
+		},
 	}
 }
 
@@ -274,35 +303,38 @@ func (s *subscription) sendSnapshot(ctx context.Context) error {
 	return s.sender.Send(eventSnapshot, msg)
 }
 
-func (s *subscription) sendUpdate(ctx context.Context) error {
+func (s *subscription) sendUpdate(ctx context.Context) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	status, err := s.repo.GetLatestStatus(ctx, s.submissionID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	summary := repository.BuildSummary(status)
 	if err := s.sender.Send(eventUpdate, toMessage(s.submissionID, summary)); err != nil {
-		return err
+		return false, err
 	}
 	if !repository.IsFinalStatus(status.Status) {
-		return nil
+		return false, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	finalStatus, err := s.repo.GetFinalStatus(ctx, s.submissionID)
 	if err != nil {
 		finalStatus = status
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
-	return s.sender.Send(eventFinal, toMessage(s.submissionID, finalStatus))
+	if err := s.sender.Send(eventFinal, toMessage(s.submissionID, finalStatus)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type statusMessage struct {

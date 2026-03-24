@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	appErr "fuzoj/pkg/errors"
@@ -456,7 +457,7 @@ type pageRow struct {
 }
 
 func (r *LeaderboardRepository) loadPageRows(ctx context.Context, contestID, leaderboardKey string, start, stop int64) (int64, string, []pageRow, error) {
-	raw, err := r.redis.ScriptRunCtx(ctx, rankLoadPageScript, []string{leaderboardKey, metaKey(contestID)}, detailPrefix+contestID+":", start, stop)
+	raw, err := r.redis.ScriptRunCtx(ctx, rankLoadPageScript, []string{leaderboardKey, metaKey(contestID)}, detailPrefixForContest(contestID), start, stop)
 	if err != nil {
 		return 0, "", nil, appErr.Wrapf(err, appErr.CacheError, "load leaderboard page failed")
 	}
@@ -504,22 +505,45 @@ func (r *LeaderboardRepository) loadVersion(ctx context.Context, contestID strin
 }
 
 func leaderboardKey(contestID string) string {
-	return leaderboardPrefix + contestID
+	return leaderboardPrefix + contestSlotTag(contestID)
 }
 
 func leaderboardKeyByMode(contestID, mode string) string {
 	if mode == "frozen" {
-		return leaderboardFrozen + contestID
+		return leaderboardFrozen + contestSlotTag(contestID)
 	}
 	return leaderboardKey(contestID)
 }
 
 func detailKey(contestID, memberID string) string {
-	return detailPrefix + contestID + ":" + memberID
+	return detailPrefixForContest(contestID) + memberID
 }
 
 func metaKey(contestID string) string {
-	return metaPrefix + contestID
+	return metaPrefix + contestSlotTag(contestID)
+}
+
+func detailPrefixForContest(contestID string) string {
+	return detailPrefix + contestSlotTag(contestID) + ":"
+}
+
+func contestSlotTag(contestID string) string {
+	return "{" + contestID + "}"
+}
+
+func parseContestIDFromMetaKey(key string) string {
+	rest := strings.TrimPrefix(key, metaPrefix)
+	if rest == "" {
+		return ""
+	}
+	if strings.HasPrefix(rest, "{") {
+		idx := strings.Index(rest, "}")
+		if idx <= 1 {
+			return ""
+		}
+		return rest[1:idx]
+	}
+	return rest
 }
 
 func pageCacheKey(contestID, mode string, page, pageSize int, version string) string {
@@ -600,7 +624,7 @@ func (r *LeaderboardRepository) applyContestEventsWithSummary(ctx context.Contex
 		meta.MaxVersion,
 		meta.MaxUpdatedAt,
 		snapshotAt,
-		detailPrefix+contestID+":",
+		detailPrefixForContest(contestID),
 	)
 	for i, event := range events {
 		if event.MemberID == "" {

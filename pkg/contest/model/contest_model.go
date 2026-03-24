@@ -13,6 +13,7 @@ type Contest struct {
 	Visibility string    `db:"visibility"`
 	StartAt    time.Time `db:"start_at"`
 	EndAt      time.Time `db:"end_at"`
+	RuleJSON   string    `db:"rule_json"`
 }
 
 type ContestModel struct {
@@ -29,7 +30,7 @@ func NewContestModel(conn sqlx.SqlConn) *ContestModel {
 
 func (m *ContestModel) FindMeta(ctx context.Context, contestID string) (Contest, error) {
 	var resp Contest
-	query := "select contest_id, status, visibility, start_at, end_at from " + m.table + " where `contest_id` = ? limit 1"
+	query := "select contest_id, status, visibility, start_at, end_at, rule_json from " + m.table + " where `contest_id` = ? limit 1"
 	err := m.conn.QueryRowCtx(ctx, &resp, query, contestID)
 	return resp, err
 }

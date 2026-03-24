@@ -94,7 +94,7 @@ Judge:
   WorkRoot: /home/foushen.zhan/fuzoj/tmp/work
 Sandbox:
   CgroupRoot: /sys/fs/cgroup
-  SeccompDir: /etc/judge/seccomp
+  SeccompDir: /home/foushen.zhan/fuzoj/configs/seccomp
   HelperPath: /home/foushen.zhan/fuzoj/logs/bin/sandbox-init
   StdoutStderrMaxBytes: 1048576
   EnableSeccomp: false
@@ -115,6 +115,19 @@ Language:
         - LC_ALL=C
       TimeMultiplier: 1.0
       MemoryMultiplier: 1.0
+    - ID: py
+      Name: Python
+      Version: "3"
+      SourceFile: main.py
+      BinaryFile: ""
+      CompileEnabled: false
+      CompileCmdTpl: ""
+      RunCmdTpl: "python3 {src}"
+      Env:
+        - LANG=C
+        - LC_ALL=C
+      TimeMultiplier: 2.0
+      MemoryMultiplier: 1.0
   Profiles:
     - LanguageID: cpp
       TaskType: compile
@@ -134,6 +147,28 @@ Language:
       DefaultLimits:
         CPUTimeMs: 1000
         WallTimeMs: 2000
+        MemoryMB: 512
+        StackMB: 256
+        OutputMB: 64
+        PIDs: 64
+    - LanguageID: py
+      TaskType: run
+      RootFS: /home/foushen.zhan/fuzoj/rootfs/python-run-rootfs
+      SeccompProfile: py-run.json
+      DefaultLimits:
+        CPUTimeMs: 2000
+        WallTimeMs: 4000
+        MemoryMB: 512
+        StackMB: 256
+        OutputMB: 64
+        PIDs: 64
+    - LanguageID: py
+      TaskType: checker
+      RootFS: /home/foushen.zhan/fuzoj/rootfs/python-run-rootfs
+      SeccompProfile: py-checker.json
+      DefaultLimits:
+        CPUTimeMs: 2000
+        WallTimeMs: 4000
         MemoryMB: 512
         StackMB: 256
         OutputMB: 64

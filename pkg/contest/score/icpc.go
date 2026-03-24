@@ -4,6 +4,14 @@ import "time"
 
 // ICPCPenalty calculates ICPC-style penalty in seconds.
 func ICPCPenalty(startAt time.Time, submitAt time.Time, wrongCount int) int64 {
+	return ICPCPenaltyWithMinutes(startAt, submitAt, wrongCount, 20)
+}
+
+// ICPCPenaltyWithMinutes calculates ICPC-style penalty in seconds with configurable penalty minutes.
+func ICPCPenaltyWithMinutes(startAt time.Time, submitAt time.Time, wrongCount int, penaltyMinutes int) int64 {
+	if penaltyMinutes <= 0 {
+		penaltyMinutes = 20
+	}
 	if startAt.IsZero() || submitAt.IsZero() {
 		return 0
 	}
@@ -11,7 +19,7 @@ func ICPCPenalty(startAt time.Time, submitAt time.Time, wrongCount int) int64 {
 	if base < 0 {
 		base = 0
 	}
-	return int64(base) + int64(wrongCount)*20*60
+	return int64(base) + int64(wrongCount)*int64(penaltyMinutes)*60
 }
 
 // SortScore computes sort score for ICPC leaderboard.

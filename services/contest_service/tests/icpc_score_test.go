@@ -28,6 +28,27 @@ func TestICPCPenalty(t *testing.T) {
 	}
 }
 
+func TestICPCPenaltyWithMinutes(t *testing.T) {
+	start := time.Date(2026, 3, 4, 10, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name           string
+		submitAt       time.Time
+		wrongCount     int
+		penaltyMinutes int
+		expect         int64
+	}{
+		{"custom-10", start.Add(30 * time.Minute), 2, 10, 30*60 + 2*10*60},
+		{"invalid-fallback", start.Add(30 * time.Minute), 2, 0, 30*60 + 2*20*60},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := score.ICPCPenaltyWithMinutes(start, tc.submitAt, tc.wrongCount, tc.penaltyMinutes); got != tc.expect {
+				t.Fatalf("penalty with minutes mismatch: got=%d expect=%d", got, tc.expect)
+			}
+		})
+	}
+}
+
 func TestSortScore(t *testing.T) {
 	cases := []struct {
 		name     string

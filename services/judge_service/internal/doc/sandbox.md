@@ -33,10 +33,11 @@
 
 ### 2.2 Runner 实现要点（当前实现）
 
-Runner 负责将语言与任务配置转化为可执行的 `RunSpec`，并调用 Sandbox Engine。当前实现以 **C++ 为优先支持语言**，并通过统一请求结构承载通用字段，为多语言扩展保留空间：
+Runner 负责将语言与任务配置转化为可执行的 `RunSpec`，并调用 Sandbox Engine。当前实现按 `language_id` 分发到语言专属 runner，已内置 **C++** 与 **Python** 两类实现，并通过统一请求结构承载通用字段：
 
 - `CompileRequest` / `RunRequest` 作为统一结构，承载通用字段（SubmissionID、WorkDir、语言配置、Profile、资源限制等）。
-- 语言差异通过 `LanguageSpec` 或独立 Runner 实现来体现，而不是扩展请求结构。
+- `LanguageDispatchRunner` 作为统一入口，按 `language_id` 选择 `CppRunner` 或 `PythonRunner`。
+- 语言差异通过 `LanguageSpec` 与独立 Runner 实现来体现，而不是把全部语言逻辑堆在同一个默认实现中。
 
 Runner 生成 RunSpec 的关键规则：
 
@@ -45,6 +46,7 @@ Runner 生成 RunSpec 的关键规则：
 3. `BindMounts` 包含工作目录（读写）与输入/答案（只读）。
 4. 资源限制优先使用请求中覆盖值，其次使用 `TaskProfile.DefaultLimits`，并应用语言倍率（Time/Memory multiplier）。
 5. 编译日志写入 `/work/compile.log`，运行日志写入 `/work/runtime.log`。
+6. 对于无编译语言，runner 需要先把源码写入测试目录，再执行解释器命令。
 
 #### SPJ（Checker）流程
 

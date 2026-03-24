@@ -52,6 +52,10 @@ def build_smoke_cmd(args: argparse.Namespace, concurrent_users: int, seed: int) 
         str(args.submit_workers),
         "--timeout",
         str(args.timeout),
+        "--status-wait-mode",
+        args.status_wait_mode,
+        "--status-fetch-mode",
+        args.status_fetch_mode,
         "--poll-interval",
         str(args.poll_interval),
         "--poll-times",
@@ -183,6 +187,18 @@ def main() -> int:
     parser.add_argument("--rounds", type=int, default=3, help="Rounds per concurrency step")
     parser.add_argument("--submit-workers", type=int, default=50, help="Worker count forwarded to smoke script")
     parser.add_argument("--timeout", type=int, default=10, help="HTTP timeout seconds")
+    parser.add_argument(
+        "--status-wait-mode",
+        choices=("sse", "poll", "auto"),
+        default="sse",
+        help="Forwarded to smoke script for submission status waiting",
+    )
+    parser.add_argument(
+        "--status-fetch-mode",
+        choices=("gateway", "status", "auto"),
+        default="auto",
+        help="Forwarded to smoke script for short polling fallback",
+    )
     parser.add_argument("--poll-interval", type=float, default=1.0, help="Status poll interval seconds")
     parser.add_argument("--poll-times", type=int, default=60, help="Status poll times")
     parser.add_argument("--rank-poll-times", type=int, default=90, help="Leaderboard poll times")

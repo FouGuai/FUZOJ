@@ -162,7 +162,7 @@ Value：`host:port`
   "problemRpc":{"etcd":{"hosts":["127.0.0.1:2379"],"key":"problem.rpc"},"timeout":2000,"callTimeout":"2s","metaTTL":"30s"},
   "status":{"ttl":"30m","timeout":"2s","finalTopic":"judge.status.final","finalBatchSize":100,"finalBatchInterval":"1s","finalBatchTimeout":"3s"},
   "judge":{"workRoot":"/data/judge/work"},
-  "sandbox":{"cgroupRoot":"/sys/fs/cgroup","seccompDir":"/etc/judge/seccomp","helperPath":"/usr/local/bin/judge-helper","stdoutStderrMaxBytes":1048576,
+  "sandbox":{"cgroupRoot":"/sys/fs/cgroup","seccompDir":"/home/foushen.zhan/fuzoj/configs/seccomp","helperPath":"/usr/local/bin/judge-helper","stdoutStderrMaxBytes":1048576,
     "enableSeccomp":true,"enableCgroup":true,"enableNamespaces":true},
   "language":{"languages":[],"profiles":[]}
 }

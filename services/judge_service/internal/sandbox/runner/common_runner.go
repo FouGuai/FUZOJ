@@ -33,98 +33,27 @@ const (
 	checkerLogMaxSize = 64 * 1024
 )
 
-// DefaultRunner implements compile/run workflows for supported languages.
-type DefaultRunner struct {
+type runnerSupport struct {
 	eng     engine.Engine
 	metrics observer.MetricsRecorder
 }
 
-// NewRunner creates a new runner backed by the sandbox engine.
-func NewRunner(eng engine.Engine) *DefaultRunner {
-	return NewRunnerWithObserver(eng, observer.NoopMetricsRecorder{})
+type checkerRunResult struct {
+	ExitCode int
+	LogPath  string
 }
 
-// NewRunnerWithObserver creates a new runner with metrics hooks.
-func NewRunnerWithObserver(eng engine.Engine, metrics observer.MetricsRecorder) *DefaultRunner {
+func newRunnerSupport(eng engine.Engine, metrics observer.MetricsRecorder) runnerSupport {
 	if metrics == nil {
 		metrics = observer.NoopMetricsRecorder{}
 	}
-	return &DefaultRunner{eng: eng, metrics: metrics}
+	return runnerSupport{
+		eng:     eng,
+		metrics: metrics,
+	}
 }
 
-func (r *DefaultRunner) Compile(ctx context.Context, req CompileRequest) (result.CompileResult, error) {
-	logger := logx.WithContext(ctx)
-	logger.Infof("compile task start submission_id=%s language_id=%s work_dir=%s", req.SubmissionID, req.Language.ID, req.WorkDir)
-
-	if err := validateCompileRequest(req); err != nil {
-		return result.CompileResult{}, err
-	}
-	if !req.Language.CompileEnabled {
-		return result.CompileResult{OK: true}, nil
-	}
-	if err := prepareWorkDir(req.WorkDir); err != nil {
-		return result.CompileResult{}, err
-	}
-	if err := writeSourceFile(req.WorkDir, req.SourcePath, req.Language.SourceFile); err != nil {
-		return result.CompileResult{}, err
-	}
-
-	limits := applyLimits(req.Limits, req.Profile.DefaultLimits, req.Language)
-	cmd, err := buildCommand(req.Language.CompileCmdTpl, req.Language, req.ExtraCompileFlags)
-	if err != nil {
-		return result.CompileResult{}, err
-	}
-
-	runSpec := spec.RunSpec{
-		SubmissionID: req.SubmissionID,
-		TestID:       "compile",
-		WorkDir:      containerWorkDir,
-		Cmd:          cmd,
-		Env:          req.Language.Env,
-		StdoutPath:   "",
-		StderrPath:   filepath.Join(containerWorkDir, compileLogName),
-		Profile:      profileName(req.Language.ID, req.Profile.TaskType),
-		Limits:       limits,
-		BindMounts: []spec.MountSpec{{
-			Source:   req.WorkDir,
-			Target:   containerWorkDir,
-			ReadOnly: false,
-		}},
-	}
-
-	runRes, runErr := r.eng.Run(ctx, runSpec)
-	logContent, logErr := readCompileLog(filepath.Join(req.WorkDir, compileLogName), compileLogMaxSize)
-	if logErr != nil {
-		logger.Errorf("read compile log failed submission_id=%s language_id=%s err=%v", req.SubmissionID, req.Language.ID, logErr)
-	}
-	compileRes := result.CompileResult{
-		OK:       runRes.ExitCode == 0 && runErr == nil,
-		ExitCode: runRes.ExitCode,
-		TimeMs:   runRes.TimeMs,
-		MemoryKB: runRes.MemoryKB,
-		Log:      logContent,
-	}
-	r.metrics.ObserveCompile(ctx, req.Language.ID, compileRes.OK, compileRes.TimeMs, compileRes.MemoryKB)
-	if runErr != nil {
-		compileRes.Error = runErr.Error()
-		if compileRes.Log == "" {
-			compileRes.Log = runRes.Stderr
-		}
-		logger.Errorf("compile run failed submission_id=%s language_id=%s err=%v", req.SubmissionID, req.Language.ID, runErr)
-		return compileRes, runErr
-	}
-	if runRes.ExitCode != 0 {
-		if compileRes.Log != "" {
-			compileRes.Error = compileRes.Log
-		} else {
-			compileRes.Error = runRes.Stderr
-			compileRes.Log = runRes.Stderr
-		}
-	}
-	return compileRes, nil
-}
-
-func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.TestcaseResult, error) {
+func (s runnerSupport) executeRun(ctx context.Context, req RunRequest, limits spec.ResourceLimit, prepare func() error) (result.TestcaseResult, error) {
 	if req.IOConfig.Mode == "" {
 		req.IOConfig.Mode = "stdio"
 	}
@@ -134,20 +63,24 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 	if err := prepareWorkDir(req.WorkDir); err != nil {
 		return result.TestcaseResult{}, err
 	}
+	if prepare != nil {
+		if err := prepare(); err != nil {
+			return result.TestcaseResult{}, err
+		}
+	}
 
-	limits := applyLimits(req.Limits, req.Profile.DefaultLimits, req.Language)
 	runSpec, runtimeLogPath, outputName, err := buildRunSpec(req, limits)
 	if err != nil {
 		return result.TestcaseResult{}, err
 	}
 
-	runRes, runErr := r.eng.Run(ctx, runSpec)
+	runRes, runErr := s.eng.Run(ctx, runSpec)
 	runtimeLog, runtimeErr := readLogFile(runtimeLogPath, runtimeLogMaxSize)
 	if runtimeErr != nil {
 		logx.WithContext(ctx).Errorf("read runtime log failed submission_id=%s test_id=%s err=%v", req.SubmissionID, req.TestID, runtimeErr)
 	}
 	if runErr != nil {
-		r.metrics.ObserveRun(ctx, req.Language.ID, string(result.VerdictSE), runRes.TimeMs, runRes.MemoryKB, runRes.OutputKB)
+		s.metrics.ObserveRun(ctx, req.Language.ID, string(result.VerdictSE), runRes.TimeMs, runRes.MemoryKB, runRes.OutputKB)
 		return result.TestcaseResult{
 			TestID:     req.TestID,
 			Verdict:    result.VerdictSE,
@@ -156,12 +89,10 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 	}
 
 	verdict := mapRunVerdict(runRes, limits)
-	checkerLogPath := ""
 	checkerLog := ""
 	if verdict == result.VerdictAC && req.Checker != nil && req.CheckerProfile != nil {
-		checkerRes, checkerErr := r.runChecker(ctx, req, outputName)
-		checkerLogPath = checkerRes.LogPath
-		checkerLog, runtimeErr = readLogFile(checkerLogPath, checkerLogMaxSize)
+		checkerRes, checkerErr := s.runChecker(ctx, req, outputName)
+		checkerLog, runtimeErr = readLogFile(checkerRes.LogPath, checkerLogMaxSize)
 		if runtimeErr != nil {
 			logx.WithContext(ctx).Errorf("read checker log failed submission_id=%s test_id=%s err=%v", req.SubmissionID, req.TestID, runtimeErr)
 		}
@@ -192,11 +123,11 @@ func (r *DefaultRunner) Run(ctx context.Context, req RunRequest) (result.Testcas
 		Score:      req.Score,
 		SubtaskID:  req.SubtaskID,
 	}
-	r.metrics.ObserveRun(ctx, req.Language.ID, string(verdict), res.TimeMs, res.MemoryKB, res.OutputKB)
+	s.metrics.ObserveRun(ctx, req.Language.ID, string(verdict), res.TimeMs, res.MemoryKB, res.OutputKB)
 	return res, nil
 }
 
-func (r *DefaultRunner) runChecker(ctx context.Context, req RunRequest, outputName string) (checkerRunResult, error) {
+func (s runnerSupport) runChecker(ctx context.Context, req RunRequest, outputName string) (checkerRunResult, error) {
 	if req.Checker == nil || req.CheckerProfile == nil {
 		return checkerRunResult{}, appErr.ValidationError("checker", "required")
 	}
@@ -223,7 +154,7 @@ func (r *DefaultRunner) runChecker(ctx context.Context, req RunRequest, outputNa
 		Env:          req.Checker.Env,
 		StdoutPath:   "",
 		StderrPath:   filepath.Join(containerWorkDir, checkerLogName),
-		Profile:      profileName(req.Language.ID, req.CheckerProfile.TaskType),
+		Profile:      profileName(checkerLanguageID(req), req.CheckerProfile.TaskType),
 		Limits:       checkerLimits,
 		BindMounts: buildBindMounts(req.WorkDir, []spec.MountSpec{
 			{Source: req.InputPath, Target: filepath.Join(containerWorkDir, inputName(req.IOConfig)), ReadOnly: true},
@@ -232,16 +163,11 @@ func (r *DefaultRunner) runChecker(ctx context.Context, req RunRequest, outputNa
 		}),
 	}
 
-	runRes, err := r.eng.Run(ctx, runSpec)
+	runRes, err := s.eng.Run(ctx, runSpec)
 	return checkerRunResult{
 		ExitCode: runRes.ExitCode,
 		LogPath:  filepath.Join(req.WorkDir, checkerLogName),
 	}, err
-}
-
-type checkerRunResult struct {
-	ExitCode int
-	LogPath  string
 }
 
 func readCompileLog(path string, maxSize int64) (string, error) {
@@ -320,6 +246,13 @@ func validateRunRequest(req RunRequest) error {
 		}
 	}
 	return nil
+}
+
+func checkerLanguageID(req RunRequest) string {
+	if req.CheckerLanguageID != "" {
+		return req.CheckerLanguageID
+	}
+	return req.Language.ID
 }
 
 func buildRunSpec(req RunRequest, limits spec.ResourceLimit) (spec.RunSpec, string, string, error) {

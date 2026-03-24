@@ -22,19 +22,21 @@ type CompileRequest struct {
 
 // RunRequest describes one execution task.
 type RunRequest struct {
-	SubmissionID   string
-	TestID         string
-	Language       profile.LanguageSpec
-	Profile        profile.TaskProfile
-	WorkDir        string
-	IOConfig       IOConfig
-	InputPath      string
-	AnswerPath     string
-	Limits         spec.ResourceLimit
-	Checker        *CheckerSpec
-	CheckerProfile *profile.TaskProfile
-	Score          int
-	SubtaskID      string
+	SubmissionID      string
+	TestID            string
+	Language          profile.LanguageSpec
+	Profile           profile.TaskProfile
+	WorkDir           string
+	SourcePath        string
+	IOConfig          IOConfig
+	InputPath         string
+	AnswerPath        string
+	Limits            spec.ResourceLimit
+	Checker           *CheckerSpec
+	CheckerLanguageID string
+	CheckerProfile    *profile.TaskProfile
+	Score             int
+	SubtaskID         string
 }
 
 // Runner orchestrates compile and run workflows.

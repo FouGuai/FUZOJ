@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -670,6 +671,19 @@ def read_etcd_values(base_cmd: List[str], env: Dict[str, str], key: str) -> List
     return lines
 
 
+def filter_registry_targets(values: List[str]) -> List[str]:
+    addr_pattern = re.compile(r"^[^{}\s]+:\d+$")
+    targets: List[str] = []
+    for value in values:
+        text = value.strip()
+        if not text:
+            continue
+        if not addr_pattern.match(text):
+            continue
+        targets.append(text)
+    return targets
+
+
 def discover_registry_keys(base_cmd: List[str], env: Dict[str, str], config_path: Path) -> Tuple[Optional[str], Optional[str]]:
     rest_key = None
     rpc_key = None
@@ -719,7 +733,8 @@ def wait_for_registry_instances(
         all_ready = True
         for _, key in checks:
             values = read_etcd_values(base_cmd, env, key)
-            if len(values) < expected:
+            targets = sorted(set(filter_registry_targets(values)))
+            if len(targets) != expected:
                 all_ready = False
                 break
         if all_ready:

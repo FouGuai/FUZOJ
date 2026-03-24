@@ -163,6 +163,7 @@
 - 接口请放在 `docs/controller_api.md`
 - **新增/变更 Controller 接口时必须同步更新 CLI 调试客户端与 `docs/cli_client.md`**
 - **新增服务时必须同步更新启动脚本（如 `scripts/debug_start.py`）**
+- **新增服务时必须同步更新启动/关闭相关脚本与清单（至少包含 `scripts/debug_manifest.yaml`、`scripts/debug_start.py`、`scripts/debug_stop.py`、`tests/killall.sh`）**
 
 ### 服务设计原则
 **因为该项目qps非常高，重要服务务必都要支持水平扩展**

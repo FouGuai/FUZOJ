@@ -154,19 +154,21 @@ func (w *Worker) Execute(ctx context.Context, req JudgeRequest) (result.JudgeRes
 		}
 
 		runReq := runner.RunRequest{
-			SubmissionID:   req.SubmissionID,
-			TestID:         tc.TestID,
-			Language:       lang,
-			Profile:        runProfile,
-			WorkDir:        testWorkDir,
-			IOConfig:       runner.IOConfig(tc.IOConfig),
-			InputPath:      tc.InputPath,
-			AnswerPath:     tc.AnswerPath,
-			Limits:         tc.Limits,
-			Checker:        checkerSpec,
-			CheckerProfile: checkerProfile,
-			Score:          tc.Score,
-			SubtaskID:      tc.SubtaskID,
+			SubmissionID:      req.SubmissionID,
+			TestID:            tc.TestID,
+			Language:          lang,
+			Profile:           runProfile,
+			WorkDir:           testWorkDir,
+			SourcePath:        req.SourcePath,
+			IOConfig:          runner.IOConfig(tc.IOConfig),
+			InputPath:         tc.InputPath,
+			AnswerPath:        tc.AnswerPath,
+			Limits:            tc.Limits,
+			Checker:           checkerSpec,
+			CheckerLanguageID: tc.CheckerLanguageID,
+			CheckerProfile:    checkerProfile,
+			Score:             tc.Score,
+			SubtaskID:         tc.SubtaskID,
 		}
 
 		runRes, runErr := w.runner.Run(ctx, runReq)

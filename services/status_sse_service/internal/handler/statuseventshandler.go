@@ -63,6 +63,8 @@ func StatusEventsHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			logx.WithContext(r.Context()).Errorf("subscribe status sse failed: %v", err)
 			return
 		}
+		logx.WithContext(r.Context()).Infof("status sse subscribed submission_id=%s user_id=%d", req.Id, userID)
+		defer logx.WithContext(r.Context()).Infof("status sse stream closed submission_id=%s user_id=%d", req.Id, userID)
 		<-r.Context().Done()
 	}
 }

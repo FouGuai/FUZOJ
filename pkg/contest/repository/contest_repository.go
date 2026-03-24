@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -16,6 +17,7 @@ const (
 	defaultEligibilityTTL       = 30 * time.Minute
 	defaultEligibilityEmptyTTL  = 5 * time.Minute
 	defaultEligibilityLocalSize = 1024
+	defaultPenaltyMinutes       = 20
 )
 
 var (
@@ -23,11 +25,12 @@ var (
 )
 
 type ContestMeta struct {
-	ContestID  string
-	Status     string
-	Visibility string
-	StartAt    time.Time
-	EndAt      time.Time
+	ContestID      string
+	Status         string
+	Visibility     string
+	StartAt        time.Time
+	EndAt          time.Time
+	PenaltyMinutes int
 }
 
 type ContestRepository interface {
@@ -75,6 +78,9 @@ func (r *MySQLContestRepository) GetMeta(ctx context.Context, contestID string) 
 			if cached.ContestID == "" {
 				return ContestMeta{}, ErrContestNotFound
 			}
+			if cached.PenaltyMinutes <= 0 {
+				cached.PenaltyMinutes = defaultPenaltyMinutes
+			}
 			return cached, nil
 		}
 	}
@@ -83,6 +89,9 @@ func (r *MySQLContestRepository) GetMeta(ctx context.Context, contestID string) 
 		if err := r.cache.GetCtx(ctx, key, &cached); err == nil {
 			if cached.ContestID == "" {
 				return ContestMeta{}, ErrContestNotFound
+			}
+			if cached.PenaltyMinutes <= 0 {
+				cached.PenaltyMinutes = defaultPenaltyMinutes
 			}
 			if r.local != nil {
 				r.local.Set(key, cached)
@@ -104,11 +113,12 @@ func (r *MySQLContestRepository) GetMeta(ctx context.Context, contestID string) 
 		return ContestMeta{}, err
 	}
 	meta := ContestMeta{
-		ContestID:  row.ContestId,
-		Status:     row.Status,
-		Visibility: row.Visibility,
-		StartAt:    row.StartAt,
-		EndAt:      row.EndAt,
+		ContestID:      row.ContestId,
+		Status:         row.Status,
+		Visibility:     row.Visibility,
+		StartAt:        row.StartAt,
+		EndAt:          row.EndAt,
+		PenaltyMinutes: parsePenaltyMinutes(row.RuleJSON),
 	}
 	if r.cache != nil {
 		_ = r.cache.SetWithExpireCtx(ctx, key, meta, cache_helper.JitterTTL(r.ttl))
@@ -135,4 +145,20 @@ func (r *MySQLContestRepository) InvalidateMetaCache(ctx context.Context, contes
 
 func contestMetaKey(contestID string) string {
 	return "contest:meta:" + contestID
+}
+
+func parsePenaltyMinutes(ruleJSON string) int {
+	if ruleJSON == "" {
+		return defaultPenaltyMinutes
+	}
+	var rule struct {
+		PenaltyMinutes int `json:"penalty_minutes"`
+	}
+	if err := json.Unmarshal([]byte(ruleJSON), &rule); err != nil {
+		return defaultPenaltyMinutes
+	}
+	if rule.PenaltyMinutes <= 0 {
+		return defaultPenaltyMinutes
+	}
+	return rule.PenaltyMinutes
 }

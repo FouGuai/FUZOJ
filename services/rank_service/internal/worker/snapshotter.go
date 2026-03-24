@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -136,7 +135,7 @@ func (s *Snapshotter) run(ctx context.Context) {
 			return
 		}
 		for _, key := range keys {
-			contestID := strings.TrimPrefix(key, prefix)
+			contestID := repository.ContestIDFromMetaKey(key)
 			if contestID == "" {
 				continue
 			}
