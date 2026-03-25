@@ -52,6 +52,7 @@ const (
 	rankOutboxBacklogWarnThreshold = 2 * time.Second
 	rankOutboxPublishWarnThreshold = 500 * time.Millisecond
 	rankOutboxLockKeyPrefix        = "contest:rank:outbox:lock:"
+	rankOutboxNoSleepFullScanRounds = 3
 )
 
 type kafkaPublisher interface {
@@ -140,6 +141,7 @@ func (r *RankOutboxRelay) run(ctx context.Context) {
 	defer r.closePublisher()
 	logger := logx.WithContext(ctx)
 	lastCleanup := time.Now()
+	fullScanStreak := 0
 	for {
 		select {
 		case <-r.stopCh:
@@ -158,37 +160,34 @@ func (r *RankOutboxRelay) run(ctx context.Context) {
 		contests, err := r.listPendingContests(ctx, now)
 		if err != nil {
 			logger.Errorf("list pending contests failed: %v", err)
+			fullScanStreak = 0
 			time.Sleep(r.options.ContestScanInterval)
 			continue
 		}
-		if len(contests) == 0 {
-			time.Sleep(r.options.ContestScanInterval)
-			continue
+		fullScanStreak = updateRankOutboxFullScanStreak(fullScanStreak, len(contests), r.options.ContestScanBatch)
+
+		if len(contests) > 0 {
+			for _, contestID := range contests {
+				lock, locked, err := r.acquireLease(ctx, contestID)
+				if err != nil {
+					logger.Errorf("acquire contest lease failed, contest=%s err=%v", contestID, err)
+					continue
+				}
+				if !locked {
+					continue
+				}
+				_, err = r.processContest(ctx, contestID, lock)
+				releaseErr := r.releaseLease(ctx, lock)
+				if releaseErr != nil {
+					logger.Errorf("release contest lease failed, contest=%s err=%v", contestID, releaseErr)
+				}
+				if err != nil {
+					logger.Errorf("process contest outbox failed, contest=%s err=%v", contestID, err)
+				}
+			}
 		}
 
-		processedAny := false
-		for _, contestID := range contests {
-			lock, locked, err := r.acquireLease(ctx, contestID)
-			if err != nil {
-				logger.Errorf("acquire contest lease failed, contest=%s err=%v", contestID, err)
-				continue
-			}
-			if !locked {
-				continue
-			}
-			processed, err := r.processContest(ctx, contestID, lock)
-			releaseErr := r.releaseLease(ctx, lock)
-			if releaseErr != nil {
-				logger.Errorf("release contest lease failed, contest=%s err=%v", contestID, releaseErr)
-			}
-			if err != nil {
-				logger.Errorf("process contest outbox failed, contest=%s err=%v", contestID, err)
-			}
-			if processed {
-				processedAny = true
-			}
-		}
-		if !processedAny {
+		if shouldRankOutboxSleep(fullScanStreak) {
 			time.Sleep(r.options.ContestScanInterval)
 		}
 	}
@@ -249,7 +248,7 @@ func (r *RankOutboxRelay) processContest(ctx context.Context, contestID string, 
 				continue
 			}
 			msgs = append(msgs, kafka.Message{
-				Key:   []byte(event.KafkaKey),
+				Key:   []byte(event.ContestID),
 				Value: []byte(event.Payload),
 			})
 			msgEvents = append(msgEvents, event)
@@ -457,4 +456,19 @@ func lockExpireSeconds(duration time.Duration) int {
 		return 1
 	}
 	return seconds
+}
+
+func updateRankOutboxFullScanStreak(current, contestsLen, scanBatch int) int {
+	if contestsLen <= 0 || contestsLen != scanBatch {
+		return 0
+	}
+	next := current + 1
+	if next > rankOutboxNoSleepFullScanRounds {
+		return rankOutboxNoSleepFullScanRounds
+	}
+	return next
+}
+
+func shouldRankOutboxSleep(fullScanStreak int) bool {
+	return fullScanStreak < rankOutboxNoSleepFullScanRounds
 }

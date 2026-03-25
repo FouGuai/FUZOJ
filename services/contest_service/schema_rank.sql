@@ -32,9 +32,8 @@ CREATE TABLE IF NOT EXISTS contest_rank_outbox (
   id BIGINT NOT NULL AUTO_INCREMENT,
   contest_id VARCHAR(64) NOT NULL,
   event_key VARCHAR(128) NOT NULL,
-  kafka_key VARCHAR(128) NOT NULL,
   payload MEDIUMTEXT NOT NULL,
-  status VARCHAR(16) NOT NULL DEFAULT 'pending',
+  status TINYINT NOT NULL DEFAULT 0,
   retry_count INT NOT NULL DEFAULT 0,
   next_retry_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   owner_id VARCHAR(64) NULL,
@@ -44,9 +43,9 @@ CREATE TABLE IF NOT EXISTS contest_rank_outbox (
   PRIMARY KEY (id),
   UNIQUE KEY contest_rank_outbox_event_key_uq (event_key),
   KEY contest_rank_outbox_dispatch_idx (status, contest_id, next_retry_at, id),
-  KEY contest_rank_outbox_pending_idx (status, next_retry_at, id),
-  KEY contest_rank_outbox_lease_idx (status, lease_until),
-  KEY contest_rank_outbox_gc_idx (status, updated_at)
+  KEY contest_rank_outbox_pending_idx (status, next_retry_at, contest_id, id),
+  KEY contest_rank_outbox_lease_idx (status, lease_until, id),
+  KEY contest_rank_outbox_gc_idx (status, updated_at, id)
 );
 
 CREATE TABLE IF NOT EXISTS contest_rank_outbox_lock (

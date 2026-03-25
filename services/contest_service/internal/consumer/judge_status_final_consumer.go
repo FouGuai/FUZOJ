@@ -328,7 +328,6 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 		outboxEvent := repository.RankOutboxEvent{
 			ContestID: status.ContestID,
 			EventKey:  buildRankOutboxEventKey(status.ContestID, status.SubmissionID, finishedAt),
-			KafkaKey:  status.ContestID,
 			Payload:   string(payload),
 		}
 		if err := outboxRepo.Enqueue(ctx, outboxEvent); err != nil {

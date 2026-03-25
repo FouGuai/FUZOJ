@@ -96,6 +96,11 @@ def main() -> None:
     parser.add_argument("--only", default="", help="Comma-separated service list")
     parser.add_argument("--deps-only", action="store_true", help="Only stop dependencies")
     parser.add_argument("--services-only", action="store_true", help="Only stop services")
+    parser.add_argument(
+        "--keep-volumes",
+        action="store_true",
+        help="Preserve docker volumes when stopping dependencies",
+    )
     parser.add_argument("--grace-seconds", type=float, default=4.0, help="Graceful shutdown timeout")
     args = parser.parse_args()
 
@@ -136,7 +141,10 @@ def main() -> None:
 
     base_cmd = compose_base(manifest, root)
     env = compose_env(manifest)
-    subprocess.run(base_cmd + ["down"], env=env, check=False)
+    down_cmd = base_cmd + ["down"]
+    if not args.keep_volumes:
+        down_cmd.append("--volumes")
+    subprocess.run(down_cmd, env=env, check=False)
 
 
 if __name__ == "__main__":

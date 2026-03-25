@@ -67,7 +67,7 @@ Submit:
   ContestDispatch:
     Topic: contest.submit.validate
   DispatchRecovery:
-    Enabled: false
+    Enabled: true
     TimeoutAfter: 2m
     ScanInterval: 2s
     ClaimBatch: 200

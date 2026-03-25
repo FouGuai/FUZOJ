@@ -13,14 +13,19 @@ import (
 const contestRankOutboxTable = "`contest_rank_outbox`"
 const contestRankOutboxLockTable = "`contest_rank_outbox_lock`"
 
+const (
+	outboxStatusPending    = 0
+	outboxStatusProcessing = 1
+	outboxStatusSent       = 2
+)
+
 // RankOutboxEvent stores pending rank updates for MQ publishing.
 type RankOutboxEvent struct {
 	ID          int64
 	ContestID   string
 	EventKey    string
-	KafkaKey    string
 	Payload     string
-	Status      string
+	Status      int
 	RetryCount  int
 	NextRetryAt time.Time
 	OwnerID     string
@@ -33,9 +38,8 @@ type rankOutboxEventRow struct {
 	ID          int64          `db:"id"`
 	ContestID   string         `db:"contest_id"`
 	EventKey    string         `db:"event_key"`
-	KafkaKey    string         `db:"kafka_key"`
 	Payload     string         `db:"payload"`
-	Status      string         `db:"status"`
+	Status      int            `db:"status"`
 	RetryCount  int            `db:"retry_count"`
 	NextRetryAt sql.NullTime   `db:"next_retry_at"`
 	OwnerID     sql.NullString `db:"owner_id"`
@@ -67,15 +71,17 @@ func (r *RankOutboxRepository) Enqueue(ctx context.Context, event RankOutboxEven
 	if event.UpdatedAt.IsZero() {
 		event.UpdatedAt = now
 	}
-	if event.Status == "" {
-		event.Status = "pending"
+	if event.Status == 0 {
+		event.Status = outboxStatusPending
 	}
-	query := "insert into " + contestRankOutboxTable + " (contest_id, event_key, kafka_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at) " +
-		"values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	if event.NextRetryAt.IsZero() {
+		event.NextRetryAt = now
+	}
+	query := "insert into " + contestRankOutboxTable + " (contest_id, event_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at) " +
+		"values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	_, err := r.conn.ExecCtx(ctx, query,
 		event.ContestID,
 		event.EventKey,
-		event.KafkaKey,
 		event.Payload,
 		event.Status,
 		event.RetryCount,
@@ -96,10 +102,10 @@ func (r *RankOutboxRepository) ListPending(ctx context.Context, limit int) ([]Ra
 		limit = 100
 	}
 	var rows []rankOutboxEventRow
-	query := "select id, contest_id, event_key, kafka_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at " +
-		"from " + contestRankOutboxTable + " where status = 'pending' and (next_retry_at is null or next_retry_at <= ?) " +
+	query := "select id, contest_id, event_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at " +
+		"from " + contestRankOutboxTable + " where status = ? and (next_retry_at is null or next_retry_at <= ?) " +
 		"order by id asc limit ?"
-	if err := r.conn.QueryRowsCtx(ctx, &rows, query, time.Now(), limit); err != nil {
+	if err := r.conn.QueryRowsCtx(ctx, &rows, query, outboxStatusPending, time.Now(), limit); err != nil {
 		if err == sqlx.ErrNotFound {
 			return nil, nil
 		}
@@ -119,10 +125,10 @@ func (r *RankOutboxRepository) MarkSentByOwner(ctx context.Context, ownerID stri
 	if len(ids) == 0 {
 		return nil
 	}
-	query := "update " + contestRankOutboxTable + " set status = 'sent', owner_id = null, lease_until = null, updated_at = ? " +
-		"where status = 'processing'"
-	args := make([]any, 0, len(ids)+2)
-	args = append(args, time.Now())
+	query := "update " + contestRankOutboxTable + " set status = ?, owner_id = null, lease_until = null, updated_at = ? " +
+		"where status = ?"
+	args := make([]any, 0, len(ids)+4)
+	args = append(args, outboxStatusSent, time.Now(), outboxStatusProcessing)
 	if ownerID != "" {
 		query += " and owner_id = ?"
 		args = append(args, ownerID)
@@ -146,10 +152,13 @@ func (r *RankOutboxRepository) MarkFailedWithRetry(ctx context.Context, ownerID 
 	if len(ids) == 0 {
 		return nil
 	}
-	query := "update " + contestRankOutboxTable + " set status = 'pending', retry_count = ?, next_retry_at = ?, owner_id = null, lease_until = null, updated_at = ? " +
-		"where status = 'processing' and retry_count = ?"
-	args := make([]any, 0, len(ids)+5)
-	args = append(args, retryCount+1, nullTime(nextRetry), time.Now(), retryCount)
+	if nextRetry.IsZero() {
+		nextRetry = time.Now()
+	}
+	query := "update " + contestRankOutboxTable + " set status = ?, retry_count = ?, next_retry_at = ?, owner_id = null, lease_until = null, updated_at = ? " +
+		"where status = ? and retry_count = ?"
+	args := make([]any, 0, len(ids)+7)
+	args = append(args, outboxStatusPending, retryCount+1, nullTime(nextRetry), time.Now(), outboxStatusProcessing, retryCount)
 	if ownerID != "" {
 		query += " and owner_id = ?"
 		args = append(args, ownerID)
@@ -171,8 +180,8 @@ func (r *RankOutboxRepository) ListPendingContests(ctx context.Context, now time
 	}
 	var contests []string
 	query := "select distinct contest_id from " + contestRankOutboxTable +
-		" where status = 'pending' order by contest_id asc limit ?"
-	if err := r.conn.QueryRowsCtx(ctx, &contests, query, limit); err != nil {
+		" where status = ? and (next_retry_at is null or next_retry_at <= ?) order by contest_id asc limit ?"
+	if err := r.conn.QueryRowsCtx(ctx, &contests, query, outboxStatusPending, now, limit); err != nil {
 		if err == sqlx.ErrNotFound {
 			return nil, nil
 		}
@@ -254,15 +263,15 @@ func (r *RankOutboxRepository) ClaimByContest(ctx context.Context, contestID, ow
 	}
 	now := time.Now()
 	leaseUntil := now.Add(leaseDuration)
-	updateQuery := "update " + contestRankOutboxTable + " set status = 'processing', owner_id = ?, lease_until = ?, updated_at = ? " +
-		"where contest_id = ? and status = 'pending' and (next_retry_at is null or next_retry_at <= ?) order by id asc limit ?"
-	if _, err := r.conn.ExecCtx(ctx, updateQuery, ownerID, leaseUntil, now, contestID, now, limit); err != nil {
+	updateQuery := "update " + contestRankOutboxTable + " set status = ?, owner_id = ?, lease_until = ?, updated_at = ? " +
+		"where contest_id = ? and status = ? and (next_retry_at is null or next_retry_at <= ?) order by id asc limit ?"
+	if _, err := r.conn.ExecCtx(ctx, updateQuery, outboxStatusProcessing, ownerID, leaseUntil, now, contestID, outboxStatusPending, now, limit); err != nil {
 		return nil, err
 	}
 	var rows []rankOutboxEventRow
-	selectQuery := "select id, contest_id, event_key, kafka_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at " +
-		"from " + contestRankOutboxTable + " where contest_id = ? and status = 'processing' and owner_id = ? order by id asc limit ?"
-	if err := r.conn.QueryRowsCtx(ctx, &rows, selectQuery, contestID, ownerID, limit); err != nil {
+	selectQuery := "select id, contest_id, event_key, payload, status, retry_count, next_retry_at, owner_id, lease_until, created_at, updated_at " +
+		"from " + contestRankOutboxTable + " where contest_id = ? and status = ? and owner_id = ? order by id asc limit ?"
+	if err := r.conn.QueryRowsCtx(ctx, &rows, selectQuery, contestID, outboxStatusProcessing, ownerID, limit); err != nil {
 		if err == sqlx.ErrNotFound {
 			return nil, nil
 		}
@@ -278,9 +287,9 @@ func (r *RankOutboxRepository) RequeueExpiredProcessing(ctx context.Context, now
 	if limit <= 0 {
 		limit = 200
 	}
-	query := "update " + contestRankOutboxTable + " set status = 'pending', owner_id = null, lease_until = null, updated_at = ? " +
-		"where status = 'processing' and lease_until <= ? order by lease_until asc limit ?"
-	res, err := r.conn.ExecCtx(ctx, query, now, now, limit)
+	query := "update " + contestRankOutboxTable + " set status = ?, owner_id = null, lease_until = null, updated_at = ? " +
+		"where status = ? and lease_until <= ? order by lease_until asc limit ?"
+	res, err := r.conn.ExecCtx(ctx, query, outboxStatusPending, now, outboxStatusProcessing, now, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -298,8 +307,8 @@ func (r *RankOutboxRepository) DeleteSentBefore(ctx context.Context, cutoff time
 	if limit <= 0 {
 		limit = 200
 	}
-	query := "delete from " + contestRankOutboxTable + " where status = 'sent' and updated_at < ? order by updated_at asc limit ?"
-	res, err := r.conn.ExecCtx(ctx, query, cutoff, limit)
+	query := "delete from " + contestRankOutboxTable + " where status = ? and updated_at < ? order by updated_at asc limit ?"
+	res, err := r.conn.ExecCtx(ctx, query, outboxStatusSent, cutoff, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -344,7 +353,6 @@ func convertOutboxRows(rows []rankOutboxEventRow) []RankOutboxEvent {
 			ID:         row.ID,
 			ContestID:  row.ContestID,
 			EventKey:   row.EventKey,
-			KafkaKey:   row.KafkaKey,
 			Payload:    row.Payload,
 			Status:     row.Status,
 			RetryCount: row.RetryCount,

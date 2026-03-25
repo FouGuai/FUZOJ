@@ -1,4 +1,4 @@
-.PHONY: start start-inner down connect build status test killall
+.PHONY: start start-inner down stop connect build status test killall
 
 start:
 	@python3 ../scripts/ensure_cgroup_delegate.py -- $(MAKE) start-inner
@@ -10,6 +10,9 @@ start-inner:
 
 down:
 	@python3 ../scripts/debug_stop.py
+
+stop:
+	@python3 ../scripts/debug_stop.py --keep-volumes
 
 killall:
 	@bash ./killall.sh
