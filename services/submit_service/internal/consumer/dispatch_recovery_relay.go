@@ -8,9 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"fuzoj/pkg/submit/statuscache"
 	"fuzoj/services/submit_service/internal/repository"
 
 	"github.com/zeromicro/go-zero/core/logx"
+	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
 // DispatchRecoveryOptions configures timeout recovery relay.
@@ -48,6 +50,7 @@ type DispatchRecoveryRelay struct {
 	repo    repository.SubmissionDispatchRepository
 	checker FinalStatusChecker
 	router  DispatchTopicResolver
+	cache   *redis.Redis
 	options DispatchRecoveryOptions
 	stopCh  chan struct{}
 	once    sync.Once
@@ -58,6 +61,7 @@ func NewDispatchRecoveryRelay(
 	repo repository.SubmissionDispatchRepository,
 	checker FinalStatusChecker,
 	router DispatchTopicResolver,
+	cacheClient *redis.Redis,
 	options DispatchRecoveryOptions,
 ) *DispatchRecoveryRelay {
 	if options.OwnerID == "" {
@@ -89,6 +93,7 @@ func NewDispatchRecoveryRelay(
 		repo:    repo,
 		checker: checker,
 		router:  router,
+		cache:   cacheClient,
 		options: options,
 		stopCh:  make(chan struct{}),
 	}
@@ -218,6 +223,9 @@ func (r *DispatchRecoveryRelay) processRecord(ctx context.Context, item reposito
 		return
 	}
 	ctxMQ := withTimeout(ctx, r.options.MQTimeout)
+	if err := r.deleteSubmissionStatusCache(ctxMQ.ctx, item.SubmissionID); err != nil {
+		logger.Errorf("delete status cache before republish failed submission_id=%s err=%v", item.SubmissionID, err)
+	}
 	err := pusher.PushWithKey(ctxMQ.ctx, item.SubmissionID, item.Payload)
 	ctxMQ.cancel()
 	if err != nil {
@@ -267,4 +275,12 @@ func backoffDuration(retryCount int, base, max time.Duration) time.Duration {
 		return max
 	}
 	return delay
+}
+
+func (r *DispatchRecoveryRelay) deleteSubmissionStatusCache(ctx context.Context, submissionID string) error {
+	if r == nil || r.cache == nil || strings.TrimSpace(submissionID) == "" {
+		return nil
+	}
+	_, err := r.cache.DelCtx(ctx, statuscache.PrimaryKey(submissionID), statuscache.LegacyKey(submissionID))
+	return err
 }

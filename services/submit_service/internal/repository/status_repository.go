@@ -9,6 +9,7 @@ import (
 
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/pkg/submit/statuscache"
+	"fuzoj/pkg/submit/statusmonotonic"
 	"fuzoj/pkg/submit/statuspubsub"
 	"fuzoj/services/submit_service/internal/domain"
 	"fuzoj/services/submit_service/internal/model"
@@ -191,6 +192,15 @@ func (r *StatusRepository) Save(ctx context.Context, status domain.JudgeStatusPa
 	if r.redis == nil {
 		return nil
 	}
+	accept, reason, err := r.shouldAcceptStatusUpdate(ctx, status)
+	if err != nil {
+		logger.Errorf("check status monotonic failed: %v", err)
+		return appErr.Wrapf(err, appErr.CacheError, "check status monotonic failed")
+	}
+	if !accept {
+		logger.Infof("skip non-monotonic status update submission_id=%s status=%s reason=%s", status.SubmissionID, status.Status, reason)
+		return nil
+	}
 	data, err := json.Marshal(statusSummary(status))
 	if err != nil {
 		logger.Errorf("marshal status failed: %v", err)
@@ -239,10 +249,41 @@ func (r *StatusRepository) storeFinalStatus(ctx context.Context, status domain.J
 	}
 	affected, err := res.RowsAffected()
 	if err == nil && affected == 0 {
-		logger.Error("submission not found")
-		return appErr.New(appErr.SubmissionNotFound).WithMessage("submission not found")
+		if _, findErr := r.submissionsModel.FindOne(ctx, status.SubmissionID); findErr != nil {
+			if errors.Is(findErr, model.ErrNotFound) {
+				logger.Error("submission not found")
+				return appErr.New(appErr.SubmissionNotFound).WithMessage("submission not found")
+			}
+			return appErr.Wrapf(findErr, appErr.DatabaseError, "check submission existence failed")
+		}
+		logger.Infof("skip duplicate final status submission_id=%s", status.SubmissionID)
+		return nil
 	}
 	return nil
+}
+
+func (r *StatusRepository) shouldAcceptStatusUpdate(ctx context.Context, next domain.JudgeStatusPayload) (bool, string, error) {
+	cached, hit, err := statuscache.Get(ctx, r.redis, next.SubmissionID)
+	if err != nil {
+		return false, "", err
+	}
+	if !hit || cached == "" || cached == statuscache.NullValue {
+		return true, "", nil
+	}
+	current, err := unmarshalStatus(cached)
+	if err != nil {
+		logx.WithContext(ctx).Errorf("decode cached status failed, accept incoming update: %v", err)
+		return true, "", nil
+	}
+	accept, reason := statusmonotonic.ShouldAccept(
+		current.Status,
+		current.Progress.DoneTests,
+		current.Progress.TotalTests,
+		next.Status,
+		next.Progress.DoneTests,
+		next.Progress.TotalTests,
+	)
+	return accept, reason, nil
 }
 
 func (r *StatusRepository) getFinalStatusFromDB(ctx context.Context, submissionID string) (domain.JudgeStatusPayload, error) {
