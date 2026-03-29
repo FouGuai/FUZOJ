@@ -48,6 +48,13 @@ type RankConfig struct {
 	SnapshotPageSize int           `json:"snapshotPageSize"`
 	SnapshotBatch    int           `json:"snapshotBatch"`
 	RecoverOnStart   bool          `json:"recoverOnStart"`
+	Recover          struct {
+		KafkaCatchupEnabled      bool          `json:"kafkaCatchupEnabled"`
+		KafkaCatchupWindow       time.Duration `json:"kafkaCatchupWindow"`
+		VerifyStrict             bool          `json:"verifyStrict"`
+		MainTableFallbackEnabled bool          `json:"mainTableFallbackEnabled"`
+		RebuildBatchSize         int           `json:"rebuildBatchSize"`
+	} `json:"recover"`
 }
 
 type TimeoutConfig struct {

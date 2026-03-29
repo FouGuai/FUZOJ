@@ -4,14 +4,14 @@ import "testing"
 
 func TestShouldAccept_StrictSameStageProgress(t *testing.T) {
 	tests := []struct {
-		name              string
-		currentStatus     string
-		currentDone       int
-		currentTotal      int
-		nextStatus        string
-		nextDone          int
-		nextTotal         int
-		wantAccept        bool
+		name               string
+		currentStatus      string
+		currentDone        int
+		currentTotal       int
+		nextStatus         string
+		nextDone           int
+		nextTotal          int
+		wantAccept         bool
 		wantReasonNonEmpty bool
 	}{
 		{
@@ -104,4 +104,3 @@ func TestShouldAccept_StrictSameStageProgress(t *testing.T) {
 		})
 	}
 }
-

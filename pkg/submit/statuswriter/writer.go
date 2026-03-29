@@ -3,6 +3,7 @@ package statuswriter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -61,7 +62,7 @@ func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusP
 	if status.Timestamps.FinishedAt > 0 {
 		finishedAt = time.Unix(status.Timestamps.FinishedAt, 0)
 	}
-	res, err := w.conn.ExecCtx(ctx, "update `submissions` set `final_status` = ?, `final_status_at` = ? where `submission_id` = ?", string(payload), finishedAt, status.SubmissionID)
+	res, err := w.conn.ExecCtx(ctx, "update `submissions` set `final_status` = ?, `final_status_at` = ? where `submission_id` = ? and `final_status_at` is null", string(payload), finishedAt, status.SubmissionID)
 	if err != nil {
 		logger.Errorf("store final status failed: %v", err)
 		return appErr.Wrapf(err, appErr.DatabaseError, "store final status failed")
@@ -69,8 +70,16 @@ func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusP
 	if res != nil {
 		affected, err := res.RowsAffected()
 		if err == nil && affected == 0 {
-			logger.Error("submission not found")
-			return appErr.New(appErr.SubmissionNotFound).WithMessage("submission not found")
+			exists, existsErr := w.submissionExists(ctx, status.SubmissionID)
+			if existsErr != nil {
+				return existsErr
+			}
+			if !exists {
+				logger.Error("submission not found")
+				return appErr.New(appErr.SubmissionNotFound).WithMessage("submission not found")
+			}
+			logger.Infof("skip duplicate final status submission_id=%s", status.SubmissionID)
+			return nil
 		}
 	}
 
@@ -86,6 +95,17 @@ func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusP
 		}
 	}
 	return nil
+}
+
+func (w *FinalStatusWriter) submissionExists(ctx context.Context, submissionID string) (bool, error) {
+	var marker int
+	if err := w.conn.QueryRowCtx(ctx, &marker, "select 1 from `submissions` where `submission_id` = ? limit 1", submissionID); err != nil {
+		if errors.Is(err, sqlx.ErrNotFound) {
+			return false, nil
+		}
+		return false, appErr.Wrapf(err, appErr.DatabaseError, "check submission existence failed")
+	}
+	return true, nil
 }
 
 func isFinalStatus(status string) bool {

@@ -34,9 +34,11 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	repo := repository.NewLeaderboardRepository(redisClient, c.Rank.PageCacheTTL, c.Rank.EmptyTTL)
 	batcher := consumer.NewUpdateBatcher(repo, pubsubClient, c.Rank.BatchSize, c.Rank.BatchInterval, c.Timeouts.MQ)
 	snapshotRepo := repository.NewSnapshotRepository(conn)
+	mainSummaryRepo := repository.NewMainSummaryRepository(conn)
 	snapshotter := worker.NewSnapshotter(
 		snapshotRepo,
 		repo,
+		mainSummaryRepo,
 		redisClient,
 		c.Rank.SnapshotInterval,
 		c.Rank.SnapshotPageSize,
@@ -44,6 +46,13 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		c.Timeouts.Cache,
 		c.Timeouts.DB,
 		c.Rank.RecoverOnStart,
+		worker.RecoveryOptions{
+			KafkaCatchupEnabled:      c.Rank.Recover.KafkaCatchupEnabled,
+			KafkaCatchupWindow:       c.Rank.Recover.KafkaCatchupWindow,
+			VerifyStrict:             c.Rank.Recover.VerifyStrict,
+			MainTableFallbackEnabled: c.Rank.Recover.MainTableFallbackEnabled,
+			RebuildBatchSize:         c.Rank.Recover.RebuildBatchSize,
+		},
 	)
 
 	var updateQueue queue.MessageQueue

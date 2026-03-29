@@ -94,8 +94,6 @@ func main() {
 
 	if ctx.Snapshotter != nil {
 		ctx.Snapshotter.Recover(context.Background())
-		go ctx.Snapshotter.Start(context.Background())
-		defer ctx.Snapshotter.Stop()
 	}
 	if ctx.UpdateBatcher != nil {
 		go ctx.UpdateBatcher.Start(context.Background())
@@ -104,6 +102,11 @@ func main() {
 	if ctx.UpdateQueue != nil {
 		go ctx.UpdateQueue.Start()
 		defer ctx.UpdateQueue.Stop()
+	}
+	if ctx.Snapshotter != nil {
+		ctx.Snapshotter.CatchupAndFallback(context.Background())
+		go ctx.Snapshotter.Start(context.Background())
+		defer ctx.Snapshotter.Stop()
 	}
 
 	logx.Infof("Starting server at %s:%d...", c.Host, c.Port)
