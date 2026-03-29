@@ -54,14 +54,17 @@ func (m *customSubmissionsModel) FindFinalStatusBatch(ctx context.Context, submi
 }
 
 func (m *customSubmissionsModel) UpdateFinalStatus(ctx context.Context, submissionID string, payload string, finishedAt time.Time) (sql.Result, error) {
-	return m.defaultSubmissionsModel.UpdateFinalStatus(ctx, submissionID, payload, finishedAt)
+	query := fmt.Sprintf("update %s set `final_status` = ?, `final_status_at` = ? where `submission_id` = ? and `final_status_at` is null", m.table)
+	return m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (sql.Result, error) {
+		return conn.ExecCtx(ctx, query, payload, finishedAt, submissionID)
+	})
 }
 
 func (m *customSubmissionsModel) UpdateFinalStatusBatch(ctx context.Context, records []FinalStatusRecord) error {
 	if len(records) == 0 {
 		return nil
 	}
-	query := fmt.Sprintf("update %s set `final_status` = ?, `final_status_at` = ? where `submission_id` = ?", m.table)
+	query := fmt.Sprintf("update %s set `final_status` = ?, `final_status_at` = ? where `submission_id` = ? and `final_status_at` is null", m.table)
 	_, err := m.ExecCtx(ctx, func(ctx context.Context, conn sqlx.SqlConn) (sql.Result, error) {
 		var res sql.Result
 		for _, record := range records {

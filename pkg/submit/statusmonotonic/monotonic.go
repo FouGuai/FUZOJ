@@ -24,7 +24,10 @@ func ShouldAccept(
 ) (bool, string) {
 	currentStage := statusStage(currentStatus)
 	nextStage := statusStage(nextStatus)
-	if currentStage == stageUnknown || nextStage == stageUnknown {
+	if nextStage == stageUnknown {
+		return false, "next status is unknown"
+	}
+	if currentStage == stageUnknown {
 		return true, ""
 	}
 	if currentStage == stageFinal {
@@ -39,6 +42,9 @@ func ShouldAccept(
 		}
 		if nextTotalTests < currentTotalTests {
 			return false, "total_tests regressed"
+		}
+		if nextDoneTests == currentDoneTests && nextTotalTests == currentTotalTests {
+			return false, "progress is not strictly increasing"
 		}
 	}
 	return true, ""
