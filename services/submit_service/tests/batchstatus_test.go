@@ -49,12 +49,12 @@ func TestBatchStatusHandler(t *testing.T) {
 		if resp.Code != int(pkgerrors.Success) {
 			t.Fatalf("unexpected response: %+v", resp)
 		}
-		if len(resp.Data.Items) != 2 || len(resp.Data.Missing) != 1 {
+		if len(resp.Data.Items) != 3 || len(resp.Data.Missing) != 0 {
 			t.Fatalf("unexpected data: %+v", resp.Data)
 		}
-		found := map[string]struct{}{}
+		found := map[string]types.JudgeStatusData{}
 		for _, item := range resp.Data.Items {
-			found[item.SubmissionId] = struct{}{}
+			found[item.SubmissionId] = item
 		}
 		if _, ok := found["sub-1"]; !ok {
 			t.Fatalf("missing status for sub-1")
@@ -62,8 +62,12 @@ func TestBatchStatusHandler(t *testing.T) {
 		if _, ok := found["sub-2"]; !ok {
 			t.Fatalf("missing status for sub-2")
 		}
-		if resp.Data.Missing[0] != "sub-3" {
-			t.Fatalf("unexpected missing: %+v", resp.Data.Missing)
+		item3, ok := found["sub-3"]
+		if !ok {
+			t.Fatalf("missing status for sub-3")
+		}
+		if item3.Status != "Unknown" {
+			t.Fatalf("unexpected sub-3 status: %+v", item3)
 		}
 	})
 

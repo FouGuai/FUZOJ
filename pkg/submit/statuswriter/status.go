@@ -56,3 +56,11 @@ type Timestamps struct {
 	ReceivedAt int64 `json:"ReceivedAt"`
 	FinishedAt int64 `json:"FinishedAt"`
 }
+
+// BuildSummary removes heavy fields for cache summary payload.
+func BuildSummary(status StatusPayload) StatusPayload {
+	summary := status
+	summary.Compile = nil
+	summary.Tests = nil
+	return summary
+}

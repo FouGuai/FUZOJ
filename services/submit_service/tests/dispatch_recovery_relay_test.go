@@ -64,6 +64,7 @@ func TestDispatchRecoveryRelayRepublish(t *testing.T) {
 		repo,
 		&fakeDispatchChecker{},
 		&fakeDispatchRouter{name: "judge.level1", pusher: pusher},
+		nil,
 		consumer.DispatchRecoveryOptions{
 			Enabled:       true,
 			ScanInterval:  20 * time.Millisecond,
@@ -119,6 +120,7 @@ func TestDispatchRecoveryRelayMarkDoneWhenFinalized(t *testing.T) {
 		repo,
 		&fakeDispatchChecker{finalized: true},
 		&fakeDispatchRouter{name: "judge.level1", pusher: &fakePusher{}},
+		nil,
 		consumer.DispatchRecoveryOptions{
 			Enabled:       true,
 			ScanInterval:  20 * time.Millisecond,

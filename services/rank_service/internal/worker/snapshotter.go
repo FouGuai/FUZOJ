@@ -242,7 +242,7 @@ func (s *Snapshotter) run(ctx context.Context) {
 func (s *Snapshotter) snapshotContest(ctx context.Context, contestID string) error {
 	logger := logx.WithContext(ctx)
 	ctxCache := withTimeout(ctx, s.cacheTimeout)
-	metaVals, err := s.redis.HmgetCtx(ctxCache.ctx, repository.MetaKey(contestID), "updated_at", "snapshot_at", "result_id", "version")
+	metaVals, err := s.redis.HmgetCtx(ctxCache.ctx, repository.MetaKey(contestID), "updated_at", "snapshot_at", "recovery_result_id", "result_id", "version")
 	ctxCache.cancel()
 	if err != nil {
 		return err
@@ -250,7 +250,10 @@ func (s *Snapshotter) snapshotContest(ctx context.Context, contestID string) err
 	updatedAt := parseInt64(metaVals, 0)
 	lastSnapshotAt := parseInt64(metaVals, 1)
 	lastResultID := parseInt64(metaVals, 2)
-	lastVersion := parseInt64(metaVals, 3)
+	if lastResultID == 0 {
+		lastResultID = parseInt64(metaVals, 3)
+	}
+	lastVersion := parseInt64(metaVals, 4)
 	if updatedAt == 0 || updatedAt <= lastSnapshotAt {
 		return nil
 	}
@@ -447,7 +450,7 @@ func (s *Snapshotter) loadRedisWatermark(ctx context.Context, contestID string) 
 		return redisWatermark{}, nil
 	}
 	ctxCache = withTimeout(ctx, s.cacheTimeout)
-	metaVals, err := s.redis.HmgetCtx(ctxCache.ctx, repository.MetaKey(contestID), "result_id", "version", "snapshot_at")
+	metaVals, err := s.redis.HmgetCtx(ctxCache.ctx, repository.MetaKey(contestID), "recovery_result_id", "result_id", "version", "snapshot_at")
 	ctxCache.cancel()
 	if err != nil {
 		return redisWatermark{}, err
@@ -460,11 +463,18 @@ func (s *Snapshotter) loadRedisWatermark(ctx context.Context, contestID string) 
 	}
 	return redisWatermark{
 		Exists:     true,
-		ResultID:   parseInt64(metaVals, 0),
-		Version:    parseInt64(metaVals, 1),
-		SnapshotAt: parseInt64(metaVals, 2),
+		ResultID:   firstNonZero(parseInt64(metaVals, 0), parseInt64(metaVals, 1)),
+		Version:    parseInt64(metaVals, 2),
+		SnapshotAt: parseInt64(metaVals, 3),
 		Total:      int64(total),
 	}, nil
+}
+
+func firstNonZero(primary, fallback int64) int64 {
+	if primary != 0 {
+		return primary
+	}
+	return fallback
 }
 
 func shouldRestoreFromSnapshot(meta repository.SnapshotMeta, watermark redisWatermark) bool {

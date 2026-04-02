@@ -143,7 +143,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 		ContestRpc:            initContestRpc(c),
 	}
 	if dispatchRepo != nil {
-		ctx.DispatchRecoveryRelay = consumer.NewDispatchRecoveryRelay(dispatchRepo, submissionsModel, ctx, consumer.DispatchRecoveryOptions{
+		ctx.DispatchRecoveryRelay = consumer.NewDispatchRecoveryRelay(dispatchRepo, submissionsModel, ctx, redisClient, consumer.DispatchRecoveryOptions{
 			Enabled:       c.Submit.DispatchRecovery.Enabled,
 			TimeoutAfter:  c.Submit.DispatchRecovery.TimeoutAfter,
 			ScanInterval:  c.Submit.DispatchRecovery.ScanInterval,

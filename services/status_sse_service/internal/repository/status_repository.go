@@ -9,96 +9,133 @@ import (
 	"time"
 
 	appErr "fuzoj/pkg/errors"
-	"fuzoj/pkg/submit/statuscache"
+	"fuzoj/pkg/submit/statusrepo"
+	"fuzoj/pkg/submit/statusutil"
 	"fuzoj/pkg/submit/statuswriter"
 
-	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
 const (
-	ownerCachePrefix      = "status:sse:owner:"
-	ownerCacheMissValue   = "$NULL$"
-	defaultOwnerCacheTTL  = 5 * time.Minute
-	defaultOwnerMissTTL   = time.Minute
-	statusPendingLiteral  = "Pending"
-	statusFinishedLiteral = "finished"
-	statusFailedLiteral   = "failed"
+	ownerCachePrefix    = "status:sse:owner:"
+	ownerCacheMissValue = "$NULL$"
 )
 
-type StatusRepository struct {
-	conn         sqlx.SqlConn
-	cache        *redis.Redis
-	ownerTTL     time.Duration
-	ownerMissTTL time.Duration
-}
+// StatusRepository is shared implementation configured for status SSE service.
+type StatusRepository = statusrepo.StatusRepository[statuswriter.StatusPayload]
 
 func NewStatusRepository(conn sqlx.SqlConn, cacheClient *redis.Redis, ownerTTL, ownerMissTTL time.Duration) *StatusRepository {
 	if ownerTTL <= 0 {
-		ownerTTL = defaultOwnerCacheTTL
+		ownerTTL = 5 * time.Minute
 	}
 	if ownerMissTTL <= 0 {
-		ownerMissTTL = defaultOwnerMissTTL
+		ownerMissTTL = time.Minute
 	}
-	return &StatusRepository{
-		conn:         conn,
-		cache:        cacheClient,
-		ownerTTL:     ownerTTL,
-		ownerMissTTL: ownerMissTTL,
-	}
+	return statusrepo.NewStatusRepository(statusrepo.StatusRepositoryConfig[statuswriter.StatusPayload]{
+		Cache:    cacheClient,
+		TTL:      ownerTTL,
+		EmptyTTL: ownerMissTTL,
+		GetSubmissionID: func(status statuswriter.StatusPayload) string {
+			return status.SubmissionID
+		},
+		GetStatusLabel: func(status statuswriter.StatusPayload) string {
+			return status.Status
+		},
+		Encode: func(status statuswriter.StatusPayload) (string, error) {
+			data, err := json.Marshal(status)
+			if err != nil {
+				return "", err
+			}
+			return string(data), nil
+		},
+		Decode: func(raw string) (statuswriter.StatusPayload, error) {
+			var status statuswriter.StatusPayload
+			if err := json.Unmarshal([]byte(raw), &status); err != nil {
+				return statuswriter.StatusPayload{}, err
+			}
+			return status, nil
+		},
+		BuildUnknown: func(submissionID string) statuswriter.StatusPayload {
+			return statuswriter.StatusPayload{SubmissionID: submissionID, Status: "Unknown"}
+		},
+		LoadOneFromDB: func(ctx context.Context, submissionID string) (statuswriter.StatusPayload, bool, error) {
+			query := "select final_status from submissions where submission_id = ? and final_status is not null limit 1"
+			var payload string
+			err := conn.QueryRowCtx(ctx, &payload, query, submissionID)
+			if err != nil {
+				if errors.Is(err, sqlx.ErrNotFound) {
+					return statuswriter.StatusPayload{}, false, nil
+				}
+				return statuswriter.StatusPayload{}, false, appErr.Wrapf(err, appErr.DatabaseError, "get submission status failed")
+			}
+			var status statuswriter.StatusPayload
+			if err := json.Unmarshal([]byte(payload), &status); err != nil {
+				return statuswriter.StatusPayload{}, false, appErr.Wrapf(err, appErr.DatabaseError, "decode status failed")
+			}
+			status.SubmissionID = submissionID
+			return status, true, nil
+		},
+		LoadBatchFromDB: func(ctx context.Context, submissionIDs []string) (map[string]statuswriter.StatusPayload, error) {
+			resultMap := make(map[string]statuswriter.StatusPayload, len(submissionIDs))
+			for _, id := range submissionIDs {
+				if id == "" {
+					continue
+				}
+				status, found, err := queryFinalStatus(ctx, conn, id)
+				if err != nil {
+					return nil, err
+				}
+				if found {
+					resultMap[id] = status
+				}
+			}
+			return resultMap, nil
+		},
+		LoadFinalFromDB: func(ctx context.Context, submissionID string) (statuswriter.StatusPayload, bool, error) {
+			return queryFinalStatus(ctx, conn, submissionID)
+		},
+		CheckOwner: func(ctx context.Context, submissionID string, userID int64) error {
+			if strings.TrimSpace(submissionID) == "" {
+				return appErr.ValidationError("submission_id", "required")
+			}
+			if userID <= 0 {
+				return appErr.New(appErr.Unauthorized).WithMessage("user is not authenticated")
+			}
+			ownerID, err := getSubmissionOwnerID(ctx, conn, cacheClient, submissionID, ownerTTL, ownerMissTTL)
+			if err != nil {
+				return err
+			}
+			if ownerID != userID {
+				return appErr.New(appErr.PermissionDenied).WithMessage("submission access denied")
+			}
+			return nil
+		},
+	})
 }
 
-func (r *StatusRepository) CheckSubmissionOwner(ctx context.Context, submissionID string, userID int64) error {
-	if strings.TrimSpace(submissionID) == "" {
-		return appErr.ValidationError("submission_id", "required")
-	}
-	if userID <= 0 {
-		return appErr.New(appErr.Unauthorized).WithMessage("user is not authenticated")
-	}
-	ownerID, err := r.getSubmissionOwnerID(ctx, submissionID)
+func queryFinalStatus(ctx context.Context, conn sqlx.SqlConn, submissionID string) (statuswriter.StatusPayload, bool, error) {
+	query := "select final_status from submissions where submission_id = ? and final_status is not null limit 1"
+	var payload string
+	err := conn.QueryRowCtx(ctx, &payload, query, submissionID)
 	if err != nil {
-		return err
-	}
-	if ownerID != userID {
-		return appErr.New(appErr.PermissionDenied).WithMessage("submission access denied")
-	}
-	return nil
-}
-
-func (r *StatusRepository) GetLatestStatus(ctx context.Context, submissionID string) (statuswriter.StatusPayload, error) {
-	if strings.TrimSpace(submissionID) == "" {
-		return statuswriter.StatusPayload{}, appErr.ValidationError("submission_id", "required")
-	}
-	if r.cache != nil {
-		cached, hit, err := statuscache.Get(ctx, r.cache, submissionID)
-		if err != nil {
-			return statuswriter.StatusPayload{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
+		if errors.Is(err, sqlx.ErrNotFound) {
+			return statuswriter.StatusPayload{}, false, nil
 		}
-		if hit {
-			if cached == statuscache.NullValue {
-				return statuswriter.StatusPayload{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
-			}
-			status, err := unmarshalStatus(cached)
-			if err == nil {
-				return status, nil
-			}
-		}
+		return statuswriter.StatusPayload{}, false, appErr.Wrapf(err, appErr.DatabaseError, "get submission status failed")
 	}
-	return r.getFinalStatusFromDB(ctx, submissionID)
+	var status statuswriter.StatusPayload
+	if err := json.Unmarshal([]byte(payload), &status); err != nil {
+		return statuswriter.StatusPayload{}, false, appErr.Wrapf(err, appErr.DatabaseError, "decode status failed")
+	}
+	status.SubmissionID = submissionID
+	return status, true, nil
 }
 
-func (r *StatusRepository) GetFinalStatus(ctx context.Context, submissionID string) (statuswriter.StatusPayload, error) {
-	if strings.TrimSpace(submissionID) == "" {
-		return statuswriter.StatusPayload{}, appErr.ValidationError("submission_id", "required")
-	}
-	return r.getFinalStatusFromDB(ctx, submissionID)
-}
-
-func (r *StatusRepository) getSubmissionOwnerID(ctx context.Context, submissionID string) (int64, error) {
-	if r.cache != nil {
+func getSubmissionOwnerID(ctx context.Context, conn sqlx.SqlConn, cacheClient *redis.Redis, submissionID string, ownerTTL, ownerMissTTL time.Duration) (int64, error) {
+	if cacheClient != nil {
 		key := ownerCachePrefix + submissionID
-		value, err := r.cache.GetCtx(ctx, key)
+		value, err := cacheClient.GetCtx(ctx, key)
 		if err == nil && value != "" {
 			if value == ownerCacheMissValue {
 				return 0, appErr.New(appErr.SubmissionNotFound).WithMessage("submission not found")
@@ -112,56 +149,27 @@ func (r *StatusRepository) getSubmissionOwnerID(ctx context.Context, submissionI
 
 	query := "select user_id from submissions where submission_id = ? limit 1"
 	var ownerID int64
-	err := r.conn.QueryRowCtx(ctx, &ownerID, query, submissionID)
+	err := conn.QueryRowCtx(ctx, &ownerID, query, submissionID)
 	if err != nil {
 		if errors.Is(err, sqlx.ErrNotFound) {
-			r.cacheOwner(submissionID, ownerCacheMissValue, r.ownerMissTTL)
+			cacheOwner(cacheClient, submissionID, ownerCacheMissValue, ownerMissTTL)
 			return 0, appErr.New(appErr.SubmissionNotFound).WithMessage("submission not found")
 		}
 		return 0, appErr.Wrapf(err, appErr.DatabaseError, "get submission owner failed")
 	}
-	r.cacheOwner(submissionID, fmt.Sprintf("%d", ownerID), r.ownerTTL)
+	cacheOwner(cacheClient, submissionID, fmt.Sprintf("%d", ownerID), ownerTTL)
 	return ownerID, nil
 }
 
-func (r *StatusRepository) getFinalStatusFromDB(ctx context.Context, submissionID string) (statuswriter.StatusPayload, error) {
-	logger := logx.WithContext(ctx)
-	query := "select final_status from submissions where submission_id = ? and final_status is not null limit 1"
-	var payload string
-	err := r.conn.QueryRowCtx(ctx, &payload, query, submissionID)
-	if err != nil {
-		if errors.Is(err, sqlx.ErrNotFound) {
-			exists, existsErr := r.submissionExists(ctx, submissionID)
-			if existsErr != nil {
-				return statuswriter.StatusPayload{}, existsErr
-			}
-			if exists {
-				logger.Infof("submission exists without final status, fallback to pending submission_id=%s", submissionID)
-				return buildPendingStatus(submissionID), nil
-			}
-			if r.cache != nil {
-				_ = statuscache.Set(ctx, r.cache, submissionID, statuscache.NullValue, ttlSeconds(defaultOwnerMissTTL))
-			}
-			return statuswriter.StatusPayload{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
-		}
-		return statuswriter.StatusPayload{}, appErr.Wrapf(err, appErr.DatabaseError, "get submission status failed")
-	}
-	status, err := unmarshalStatus(payload)
-	if err != nil {
-		return statuswriter.StatusPayload{}, appErr.Wrapf(err, appErr.DatabaseError, "decode status failed")
-	}
-	return status, nil
-}
-
-func (r *StatusRepository) cacheOwner(submissionID, value string, ttl time.Duration) {
-	if r == nil || r.cache == nil || strings.TrimSpace(submissionID) == "" {
+func cacheOwner(cacheClient *redis.Redis, submissionID, value string, ttl time.Duration) {
+	if cacheClient == nil || strings.TrimSpace(submissionID) == "" {
 		return
 	}
-	seconds := ttlSeconds(ttl)
+	seconds := statusutil.TTLSeconds(ttl)
 	if seconds <= 0 {
 		return
 	}
-	_ = r.cache.SetexCtx(context.Background(), ownerCachePrefix+submissionID, value, seconds)
+	_ = cacheClient.SetexCtx(context.Background(), ownerCachePrefix+submissionID, value, seconds)
 }
 
 func parseOwnerID(value string) (int64, error) {
@@ -173,56 +181,10 @@ func parseOwnerID(value string) (int64, error) {
 	return ownerID, nil
 }
 
-func unmarshalStatus(raw string) (statuswriter.StatusPayload, error) {
-	var status statuswriter.StatusPayload
-	if err := json.Unmarshal([]byte(raw), &status); err != nil {
-		return statuswriter.StatusPayload{}, err
-	}
-	return status, nil
-}
-
-func (r *StatusRepository) submissionExists(ctx context.Context, submissionID string) (bool, error) {
-	query := "select 1 from submissions where submission_id = ? limit 1"
-	var marker int
-	if err := r.conn.QueryRowCtx(ctx, &marker, query, submissionID); err != nil {
-		if errors.Is(err, sqlx.ErrNotFound) {
-			return false, nil
-		}
-		return false, appErr.Wrapf(err, appErr.DatabaseError, "check submission exists failed")
-	}
-	return true, nil
-}
-
 func IsFinalStatus(status string) bool {
-	s := strings.ToLower(strings.TrimSpace(status))
-	return s == statusFinishedLiteral || s == statusFailedLiteral
+	return statusutil.IsFinalStatus(status)
 }
 
 func BuildSummary(status statuswriter.StatusPayload) statuswriter.StatusPayload {
-	summary := status
-	summary.Compile = nil
-	summary.Tests = nil
-	return summary
-}
-
-func buildPendingStatus(submissionID string) statuswriter.StatusPayload {
-	return statuswriter.StatusPayload{
-		SubmissionID: submissionID,
-		Status:       statusPendingLiteral,
-		Progress: statuswriter.Progress{
-			TotalTests: 0,
-			DoneTests:  0,
-		},
-	}
-}
-
-func ttlSeconds(ttl time.Duration) int {
-	if ttl <= 0 {
-		return 0
-	}
-	seconds := int(ttl.Seconds())
-	if seconds <= 0 {
-		return 1
-	}
-	return seconds
+	return statuswriter.BuildSummary(status)
 }

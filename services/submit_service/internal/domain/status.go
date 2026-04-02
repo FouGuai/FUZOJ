@@ -42,18 +42,18 @@ type CompileResult struct {
 
 // TestcaseResult contains per-testcase execution outcomes.
 type TestcaseResult struct {
-	TestID         string `json:"TestID"`
-	Verdict        string `json:"Verdict"`
-	TimeMs         int64  `json:"TimeMs"`
-	MemoryKB       int64  `json:"MemoryKB"`
-	OutputKB       int64  `json:"OutputKB"`
-	ExitCode       int    `json:"ExitCode"`
-	RuntimeLog     string `json:"RuntimeLog"`
-	CheckerLog     string `json:"CheckerLog"`
-	Stdout         string `json:"Stdout"`
-	Stderr         string `json:"Stderr"`
-	Score          int    `json:"Score"`
-	SubtaskID      string `json:"SubtaskID"`
+	TestID     string `json:"TestID"`
+	Verdict    string `json:"Verdict"`
+	TimeMs     int64  `json:"TimeMs"`
+	MemoryKB   int64  `json:"MemoryKB"`
+	OutputKB   int64  `json:"OutputKB"`
+	ExitCode   int    `json:"ExitCode"`
+	RuntimeLog string `json:"RuntimeLog"`
+	CheckerLog string `json:"CheckerLog"`
+	Stdout     string `json:"Stdout"`
+	Stderr     string `json:"Stderr"`
+	Score      int    `json:"Score"`
+	SubtaskID  string `json:"SubtaskID"`
 }
 
 // Timestamps captures submission lifecycle timestamps.
@@ -63,12 +63,14 @@ type Timestamps struct {
 }
 
 const (
-	StatusPending   = "Pending"
-	StatusCompiling = "Compiling"
-	StatusRunning   = "Running"
-	StatusJudging   = "Judging"
-	StatusFinished  = "Finished"
-	StatusFailed    = "Failed"
+	StatusQueueing   = "Queueing"
+	StatusValidating = "Validating"
+	StatusPending    = "Pending"
+	StatusCompiling  = "Compiling"
+	StatusRunning    = "Running"
+	StatusJudging    = "Judging"
+	StatusFinished   = "Finished"
+	StatusFailed     = "Failed"
 )
 
 // StatusEvent carries status updates for async processing.

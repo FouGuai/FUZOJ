@@ -142,6 +142,105 @@ func TestLeaderboardRepository_ApplyUpdates_OutOfOrderDifferentMembersNotDropped
 	}
 }
 
+func TestLeaderboardRepository_ApplyUpdates_GapDoesNotAdvanceRecoveryWatermark(t *testing.T) {
+	repo, cache := newLeaderboardRepoForTest(t)
+	ctx := context.Background()
+
+	if err := repo.ApplyUpdates(ctx, []pmodel.RankUpdateEvent{
+		{
+			ContestID:  "c1",
+			MemberID:   "m5",
+			SortScore:  50,
+			ScoreTotal: 5,
+			Version:    "5",
+			ResultID:   5,
+			UpdatedAt:  105,
+		},
+	}); err != nil {
+		t.Fatalf("apply updates failed: %v", err)
+	}
+
+	entry, _, err := repo.GetMember(ctx, "c1", "m5", "")
+	if err != nil {
+		t.Fatalf("get member failed: %v", err)
+	}
+	if entry.Score != 5 {
+		t.Fatalf("expected score=5, got %d", entry.Score)
+	}
+
+	seen, err := cache.HgetCtx(ctx, repository.MetaKey("c1"), "seen_result_id")
+	if err != nil {
+		t.Fatalf("load seen result id failed: %v", err)
+	}
+	if seen != "5" {
+		t.Fatalf("expected seen_result_id=5, got %s", seen)
+	}
+	recovery, err := cache.HgetCtx(ctx, repository.MetaKey("c1"), "recovery_result_id")
+	if err != nil {
+		t.Fatalf("load recovery result id failed: %v", err)
+	}
+	if recovery != "0" {
+		t.Fatalf("expected recovery_result_id=0, got %s", recovery)
+	}
+}
+
+func TestLeaderboardRepository_ApplyUpdates_RecoveryWatermarkDrainsPending(t *testing.T) {
+	repo, cache := newLeaderboardRepoForTest(t)
+	ctx := context.Background()
+
+	if err := repo.ApplyUpdates(ctx, []pmodel.RankUpdateEvent{
+		{
+			ContestID:  "c1",
+			MemberID:   "m1",
+			SortScore:  10,
+			ScoreTotal: 1,
+			Version:    "1",
+			ResultID:   1,
+			UpdatedAt:  101,
+		},
+		{
+			ContestID:  "c1",
+			MemberID:   "m3",
+			SortScore:  30,
+			ScoreTotal: 3,
+			Version:    "3",
+			ResultID:   3,
+			UpdatedAt:  103,
+		},
+	}); err != nil {
+		t.Fatalf("apply first updates failed: %v", err)
+	}
+
+	if err := repo.ApplyUpdates(ctx, []pmodel.RankUpdateEvent{
+		{
+			ContestID:  "c1",
+			MemberID:   "m2",
+			SortScore:  20,
+			ScoreTotal: 2,
+			Version:    "2",
+			ResultID:   2,
+			UpdatedAt:  102,
+		},
+	}); err != nil {
+		t.Fatalf("apply second updates failed: %v", err)
+	}
+
+	recovery, err := cache.HgetCtx(ctx, repository.MetaKey("c1"), "recovery_result_id")
+	if err != nil {
+		t.Fatalf("load recovery result id failed: %v", err)
+	}
+	if recovery != "3" {
+		t.Fatalf("expected recovery_result_id=3 after draining pending, got %s", recovery)
+	}
+	resultID, err := cache.HgetCtx(ctx, repository.MetaKey("c1"), "result_id")
+	if err != nil {
+		t.Fatalf("load result id failed: %v", err)
+	}
+	if resultID != "3" {
+		t.Fatalf("expected result_id=3, got %s", resultID)
+	}
+}
+
 func TestLeaderboardRepository_RestoreSnapshotAndFinalizeMeta(t *testing.T) {
 	repo, cache := newLeaderboardRepoForTest(t)
 	ctx := context.Background()

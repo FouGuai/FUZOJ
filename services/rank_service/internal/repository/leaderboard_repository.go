@@ -25,11 +25,13 @@ const (
 	leaderboardFrozen = "contest:lb:frozen:"
 	detailPrefix      = "contest:lb:detail:"
 	metaPrefix        = "contest:lb:meta:"
+	pendingPrefix     = "contest:lb:pending:"
 )
 
 var rankApplyScript = redis.NewScript(`
 local leaderboardKey = KEYS[1]
 local metaKey = KEYS[2]
+local pendingKey = KEYS[3]
 
 local eventCount = tonumber(ARGV[1]) or 0
 local applyMeta = tonumber(ARGV[2]) or 0
@@ -38,12 +40,20 @@ local maxResultId = tonumber(ARGV[4]) or 0
 local maxVersion = tonumber(ARGV[5]) or 0
 local maxUpdatedAt = tonumber(ARGV[6]) or 0
 local snapshotAt = tonumber(ARGV[7]) or 0
-local detailPrefix = ARGV[8] or ""
+local applyRecoveryMeta = tonumber(ARGV[8]) or 0
+local detailPrefix = ARGV[9] or ""
 
-local currentResultId = tonumber(redis.call("HGET", metaKey, "result_id") or "0") or 0
+local currentSeenResultId = tonumber(redis.call("HGET", metaKey, "seen_result_id") or "0") or 0
+local currentRecoveryResultId = tonumber(redis.call("HGET", metaKey, "recovery_result_id") or "0") or 0
+if currentSeenResultId == 0 then
+	currentSeenResultId = tonumber(redis.call("HGET", metaKey, "result_id") or "0") or 0
+end
+if currentRecoveryResultId == 0 then
+	currentRecoveryResultId = tonumber(redis.call("HGET", metaKey, "result_id") or "0") or 0
+end
 local currentVersion = tonumber(redis.call("HGET", metaKey, "version") or "0") or 0
 
-local offset = 8
+local offset = 9
 local stride = 7
 local applied = 0
 
@@ -82,8 +92,24 @@ for i = 0, eventCount - 1 do
 		if version > memberVersion then
 			redis.call("HSET", memberKey, "version_num", tostring(version))
 		end
-		if resultId > currentResultId then
-			currentResultId = resultId
+		if resultId > currentSeenResultId then
+			currentSeenResultId = resultId
+		end
+		if resultId > 0 then
+			if resultId == currentRecoveryResultId + 1 then
+				currentRecoveryResultId = resultId
+				while true do
+					local nextId = currentRecoveryResultId + 1
+					local pending = redis.call("ZSCORE", pendingKey, tostring(nextId))
+					if not pending then
+						break
+					end
+					redis.call("ZREM", pendingKey, tostring(nextId))
+					currentRecoveryResultId = nextId
+				end
+			elseif resultId > currentRecoveryResultId + 1 then
+				redis.call("ZADD", pendingKey, resultId, tostring(resultId))
+			end
 		end
 		if version > currentVersion then
 			currentVersion = version
@@ -93,15 +119,18 @@ for i = 0, eventCount - 1 do
 end
 
 if applyMeta == 1 then
-	if maxResultId > currentResultId then
-		currentResultId = maxResultId
+	if maxResultId > currentSeenResultId then
+		currentSeenResultId = maxResultId
+	end
+	if applyRecoveryMeta == 1 and maxResultId > currentRecoveryResultId then
+		currentRecoveryResultId = maxResultId
 	end
 	if maxVersion > currentVersion then
 		currentVersion = maxVersion
 	end
-	if currentResultId > 0 then
-		redis.call("HSET", metaKey, "result_id", tostring(currentResultId))
-	end
+	redis.call("HSET", metaKey, "seen_result_id", tostring(currentSeenResultId))
+	redis.call("HSET", metaKey, "recovery_result_id", tostring(currentRecoveryResultId))
+	redis.call("HSET", metaKey, "result_id", tostring(currentRecoveryResultId))
 	if currentVersion > 0 then
 		redis.call("HSET", metaKey, "version", tostring(currentVersion))
 	end
@@ -110,6 +139,9 @@ if applyMeta == 1 then
 	end
 	if snapshotAt > 0 then
 		redis.call("HSET", metaKey, "snapshot_at", tostring(snapshotAt))
+	end
+	if currentRecoveryResultId > 0 then
+		redis.call("ZREMRANGEBYSCORE", pendingKey, "-inf", currentRecoveryResultId)
 	end
 end
 
@@ -282,17 +314,14 @@ func shouldReplaceMemberEvent(existing, incoming struct {
 	updatedAt  int64
 	byResultID bool
 }) bool {
-	if existing.byResultID != incoming.byResultID {
-		return incoming.byResultID
-	}
-	if incoming.byResultID {
-		if incoming.resultID != existing.resultID {
-			return incoming.resultID > existing.resultID
-		}
-	} else {
+	// Version has stronger ordering semantics than result id.
+	if existing.version > 0 || incoming.version > 0 {
 		if incoming.version != existing.version {
 			return incoming.version > existing.version
 		}
+	}
+	if incoming.resultID != existing.resultID {
+		return incoming.resultID > existing.resultID
 	}
 	if incoming.updatedAt != existing.updatedAt {
 		return incoming.updatedAt > existing.updatedAt
@@ -523,6 +552,10 @@ func metaKey(contestID string) string {
 	return metaPrefix + contestSlotTag(contestID)
 }
 
+func pendingKey(contestID string) string {
+	return pendingPrefix + contestSlotTag(contestID)
+}
+
 func detailPrefixForContest(contestID string) string {
 	return detailPrefix + contestSlotTag(contestID) + ":"
 }
@@ -614,8 +647,12 @@ func (r *LeaderboardRepository) applyContestEventsWithSummary(ctx context.Contex
 	if r.redis == nil {
 		return appErr.New(appErr.ServiceUnavailable).WithMessage("redis is not configured")
 	}
-	keys := []string{leaderboardKey(contestID), metaKey(contestID)}
-	args := make([]any, 0, 8+len(events)*7)
+	applyRecoveryMeta := false
+	if applyMeta && len(events) == 0 && meta.MaxResultID > 0 {
+		applyRecoveryMeta = true
+	}
+	keys := []string{leaderboardKey(contestID), metaKey(contestID), pendingKey(contestID)}
+	args := make([]any, 0, 9+len(events)*7)
 	args = append(args,
 		len(events),
 		boolToInt(applyMeta),
@@ -624,6 +661,7 @@ func (r *LeaderboardRepository) applyContestEventsWithSummary(ctx context.Contex
 		meta.MaxVersion,
 		meta.MaxUpdatedAt,
 		snapshotAt,
+		boolToInt(applyRecoveryMeta),
 		detailPrefixForContest(contestID),
 	)
 	for i, event := range events {

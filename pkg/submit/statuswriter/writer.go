@@ -9,23 +9,25 @@ import (
 
 	appErr "fuzoj/pkg/errors"
 	"fuzoj/pkg/submit/statuscache"
+	"fuzoj/pkg/submit/statuspubsub"
+	"fuzoj/pkg/submit/statusutil"
 
+	red "github.com/redis/go-redis/v9"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 	"github.com/zeromicro/go-zero/core/stores/sqlx"
 )
 
 const (
-	defaultStatusTTL    = 24 * time.Hour
-	statusFinishedValue = "Finished"
-	statusFailedValue   = "Failed"
+	defaultStatusTTL = 24 * time.Hour
 )
 
 // FinalStatusWriter stores final status into database and redis cache.
 type FinalStatusWriter struct {
-	conn  sqlx.SqlConn
-	redis *redis.Redis
-	ttl   time.Duration
+	conn   sqlx.SqlConn
+	redis  *redis.Redis
+	pubsub *red.Client
+	ttl    time.Duration
 }
 
 // NewFinalStatusWriter creates a writer for final status persistence.
@@ -40,6 +42,14 @@ func NewFinalStatusWriter(conn sqlx.SqlConn, redisClient *redis.Redis, ttl time.
 	}
 }
 
+// SetStatusPubSub sets status pubsub client for real-time notifications.
+func (w *FinalStatusWriter) SetStatusPubSub(client *red.Client) {
+	if w == nil {
+		return
+	}
+	w.pubsub = client
+}
+
 // WriteFinalStatus writes final status payload to database and cache.
 func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusPayload) error {
 	logger := logx.WithContext(ctx)
@@ -48,7 +58,7 @@ func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusP
 		logger.Error("submission_id is required")
 		return appErr.ValidationError("submission_id", "required")
 	}
-	if !isFinalStatus(status.Status) {
+	if !statusutil.IsFinalStatus(status.Status) {
 		logger.Error("status must be final")
 		return appErr.ValidationError("status", "final_required")
 	}
@@ -84,15 +94,16 @@ func (w *FinalStatusWriter) WriteFinalStatus(ctx context.Context, status StatusP
 	}
 
 	if w.redis != nil {
-		summary := status
-		summary.Compile = nil
-		summary.Tests = nil
+		summary := BuildSummary(status)
 		if data, err := json.Marshal(summary); err == nil {
-			if err := statuscache.Set(ctx, w.redis, status.SubmissionID, string(data), ttlSeconds(w.ttl)); err != nil {
+			if err := statuscache.Set(ctx, w.redis, status.SubmissionID, string(data), statusutil.TTLSeconds(w.ttl)); err != nil {
 				logger.Errorf("store status cache failed: %v", err)
 				return appErr.Wrapf(err, appErr.CacheError, "store status cache failed")
 			}
 		}
+	}
+	if err := statuspubsub.Publish(ctx, w.pubsub, status.SubmissionID); err != nil {
+		logger.Errorf("publish status update failed: %v", err)
 	}
 	return nil
 }
@@ -106,19 +117,4 @@ func (w *FinalStatusWriter) submissionExists(ctx context.Context, submissionID s
 		return false, appErr.Wrapf(err, appErr.DatabaseError, "check submission existence failed")
 	}
 	return true, nil
-}
-
-func isFinalStatus(status string) bool {
-	return status == statusFinishedValue || status == statusFailedValue
-}
-
-func ttlSeconds(ttl time.Duration) int {
-	if ttl <= 0 {
-		return 0
-	}
-	seconds := int(ttl.Seconds())
-	if seconds <= 0 {
-		return 1
-	}
-	return seconds
 }

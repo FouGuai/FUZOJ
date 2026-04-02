@@ -13,6 +13,7 @@ import (
 
 	"fuzoj/internal/common/storage"
 	appErr "fuzoj/pkg/errors"
+	"fuzoj/pkg/submit/statusutil"
 	"fuzoj/services/contest_rpc_service/contestrpc"
 	"fuzoj/services/submit_service/internal/domain"
 	"fuzoj/services/submit_service/internal/repository"
@@ -224,7 +225,7 @@ func (a *SubmitApp) Submit(ctx context.Context, input SubmitParams) (string, dom
 
 	pending := domain.JudgeStatusPayload{
 		SubmissionID: submissionID,
-		Status:       domain.StatusPending,
+		Status:       domain.StatusQueueing,
 		Timestamps:   domain.Timestamps{ReceivedAt: createdAt.Unix()},
 		Progress:     domain.Progress{TotalTests: 0, DoneTests: 0},
 	}
@@ -383,7 +384,7 @@ func summaryStatus(status domain.JudgeStatusPayload) domain.JudgeStatusPayload {
 }
 
 func isFinalStatus(status string) bool {
-	return status == domain.StatusFinished || status == domain.StatusFailed
+	return statusutil.IsFinalStatus(status)
 }
 
 func (a *SubmitApp) validateInput(input SubmitParams) error {

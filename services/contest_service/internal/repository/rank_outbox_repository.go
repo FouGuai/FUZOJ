@@ -12,6 +12,7 @@ import (
 
 const contestRankOutboxTable = "`contest_rank_outbox`"
 const contestRankOutboxLockTable = "`contest_rank_outbox_lock`"
+const contestRankResultSeqTable = "`contest_rank_result_seq`"
 
 const (
 	outboxStatusPending    = 0
@@ -92,6 +93,44 @@ func (r *RankOutboxRepository) Enqueue(ctx context.Context, event RankOutboxEven
 		event.UpdatedAt,
 	)
 	return err
+}
+
+// NextResultIDTx allocates the next per-contest result id in the current transaction.
+func (r *RankOutboxRepository) NextResultIDTx(ctx context.Context, contestID string) (int64, error) {
+	if r == nil || r.conn == nil {
+		return 0, errors.New("rank outbox repository is not configured")
+	}
+	if contestID == "" {
+		return 0, errors.New("contest id is required")
+	}
+	now := time.Now()
+	initQuery := "insert ignore into " + contestRankResultSeqTable + " (contest_id, next_result_id, updated_at) values (?, ?, ?)"
+	if _, err := r.conn.ExecCtx(ctx, initQuery, contestID, int64(1), now); err != nil {
+		return 0, err
+	}
+
+	var nextID int64
+	lockQuery := "select next_result_id from " + contestRankResultSeqTable + " where contest_id = ? for update"
+	if err := r.conn.QueryRowCtx(ctx, &nextID, lockQuery, contestID); err != nil {
+		return 0, err
+	}
+	if nextID <= 0 {
+		return 0, fmt.Errorf("invalid next result id: %d", nextID)
+	}
+
+	updateQuery := "update " + contestRankResultSeqTable + " set next_result_id = ?, updated_at = ? where contest_id = ? and next_result_id = ?"
+	res, err := r.conn.ExecCtx(ctx, updateQuery, nextID+1, now, contestID, nextID)
+	if err != nil {
+		return 0, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if affected != 1 {
+		return 0, fmt.Errorf("unexpected affected rows when advancing result id: %d", affected)
+	}
+	return nextID, nil
 }
 
 func (r *RankOutboxRepository) ListPending(ctx context.Context, limit int) ([]RankOutboxEvent, error) {

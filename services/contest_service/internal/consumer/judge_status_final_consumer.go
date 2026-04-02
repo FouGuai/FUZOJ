@@ -13,6 +13,7 @@ import (
 	contestRepo "fuzoj/pkg/contest/repository"
 	"fuzoj/pkg/contest/score"
 	appErr "fuzoj/pkg/errors"
+	"fuzoj/pkg/submit/statuswriter"
 	"fuzoj/services/contest_service/internal/pmodel"
 	"fuzoj/services/contest_service/internal/repository"
 
@@ -24,7 +25,6 @@ import (
 
 const (
 	rankIdemKeyPrefix        = "contest:rank:idem:"
-	rankResultIDKey          = "contest:rank:result:id:"
 	rankOutboxEventKeyPrefix = "contest:rank:outbox:"
 )
 
@@ -35,6 +35,7 @@ type JudgeFinalConsumer struct {
 	contestRepo      contestRepo.ContestRepository
 	eligibilitySvc   *eligibility.Service
 	rankOutboxRepo   *repository.RankOutboxRepository
+	statusWriter     *statuswriter.FinalStatusWriter
 	deadLetterPusher *kq.Pusher
 	opts             JudgeFinalOptions
 	timeouts         TimeoutConfig
@@ -55,6 +56,7 @@ func NewJudgeFinalConsumer(
 	redisClient *redis.Redis,
 	contestRepository contestRepo.ContestRepository,
 	eligibilityService *eligibility.Service,
+	statusWriter *statuswriter.FinalStatusWriter,
 	_ *repository.MemberProblemRepository,
 	_ *repository.MemberSummaryRepository,
 	rankOutboxRepo *repository.RankOutboxRepository,
@@ -75,6 +77,7 @@ func NewJudgeFinalConsumer(
 		redis:          redisClient,
 		contestRepo:    contestRepository,
 		eligibilitySvc: eligibilityService,
+		statusWriter:   statusWriter,
 		rankOutboxRepo: rankOutboxRepo,
 		opts:           opts,
 		timeouts:       timeouts,
@@ -200,13 +203,6 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 		return err
 	}
 
-	resultID, err := c.nextResultID(ctx, status.ContestID)
-	if err != nil {
-		logger.Errorf("generate contest result id failed: %v", err)
-		return err
-	}
-
-	var update pmodel.RankUpdateEvent
 	err = c.conn.TransactCtx(ctx, func(ctx context.Context, session sqlx.Session) error {
 		memberProblemRepo := repository.NewMemberProblemRepository(session)
 		memberSummaryRepo := repository.NewMemberSummaryRepository(session)
@@ -221,25 +217,12 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 			return err
 		}
 		if found && state.Solved {
-			summary, summaryFound, err := memberSummaryRepo.Get(ctx, status.ContestID, memberID)
+			_, summaryFound, err := memberSummaryRepo.Get(ctx, status.ContestID, memberID)
 			if err != nil {
 				return err
 			}
 			if !summaryFound {
 				return fmt.Errorf("member summary not found for solved state, contest=%s member=%s", status.ContestID, memberID)
-			}
-			update = pmodel.RankUpdateEvent{
-				ContestID:  status.ContestID,
-				MemberID:   memberID,
-				ProblemID:  problemKey,
-				SortScore:  score.SortScore(summary.ScoreTotal, summary.PenaltyTotal),
-				ScoreTotal: summary.ScoreTotal,
-				Penalty:    summary.PenaltyTotal,
-				ACCount:    summary.ACCount,
-				DetailJSON: summary.DetailJSON,
-				Version:    fmt.Sprint(summary.Version),
-				ResultID:   resultID,
-				UpdatedAt:  summary.UpdatedAt.Unix(),
 			}
 			return nil
 		}
@@ -308,7 +291,12 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 			return err
 		}
 
-		update = pmodel.RankUpdateEvent{
+		resultID, err := outboxRepo.NextResultIDTx(ctx, status.ContestID)
+		if err != nil {
+			return fmt.Errorf("allocate rank result id failed: %w", err)
+		}
+
+		update := pmodel.RankUpdateEvent{
 			ContestID:  status.ContestID,
 			MemberID:   memberID,
 			ProblemID:  problemKey,
@@ -341,23 +329,21 @@ func (c *JudgeFinalConsumer) handle(ctx context.Context, key, value string) (ret
 	if err != nil {
 		return err
 	}
+	if c.statusWriter != nil {
+		if err := c.statusWriter.WriteFinalStatus(ctxMQ.ctx, statuswriter.StatusPayload{
+			SubmissionID: status.SubmissionID,
+			Status:       status.Status,
+			Verdict:      status.Verdict,
+			Timestamps: statuswriter.Timestamps{
+				ReceivedAt: status.Timestamps.ReceivedAt,
+				FinishedAt: status.Timestamps.FinishedAt,
+			},
+			Progress: statuswriter.Progress{TotalTests: 0, DoneTests: 0},
+		}); err != nil {
+			return err
+		}
+	}
 	return nil
-}
-
-func (c *JudgeFinalConsumer) nextResultID(ctx context.Context, contestID string) (int64, error) {
-	if contestID == "" {
-		return 0, appErr.ValidationError("contest_id", "required")
-	}
-	if c.redis == nil {
-		return 0, appErr.New(appErr.ServiceUnavailable).WithMessage("redis is not configured")
-	}
-	ctxCache := withTimeout(ctx, c.timeouts.Cache)
-	defer ctxCache.cancel()
-	id, err := c.redis.IncrCtx(ctxCache.ctx, rankResultIDKey+contestID)
-	if err != nil {
-		return 0, appErr.Wrapf(err, appErr.CacheError, "increment contest result id failed")
-	}
-	return id, nil
 }
 
 // ProblemDetail holds per-problem detail for a member.

@@ -65,7 +65,7 @@ func TestCreateHandler(t *testing.T) {
 		if resp.Code != int(pkgerrors.Success) || resp.Data.SubmissionId == "" {
 			t.Fatalf("unexpected response: %+v", resp)
 		}
-		if resp.Data.Status != domain.StatusPending {
+		if resp.Data.Status != domain.StatusQueueing {
 			t.Fatalf("unexpected status: %s", resp.Data.Status)
 		}
 		if resp.Data.ReceivedAt == 0 {

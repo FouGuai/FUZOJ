@@ -163,13 +163,13 @@ func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessag
 	}
 
 	now := time.Now().Unix()
-	pending := pmodel.JudgeStatusResponse{
+	compiling := pmodel.JudgeStatusResponse{
 		SubmissionID: payload.SubmissionID,
-		Status:       result.StatusPending,
+		Status:       result.StatusCompiling,
 		Timestamps:   result.Timestamps{ReceivedAt: now},
 		Progress:     pmodel.Progress{TotalTests: 0, DoneTests: 0},
 	}
-	if err := s.persistStatus(ctx, pending); err != nil {
+	if err := s.persistStatus(ctx, compiling); err != nil {
 		return err
 	}
 
@@ -227,7 +227,7 @@ func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessag
 		ContestID:         payload.ContestID,
 		UserID:            payload.UserID,
 		Priority:          payload.Priority,
-		ReceivedAt:        pending.Timestamps.ReceivedAt,
+		ReceivedAt:        compiling.Timestamps.ReceivedAt,
 	}
 
 	ctxWorker := ctx
@@ -256,7 +256,7 @@ func (s *JudgeApp) HandleMessage(ctx context.Context, payload pmodel.JudgeMessag
 		Summary:      res.Summary,
 		CreatedAt:    payload.CreatedAt,
 		Timestamps: result.Timestamps{
-			ReceivedAt: pending.Timestamps.ReceivedAt,
+			ReceivedAt: compiling.Timestamps.ReceivedAt,
 			FinishedAt: time.Now().Unix(),
 		},
 		Progress: pmodel.Progress{TotalTests: len(res.Tests), DoneTests: len(res.Tests)},

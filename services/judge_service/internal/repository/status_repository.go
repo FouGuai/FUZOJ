@@ -3,38 +3,22 @@ package repository
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
-	"fuzoj/internal/common/cache_helper"
 	appErr "fuzoj/pkg/errors"
-	"fuzoj/pkg/submit/statuscache"
-	"fuzoj/pkg/submit/statusmonotonic"
-	"fuzoj/pkg/submit/statuspubsub"
+	"fuzoj/pkg/submit/statusrepo"
+	"fuzoj/pkg/submit/statusutil"
+	"fuzoj/pkg/submit/statuswriter"
 	dbmodel "fuzoj/services/judge_service/internal/model"
 	"fuzoj/services/judge_service/internal/pmodel"
 	"fuzoj/services/judge_service/internal/sandbox/result"
 
-	red "github.com/redis/go-redis/v9"
-	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/stores/redis"
 )
 
-const (
-	defaultStatusCacheTTL      = 30 * time.Minute
-	defaultStatusCacheEmptyTTL = 5 * time.Minute
-)
-
-// StatusRepository handles status persistence.
-type StatusRepository struct {
-	cache            *redis.Redis
-	pubsub           *red.Client
-	submissionsModel dbmodel.SubmissionsModel
-	batcher          FinalStatusEnqueuer
-	ttl              time.Duration
-	emptyTTL         time.Duration
-}
+// StatusRepository is shared implementation configured for judge service.
+type StatusRepository = statusrepo.StatusRepository[pmodel.JudgeStatusResponse]
 
 // FinalStatusEnqueuer abstracts final status batching.
 type FinalStatusEnqueuer interface {
@@ -43,363 +27,169 @@ type FinalStatusEnqueuer interface {
 
 // NewStatusRepository creates a new repository.
 func NewStatusRepository(cacheClient *redis.Redis, submissionsModel dbmodel.SubmissionsModel, ttl, emptyTTL time.Duration, batcher FinalStatusEnqueuer) *StatusRepository {
-	if ttl <= 0 {
-		ttl = defaultStatusCacheTTL
-	}
-	if emptyTTL <= 0 {
-		emptyTTL = defaultStatusCacheEmptyTTL
-	}
-	return &StatusRepository{
-		cache:            cacheClient,
-		submissionsModel: submissionsModel,
-		batcher:          batcher,
-		ttl:              ttl,
-		emptyTTL:         emptyTTL,
-	}
-}
-
-// SetStatusPubSub sets status pubsub client for real-time notifications.
-func (r *StatusRepository) SetStatusPubSub(client *red.Client) {
-	if r == nil {
-		return
-	}
-	r.pubsub = client
-}
-
-// Get returns status by submission id.
-func (r *StatusRepository) Get(ctx context.Context, submissionID string) (pmodel.JudgeStatusResponse, error) {
-	logger := logx.WithContext(ctx)
-	logger.Infof("get status start submission_id=%s", submissionID)
-	if submissionID == "" {
-		logger.Error("submission_id is required")
-		return pmodel.JudgeStatusResponse{}, appErr.ValidationError("submission_id", "required")
-	}
-	if r.cache == nil {
-		return r.getFinalStatusFromDB(ctx, submissionID)
-	}
-
-	cached, hit, err := statuscache.Get(ctx, r.cache, submissionID)
-	if err != nil {
-		logger.Errorf("get status cache failed: %v", err)
-		return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.CacheError, "get status cache failed")
-	}
-	if hit {
-		if cached == statuscache.NullValue {
-			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
-		}
-		status, err := unmarshalStatus(cached)
-		if err == nil && status != nil {
-			return *status, nil
-		}
-		logger.Errorf("decode status cache failed: %v", err)
-	}
-
-	status, err := r.getFinalStatusFromDB(ctx, submissionID)
-	if err != nil {
-		if appErr.Is(err, appErr.NotFound) {
-			_ = statuscache.Set(ctx, r.cache, submissionID, statuscache.NullValue, durationSeconds(cache_helper.JitterTTL(r.emptyTTL)))
-			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
-		}
-		return pmodel.JudgeStatusResponse{}, err
-	}
-	payload := mustMarshalStatus(status)
-	if payload != "" {
-		_ = statuscache.Set(ctx, r.cache, submissionID, payload, durationSeconds(cache_helper.JitterTTL(r.ttl)))
-	}
-	return status, nil
-}
-
-// GetBatch returns statuses for multiple submission ids.
-func (r *StatusRepository) GetBatch(ctx context.Context, submissionIDs []string) ([]pmodel.JudgeStatusResponse, []string, error) {
-	logger := logx.WithContext(ctx)
-	logger.Infof("get batch status start total=%d", len(submissionIDs))
-	if len(submissionIDs) == 0 {
-		logger.Error("submission_ids is required")
-		return nil, nil, appErr.ValidationError("submission_ids", "required")
-	}
-	statuses := make([]pmodel.JudgeStatusResponse, 0, len(submissionIDs))
-	missing := make([]string, 0)
-	if r.cache != nil {
-		keys := make([]string, 0, len(submissionIDs))
-		for _, submissionID := range submissionIDs {
-			if submissionID == "" {
-				logger.Error("submission_id is required")
-				return nil, nil, appErr.ValidationError("submission_id", "required")
+	return statusrepo.NewStatusRepository(statusrepo.StatusRepositoryConfig[pmodel.JudgeStatusResponse]{
+		Cache:    cacheClient,
+		TTL:      ttl,
+		EmptyTTL: emptyTTL,
+		GetSubmissionID: func(status pmodel.JudgeStatusResponse) string {
+			return status.SubmissionID
+		},
+		GetStatusLabel: func(status pmodel.JudgeStatusResponse) string {
+			return string(status.Status)
+		},
+		Encode: func(status pmodel.JudgeStatusResponse) (string, error) {
+			data, err := json.Marshal(status)
+			if err != nil {
+				return "", err
 			}
-			keys = append(keys, statuscache.PrimaryKey(submissionID))
-		}
-		values, err := r.cache.Mget(keys...)
-		if err != nil {
-			logger.Errorf("batch get status cache failed: %v", err)
-			return nil, nil, appErr.Wrapf(err, appErr.CacheError, "batch get status failed")
-		}
-		for i, raw := range values {
-			if raw == "" {
-				missing = append(missing, submissionIDs[i])
-				continue
+			return string(data), nil
+		},
+		Decode: func(raw string) (pmodel.JudgeStatusResponse, error) {
+			var status pmodel.JudgeStatusResponse
+			if err := json.Unmarshal([]byte(raw), &status); err != nil {
+				return pmodel.JudgeStatusResponse{}, err
 			}
-			if raw == statuscache.NullValue {
-				continue
+			return status, nil
+		},
+		BuildUnknown: func(submissionID string) pmodel.JudgeStatusResponse {
+			return pmodel.JudgeStatusResponse{SubmissionID: submissionID, Status: result.JudgeStatus("Unknown")}
+		},
+		LoadOneFromDB: func(ctx context.Context, submissionID string) (pmodel.JudgeStatusResponse, bool, error) {
+			if submissionsModel == nil {
+				return pmodel.JudgeStatusResponse{}, false, appErr.New(appErr.ServiceUnavailable).WithMessage("submissions model is not configured")
 			}
-			var resp pmodel.JudgeStatusResponse
-			if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-				logger.Errorf("decode status failed: %v", err)
-				return nil, nil, appErr.Wrapf(err, appErr.CacheError, "decode status failed")
-			}
-			statuses = append(statuses, resp)
-		}
-		if len(values) < len(submissionIDs) {
-			missing = append(missing, submissionIDs[len(values):]...)
-		}
-	} else {
-		missing = append(missing, submissionIDs...)
-	}
-
-	if len(missing) == 0 {
-		return statuses, missing, nil
-	}
-
-	dbStatuses, dbMissing, err := r.getFinalStatusBatchFromDB(ctx, missing)
-	if err != nil {
-		logger.Errorf("batch get final status from db failed: %v", err)
-		return nil, nil, err
-	}
-	if len(dbStatuses) > 0 {
-		statuses = append(statuses, dbStatuses...)
-		if r.cache != nil {
-			for _, st := range dbStatuses {
-				if payload := mustMarshalStatus(st); payload != "" {
-					_ = statuscache.Set(ctx, r.cache, st.SubmissionID, payload, durationSeconds(cache_helper.JitterTTL(r.ttl)))
+			payload, err := submissionsModel.FindFinalStatus(ctx, submissionID)
+			if err != nil {
+				if err == dbmodel.ErrNotFound {
+					return pmodel.JudgeStatusResponse{}, false, nil
 				}
+				return pmodel.JudgeStatusResponse{}, false, appErr.Wrapf(err, appErr.DatabaseError, "get final status failed")
 			}
-		}
-	}
-	if r.cache != nil && len(dbMissing) > 0 {
-		for _, id := range dbMissing {
-			if id == "" {
-				continue
+			var status pmodel.JudgeStatusResponse
+			if err := json.Unmarshal([]byte(payload), &status); err != nil {
+				return pmodel.JudgeStatusResponse{}, false, appErr.Wrapf(err, appErr.DatabaseError, "decode final status failed")
 			}
-			_ = statuscache.Set(ctx, r.cache, id, statuscache.NullValue, durationSeconds(cache_helper.JitterTTL(r.emptyTTL)))
-		}
-	}
-	return statuses, dbMissing, nil
-}
-
-// Save persists status.
-func (r *StatusRepository) Save(ctx context.Context, status pmodel.JudgeStatusResponse) error {
-	logger := logx.WithContext(ctx)
-	logger.Infof("save status start submission_id=%s status=%s", status.SubmissionID, status.Status)
-	if status.SubmissionID == "" {
-		logger.Error("submission_id is required")
-		return appErr.ValidationError("submission_id", "required")
-	}
-	if isFinalStatus(status.Status) {
-		if r.batcher == nil {
-			logger.Error("final status batcher is not configured")
-		} else if err := r.batcher.Enqueue(ctx, status); err != nil {
-			logger.Errorf("enqueue final status failed: %v", err)
-		}
-	}
-	if r.cache != nil {
-		accept, reason, err := r.shouldAcceptStatusUpdate(ctx, status)
-		if err != nil {
-			logger.Errorf("check status monotonic failed: %v", err)
-			return appErr.Wrapf(err, appErr.CacheError, "check status monotonic failed")
-		}
-		if !accept {
-			logger.Infof("skip non-monotonic status update submission_id=%s status=%s reason=%s", status.SubmissionID, status.Status, reason)
+			status.SubmissionID = submissionID
+			return status, true, nil
+		},
+		LoadBatchFromDB: func(ctx context.Context, submissionIDs []string) (map[string]pmodel.JudgeStatusResponse, error) {
+			if submissionsModel == nil {
+				return nil, appErr.New(appErr.ServiceUnavailable).WithMessage("submissions model is not configured")
+			}
+			records, err := submissionsModel.FindFinalStatusBatch(ctx, submissionIDs)
+			if err != nil {
+				return nil, appErr.Wrapf(err, appErr.DatabaseError, "batch get final status failed")
+			}
+			resultMap := make(map[string]pmodel.JudgeStatusResponse, len(records))
+			for _, record := range records {
+				if record.SubmissionID == "" {
+					continue
+				}
+				var status pmodel.JudgeStatusResponse
+				if err := json.Unmarshal([]byte(record.FinalStatus), &status); err != nil {
+					return nil, appErr.Wrapf(err, appErr.DatabaseError, "decode final status failed")
+				}
+				status.SubmissionID = record.SubmissionID
+				resultMap[record.SubmissionID] = status
+			}
+			return resultMap, nil
+		},
+		LoadFinalFromDB: nil,
+		ToWriterPayload: func(status pmodel.JudgeStatusResponse) (statuswriter.StatusPayload, error) {
+			return toStatusWriterPayload(status), nil
+		},
+		IsFinalStatus: func(status pmodel.JudgeStatusResponse) bool {
+			return statusutil.IsFinalStatus(string(status.Status))
+		},
+		OnFinalStatus: func(ctx context.Context, status pmodel.JudgeStatusResponse) error {
+			if batcher == nil {
+				return nil
+			}
+			return batcher.Enqueue(ctx, status)
+		},
+		PersistFinal: func(ctx context.Context, status pmodel.JudgeStatusResponse) error {
+			if submissionsModel == nil {
+				return appErr.New(appErr.ServiceUnavailable).WithMessage("submissions model is not configured")
+			}
+			if status.SubmissionID == "" {
+				return appErr.ValidationError("submission_id", "required")
+			}
+			if !statusutil.IsFinalStatus(string(status.Status)) {
+				return appErr.ValidationError("status", "final_required")
+			}
+			payload, err := json.Marshal(status)
+			if err != nil {
+				return fmt.Errorf("marshal final status failed: %w", err)
+			}
+			finishedAt := time.Now()
+			if status.Timestamps.FinishedAt > 0 {
+				finishedAt = time.Unix(status.Timestamps.FinishedAt, 0)
+			}
+			res, err := submissionsModel.UpdateFinalStatus(ctx, status.SubmissionID, string(payload), finishedAt)
+			if err != nil {
+				return appErr.Wrapf(err, appErr.DatabaseError, "store final status failed")
+			}
+			affected, err := res.RowsAffected()
+			if err == nil && affected == 0 {
+				return nil
+			}
 			return nil
-		}
-		data, err := json.Marshal(status)
-		if err != nil {
-			logger.Errorf("marshal status failed: %v", err)
-			return fmt.Errorf("marshal status failed: %w", err)
-		}
-		if err := statuscache.Set(ctx, r.cache, status.SubmissionID, string(data), durationSeconds(cache_helper.JitterTTL(r.ttl))); err != nil {
-			logger.Errorf("store status failed: %v", err)
-			return appErr.Wrapf(err, appErr.CacheError, "store status failed")
-		}
-	}
-	if err := statuspubsub.Publish(ctx, r.pubsub, status.SubmissionID); err != nil {
-		logger.Errorf("publish status update failed: %v", err)
-	}
-	return nil
+		},
+	})
 }
 
-// PersistFinalStatus stores final status into the database.
-func (r *StatusRepository) PersistFinalStatus(ctx context.Context, status pmodel.JudgeStatusResponse) error {
-	logger := logx.WithContext(ctx)
-	logger.Infof("persist final status start submission_id=%s", status.SubmissionID)
-	if status.SubmissionID == "" {
-		logger.Error("submission_id is required")
-		return appErr.ValidationError("submission_id", "required")
+func toStatusWriterPayload(status pmodel.JudgeStatusResponse) statuswriter.StatusPayload {
+	return statuswriter.StatusPayload{
+		SubmissionID: status.SubmissionID,
+		Status:       string(status.Status),
+		Verdict:      string(status.Verdict),
+		Score:        status.Score,
+		Language:     status.Language,
+		Summary: statuswriter.SummaryStat{
+			TotalTimeMs:  status.Summary.TotalTimeMs,
+			MaxMemoryKB:  status.Summary.MaxMemoryKB,
+			TotalScore:   status.Summary.TotalScore,
+			FailedTestID: status.Summary.FailedTestID,
+		},
+		Compile: (*statuswriter.CompileResult)(status.Compile),
+		Tests:   castTests(status.Tests),
+		Timestamps: statuswriter.Timestamps{
+			ReceivedAt: status.Timestamps.ReceivedAt,
+			FinishedAt: status.Timestamps.FinishedAt,
+		},
+		Progress: statuswriter.Progress{
+			TotalTests: status.Progress.TotalTests,
+			DoneTests:  status.Progress.DoneTests,
+		},
+		ErrorCode:    status.ErrorCode,
+		ErrorMessage: status.ErrorMessage,
 	}
-	if !isFinalStatus(status.Status) {
-		logger.Error("status must be final")
-		return appErr.ValidationError("status", "final_required")
-	}
-	return r.storeFinalStatus(ctx, status)
 }
 
-func (r *StatusRepository) storeFinalStatus(ctx context.Context, status pmodel.JudgeStatusResponse) error {
-	logger := logx.WithContext(ctx)
-	payload, err := json.Marshal(status)
-	if err != nil {
-		logger.Errorf("marshal final status failed: %v", err)
-		return fmt.Errorf("marshal final status failed: %w", err)
-	}
-	finishedAt := time.Now()
-	if status.Timestamps.FinishedAt > 0 {
-		finishedAt = time.Unix(status.Timestamps.FinishedAt, 0)
-	}
-	res, err := r.submissionsModel.UpdateFinalStatus(ctx, status.SubmissionID, string(payload), finishedAt)
-	if err != nil {
-		logger.Errorf("store final status failed: %v", err)
-		return appErr.Wrapf(err, appErr.DatabaseError, "store final status failed")
-	}
-	affected, err := res.RowsAffected()
-	if err == nil && affected == 0 {
-		if _, findErr := r.submissionsModel.FindOne(ctx, status.SubmissionID); findErr != nil {
-			if errors.Is(findErr, dbmodel.ErrNotFound) {
-				logger.Error("submission not found")
-				return appErr.New(appErr.SubmissionNotFound).WithMessage("submission not found")
-			}
-			return appErr.Wrapf(findErr, appErr.DatabaseError, "check submission existence failed")
-		}
-		logger.Infof("skip duplicate final status submission_id=%s", status.SubmissionID)
+func castTests(in []result.TestcaseResult) []statuswriter.TestcaseResult {
+	if len(in) == 0 {
 		return nil
 	}
-	return nil
-}
-
-func (r *StatusRepository) shouldAcceptStatusUpdate(ctx context.Context, next pmodel.JudgeStatusResponse) (bool, string, error) {
-	cached, hit, err := statuscache.Get(ctx, r.cache, next.SubmissionID)
-	if err != nil {
-		return false, "", err
+	out := make([]statuswriter.TestcaseResult, 0, len(in))
+	for _, t := range in {
+		out = append(out, statuswriter.TestcaseResult{
+			TestID:     t.TestID,
+			Verdict:    string(t.Verdict),
+			TimeMs:     t.TimeMs,
+			MemoryKB:   t.MemoryKB,
+			OutputKB:   t.OutputKB,
+			ExitCode:   t.ExitCode,
+			RuntimeLog: t.RuntimeLog,
+			CheckerLog: t.CheckerLog,
+			Stdout:     t.Stdout,
+			Stderr:     t.Stderr,
+			Score:      t.Score,
+			SubtaskID:  t.SubtaskID,
+		})
 	}
-	if !hit || cached == "" || cached == statuscache.NullValue {
-		return true, "", nil
-	}
-	current, err := unmarshalStatus(cached)
-	if err != nil {
-		logx.WithContext(ctx).Errorf("decode cached status failed, accept incoming update: %v", err)
-		return true, "", nil
-	}
-	accept, reason := statusmonotonic.ShouldAccept(
-		string(current.Status),
-		current.Progress.DoneTests,
-		current.Progress.TotalTests,
-		string(next.Status),
-		next.Progress.DoneTests,
-		next.Progress.TotalTests,
-	)
-	return accept, reason, nil
-}
-
-func (r *StatusRepository) getFinalStatusFromDB(ctx context.Context, submissionID string) (pmodel.JudgeStatusResponse, error) {
-	logger := logx.WithContext(ctx)
-	if r.submissionsModel == nil {
-		logger.Error("submissions model is not configured")
-		return pmodel.JudgeStatusResponse{}, appErr.New(appErr.ServiceUnavailable).WithMessage("submissions model is not configured")
-	}
-	payload, err := r.submissionsModel.FindFinalStatus(ctx, submissionID)
-	if err != nil {
-		if errors.Is(err, dbmodel.ErrNotFound) {
-			return pmodel.JudgeStatusResponse{}, appErr.New(appErr.NotFound).WithMessage("submission status not found")
-		}
-		return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.DatabaseError, "get final status failed")
-	}
-	var resp pmodel.JudgeStatusResponse
-	if err := json.Unmarshal([]byte(payload), &resp); err != nil {
-		logger.Errorf("decode final status failed: %v", err)
-		return pmodel.JudgeStatusResponse{}, appErr.Wrapf(err, appErr.DatabaseError, "decode final status failed")
-	}
-	return resp, nil
-}
-
-func (r *StatusRepository) getFinalStatusBatchFromDB(ctx context.Context, submissionIDs []string) ([]pmodel.JudgeStatusResponse, []string, error) {
-	logger := logx.WithContext(ctx)
-	if r.submissionsModel == nil {
-		logger.Error("submissions model is not configured")
-		return nil, submissionIDs, appErr.New(appErr.ServiceUnavailable).WithMessage("submissions model is not configured")
-	}
-	if len(submissionIDs) == 0 {
-		return nil, nil, nil
-	}
-	for _, id := range submissionIDs {
-		if id == "" {
-			logger.Error("submission_id is required")
-			return nil, nil, appErr.ValidationError("submission_id", "required")
-		}
-	}
-	records, err := r.submissionsModel.FindFinalStatusBatch(ctx, submissionIDs)
-	if err != nil {
-		logger.Errorf("batch get final status failed: %v", err)
-		return nil, nil, appErr.Wrapf(err, appErr.DatabaseError, "batch get final status failed")
-	}
-	found := make(map[string]pmodel.JudgeStatusResponse, len(records))
-	for _, record := range records {
-		if record.SubmissionID == "" {
-			continue
-		}
-		var resp pmodel.JudgeStatusResponse
-		if err := json.Unmarshal([]byte(record.FinalStatus), &resp); err != nil {
-			logger.Errorf("decode final status failed: %v", err)
-			return nil, nil, appErr.Wrapf(err, appErr.DatabaseError, "decode final status failed")
-		}
-		resp.SubmissionID = record.SubmissionID
-		found[record.SubmissionID] = resp
-	}
-	statuses := make([]pmodel.JudgeStatusResponse, 0, len(found))
-	missing := make([]string, 0)
-	for _, id := range submissionIDs {
-		if st, ok := found[id]; ok {
-			statuses = append(statuses, st)
-		} else {
-			missing = append(missing, id)
-		}
-	}
-	return statuses, missing, nil
+	return out
 }
 
 func isFinalStatus(status result.JudgeStatus) bool {
-	return status == result.StatusFinished || status == result.StatusFailed
-}
-
-func mustMarshalStatus(status pmodel.JudgeStatusResponse) string {
-	data, err := json.Marshal(status)
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
-func marshalStatus(status *pmodel.JudgeStatusResponse) string {
-	if status == nil {
-		return ""
-	}
-	data, err := json.Marshal(status)
-	if err != nil {
-		return ""
-	}
-	return string(data)
-}
-
-func unmarshalStatus(data string) (*pmodel.JudgeStatusResponse, error) {
-	var resp pmodel.JudgeStatusResponse
-	if err := json.Unmarshal([]byte(data), &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-func durationSeconds(ttl time.Duration) int {
-	if ttl <= 0 {
-		return 0
-	}
-	seconds := int(ttl / time.Second)
-	if seconds <= 0 {
-		return 1
-	}
-	return seconds
+	return statusutil.IsFinalStatus(string(status))
 }

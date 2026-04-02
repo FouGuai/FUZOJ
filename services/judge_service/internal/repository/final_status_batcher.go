@@ -156,33 +156,35 @@ func (b *FinalStatusBatcher) flush(ctx context.Context) {
 		if item.status.Timestamps.FinishedAt > 0 {
 			finishedAt = time.Unix(item.status.Timestamps.FinishedAt, 0)
 		}
-		records = append(records, model.FinalStatusRecord{
-			SubmissionID: item.status.SubmissionID,
-			Payload:      string(payload),
-			FinishedAt:   finishedAt,
-		})
+		if item.status.ContestID == "" {
+			records = append(records, model.FinalStatusRecord{
+				SubmissionID: item.status.SubmissionID,
+				Payload:      string(payload),
+				FinishedAt:   finishedAt,
+			})
+		}
 	}
-	if len(records) == 0 {
-		return
+	dbDuration := time.Duration(0)
+	if len(records) > 0 {
+		if b.model == nil {
+			logx.WithContext(ctx).Error("submissions model is not configured")
+			b.requeue(items)
+			return
+		}
+		dbStart := time.Now()
+		dbCtx := ctx
+		if b.flushTimeout > 0 {
+			var cancel context.CancelFunc
+			dbCtx, cancel = context.WithTimeout(ctx, b.flushTimeout)
+			defer cancel()
+		}
+		if err := b.model.UpdateFinalStatusBatch(dbCtx, records); err != nil {
+			logx.WithContext(ctx).Errorf("batch store final status failed: %v", err)
+			b.requeue(items)
+			return
+		}
+		dbDuration = time.Since(dbStart)
 	}
-	if b.model == nil {
-		logx.WithContext(ctx).Error("submissions model is not configured")
-		b.requeue(items)
-		return
-	}
-	dbStart := time.Now()
-	dbCtx := ctx
-	if b.flushTimeout > 0 {
-		var cancel context.CancelFunc
-		dbCtx, cancel = context.WithTimeout(ctx, b.flushTimeout)
-		defer cancel()
-	}
-	if err := b.model.UpdateFinalStatusBatch(dbCtx, records); err != nil {
-		logx.WithContext(ctx).Errorf("batch store final status failed: %v", err)
-		b.requeue(items)
-		return
-	}
-	dbDuration := time.Since(dbStart)
 	publishStart := time.Now()
 	failedPublishes := b.publishBatch(ctx, items)
 	publishDuration := time.Since(publishStart)

@@ -56,3 +56,10 @@ CREATE TABLE IF NOT EXISTS contest_rank_outbox_lock (
   PRIMARY KEY (contest_id),
   KEY contest_rank_outbox_lock_lease_idx (lease_until)
 );
+
+CREATE TABLE IF NOT EXISTS contest_rank_result_seq (
+  contest_id VARCHAR(64) NOT NULL,
+  next_result_id BIGINT NOT NULL DEFAULT 1,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (contest_id)
+);

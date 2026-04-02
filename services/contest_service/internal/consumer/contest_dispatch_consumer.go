@@ -9,6 +9,7 @@ import (
 
 	"fuzoj/pkg/contest/eligibility"
 	appErr "fuzoj/pkg/errors"
+	"fuzoj/pkg/submit/statusflow"
 	"fuzoj/pkg/submit/statuswriter"
 
 	"github.com/zeromicro/go-queue/kq"
@@ -38,11 +39,17 @@ type TimeoutConfig struct {
 type ContestDispatchConsumer struct {
 	eligibilityService *eligibility.Service
 	statusWriter       *statuswriter.FinalStatusWriter
+	statusUpdater      *statusflow.Updater
 	redis              *redis.Redis
 	judgePusher        MessagePusher
 	deadLetterPusher   *kq.Pusher
 	opts               DispatchOptions
 	timeouts           TimeoutConfig
+}
+
+// SetStatusUpdater configures status updater used for intermediate status updates.
+func (c *ContestDispatchConsumer) SetStatusUpdater(updater *statusflow.Updater) {
+	c.statusUpdater = updater
 }
 
 // MessagePusher defines minimal pusher interface for forwarding messages.
@@ -147,6 +154,21 @@ func (c *ContestDispatchConsumer) handle(ctx context.Context, key, value string)
 			return nil
 		}
 		idemSet = true
+	}
+	if c.statusUpdater != nil {
+		_, _, err := c.statusUpdater.ApplySummary(ctx, statuswriter.StatusPayload{
+			SubmissionID: payload.SubmissionID,
+			Status:       "Validating",
+			Timestamps: statuswriter.Timestamps{
+				ReceivedAt: payload.CreatedAt,
+			},
+			Progress: statuswriter.Progress{TotalTests: 0, DoneTests: 0},
+		})
+		if err != nil {
+			logger.Errorf("write validating status failed: %v", err)
+			c.clearIdempotency(ctx, idemKey, idemSet)
+			return appErr.Wrapf(err, appErr.CacheError, "write validating status failed")
+		}
 	}
 
 	ctxMQ := withTimeout(ctx, c.timeouts.MQ)

@@ -9,6 +9,8 @@ import (
 
 	"fuzoj/pkg/contest/eligibility"
 	contestRepo "fuzoj/pkg/contest/repository"
+	"fuzoj/pkg/submit/statusflow"
+	"fuzoj/pkg/submit/statuspubsub"
 	"fuzoj/pkg/submit/statuswriter"
 	"fuzoj/services/contest_service/internal/config"
 	"fuzoj/services/contest_service/internal/consumer"
@@ -83,6 +85,8 @@ func NewServiceContext(c config.Config) *ServiceContext {
 	eligibilityService := eligibility.NewService(contestRepository, problemRepo, participantRepo)
 
 	statusWriter := statuswriter.NewFinalStatusWriter(conn, redisClient, c.ContestDispatch.StatusTTL)
+	statusPubsub := statuspubsub.NewClient(c.Redis)
+	statusWriter.SetStatusPubSub(statusPubsub)
 	memberProblemRepo := rankRepo.NewMemberProblemRepository(conn)
 	memberSummaryRepo := rankRepo.NewMemberSummaryRepository(conn)
 	rankOutboxRepo := rankRepo.NewRankOutboxRepository(conn)
@@ -120,6 +124,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			RetryDelay:      c.ContestDispatch.RetryDelay,
 			DeadLetterTopic: c.ContestDispatch.DeadLetterTopic,
 		}, consumer.TimeoutConfig{MQ: c.Timeouts.MQ, Cache: c.Timeouts.Cache})
+		dispatchConsumer.SetStatusUpdater(statusflow.NewUpdater(redisClient, statusPubsub, c.ContestDispatch.StatusTTL))
 		if c.ContestDispatch.DeadLetterTopic != "" {
 			deadLetterPusher = kq.NewPusher(c.Kafka.Brokers, c.ContestDispatch.DeadLetterTopic, kq.WithSyncPush())
 			dispatchConsumer.SetDeadLetterPusher(deadLetterPusher)
@@ -139,6 +144,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 			redisClient,
 			contestRepository,
 			eligibilityService,
+			statusWriter,
 			memberProblemRepo,
 			memberSummaryRepo,
 			rankOutboxRepo,

@@ -3,12 +3,14 @@ package statusmonotonic
 import "strings"
 
 const (
-	stageUnknown = -1
-	stagePending = 0
-	stageCompile = 1
-	stageRunning = 2
-	stageJudging = 3
-	stageFinal   = 4
+	stageUnknown    = -1
+	stageQueueing   = 0
+	stageValidating = 1
+	stagePending    = 2
+	stageCompile    = 3
+	stageRunning    = 4
+	stageJudging    = 5
+	stageFinal      = 6
 )
 
 // ShouldAccept returns whether next status can overwrite current status.
@@ -52,6 +54,10 @@ func ShouldAccept(
 
 func statusStage(status string) int {
 	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "queueing":
+		return stageQueueing
+	case "validating":
+		return stageValidating
 	case "pending":
 		return stagePending
 	case "compiling":
